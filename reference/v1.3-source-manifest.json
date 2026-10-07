@@ -1,0 +1,243 @@
+{
+  "repository": "jev-chat/jev-chat-jarvis",
+  "tag": "v1.3",
+  "commit": "23b5ca56930960cfac470815ae582cd713eda95a",
+  "files": [
+    {
+      "path": ".gitignore",
+      "sha": "5070c45aee259eccc1d409da2a390499f6f9c742"
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha": "d6240175e412558c662d2c2e29d17e7ef108cf06"
+    },
+    {
+      "path": "LICENSE",
+      "sha": "c377e7e4ed38c85454f475546c48e4d35bda73ca"
+    },
+    {
+      "path": "README.md",
+      "sha": "f6d63e8af07a3bc8b5aa79c35be229ce580c165c"
+    },
+    {
+      "path": "app/build.gradle.kts",
+      "sha": "b410a831aa42deb449ce32b234b47ea74c4602ef"
+    },
+    {
+      "path": "app/src/main/AndroidManifest.xml",
+      "sha": "6508464b9bc7d629f39c4b06486471a2543b8233"
+    },
+    {
+      "path": "app/src/main/java/com/google/android/accessibility/selecttospeak/SelectToSpeakService.kt",
+      "sha": "ce1ef15ded367bb92087544d8ecc7b18bc33a770"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/Insets.kt",
+      "sha": "d63d6db1ff827b507119c09c3ddda85dfc97d868"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/KnowledgeActivity.kt",
+      "sha": "fac09a7cf1ef9738363b6172cc065601125827f9"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/MainActivity.kt",
+      "sha": "7fb08d8cb931631ec1f8321191b22f0036988c96"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/SettingsActivity.kt",
+      "sha": "05fa2166f697556ca0609625464b77391314454c"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/capture/ChatAppAdapter.kt",
+      "sha": "7afbb37263eb23fb6ea97b46fdbefbab2c631a8f"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/capture/ChatCaptureService.kt",
+      "sha": "95535ee95ce518893c45ec949c3d865cd3f03a15"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/capture/KeepAliveService.kt",
+      "sha": "a02ca4f87fe4b3652c7121f87a0031a61d626141"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/capture/ocr/MlKitOcr.kt",
+      "sha": "5016a97b3e90cf10e1ffd65678a8cd215e8a3a47"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/capture/ocr/OcrEngine.kt",
+      "sha": "91aaa764f4cafc8126f9d520d6622d2e0e05cb94"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/capture/ocr/ScreenCapture.kt",
+      "sha": "6ae438bbc8cf0e08b48b09ff942dc09465683d3b"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/core/ChatModels.kt",
+      "sha": "0360ec383884e8406defc3085650d91f9313625d"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/core/Prefs.kt",
+      "sha": "6ae4bb5c4faabaa3ce9ab7aad59de042a13bdf39"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/core/kb/ContextBuilder.kt",
+      "sha": "42e3a24b0f22a76ce84a7cc3f06e2866b13ab062"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/core/kb/KbModels.kt",
+      "sha": "9598d3061c230f189d9ced71e52b42e9be99a111"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/core/kb/KbSelfCheck.kt",
+      "sha": "cda4d1f58a001c500da945d4f4ae32944ee123e5"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/core/kb/KbStore.kt",
+      "sha": "82a351a7133f891f50fc854b63e97e17015a44f3"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/jev/HttpJson.kt",
+      "sha": "888b30688e08fa080147c62b5d8b9652dec53a6e"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/jev/JevClient.kt",
+      "sha": "1ec18987f7d468f59ccc75e0cefba5e5ae0251ca"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/jev/JevQuestions.kt",
+      "sha": "4d1ed2d89e6a62274e30e93f162d2f1624146af9"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/jev/JudgeClient.kt",
+      "sha": "10473254a65bf1deef1e5b1290151cca99e653ce"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/jev/ReplyClient.kt",
+      "sha": "cf081dd1c94649e9a57152754d0ff4928c5c4b4d"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/jev/VisionClient.kt",
+      "sha": "b95bcc763e4bc2bed5bb441a3428ffffcb73c56f"
+    },
+    {
+      "path": "app/src/main/java/com/jev/probe/overlay/OverlayController.kt",
+      "sha": "4147918b92516ca67f787ca7efc6e5926dc758e9"
+    },
+    {
+      "path": "app/src/main/res/drawable/ic_launcher_foreground.xml",
+      "sha": "89399048850757e22597e56b7828cfb6acbafbde"
+    },
+    {
+      "path": "app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+      "sha": "5c84730caa7b72dfe85126020edffbd0e39e64fa"
+    },
+    {
+      "path": "app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
+      "sha": "5c84730caa7b72dfe85126020edffbd0e39e64fa"
+    },
+    {
+      "path": "app/src/main/res/values/ic_launcher_background.xml",
+      "sha": "11711e0ff8625f246c190b3297c3735a08dda01b"
+    },
+    {
+      "path": "app/src/main/res/values/strings.xml",
+      "sha": "fcec479ecef9ec9a18afda29e6ff164aa1d3ddfb"
+    },
+    {
+      "path": "app/src/main/res/values/themes.xml",
+      "sha": "de8f46cc37811bae2f8755dae57cd9cb97fedf6b"
+    },
+    {
+      "path": "app/src/main/res/xml/config_disguised.xml",
+      "sha": "c1b77a09014eda0fe110456f7077f89ebd3de682"
+    },
+    {
+      "path": "build.gradle.kts",
+      "sha": "f54fe90bfefedef76f683b5904ed8b948fb31ac1"
+    },
+    {
+      "path": "docs/acceptance.md",
+      "sha": "9ec08f46aa50b471aba9fc945e4a3f08b804e9f0"
+    },
+    {
+      "path": "docs/probe_spec.md",
+      "sha": "240b39edabefce4a05b06bfabde0b44abff089a2"
+    },
+    {
+      "path": "docs/v1.3-morning-checklist.md",
+      "sha": "84ebe4a3b5d0811f16fbe26f7615d4d59d12df02"
+    },
+    {
+      "path": "docs/v1.3-plan.md",
+      "sha": "a1d3732a79d3c47db2345e072679e9059fc92287"
+    },
+    {
+      "path": "gradle.properties",
+      "sha": "781fc98a79f19cd970bba0a90773a3d335c4a637"
+    },
+    {
+      "path": "gradle/wrapper/gradle-wrapper.properties",
+      "sha": "09523c0e5490700d1a647ecf95309b5f7f9a8199"
+    },
+    {
+      "path": "gradlew",
+      "sha": "f5feea6d6b116baaca5a2642d4d9fa1f47d574a7"
+    },
+    {
+      "path": "gradlew.bat",
+      "sha": "9d21a21834d5195c278ba17baec3115b2aaab06e"
+    },
+    {
+      "path": "settings.gradle.kts",
+      "sha": "ccf36de1329f0acd9fd661638442cdfec9489b5c"
+    },
+    {
+      "path": "site/assets/favicon.svg",
+      "sha": "014fe66c5e38529f46414c4f62c34d679fcf58ce"
+    },
+    {
+      "path": "site/index.html",
+      "sha": "6e2350061209794864e08557832cba420257c46b"
+    },
+    {
+      "path": "site/main.js",
+      "sha": "c003c8ada9b2697648e49eda5103d8ea7b47a5fe"
+    },
+    {
+      "path": "site/style.css",
+      "sha": "687fc17bcb704318a9a12ec50e9327a416e94b75"
+    },
+    {
+      "path": "tools/jev/TASK.md",
+      "sha": "efe7c1a650bce86d982faa3188f6e724024248af"
+    },
+    {
+      "path": "tools/jev/calibrate.py",
+      "sha": "915ce8d632c894c71aa55cce7ee2947943b548b3"
+    },
+    {
+      "path": "tools/jev/demo_meme.py",
+      "sha": "abe37c947f2fd3056cca71146f823bb2b91e4fb0"
+    },
+    {
+      "path": "tools/jev/fixtures/labeled_set.json",
+      "sha": "0c2c46338169340e59cadddd98dbcc939d34e9c2"
+    },
+    {
+      "path": "tools/jev/jev_client.py",
+      "sha": "036bb3523e6e833e4b132412cc97a190d6d7bc19"
+    },
+    {
+      "path": "tools/jev/probe_background_field.py",
+      "sha": "3947d4876dde77a7a1e21493a263acb9a5e2cf4d"
+    },
+    {
+      "path": "tools/jev/questions.py",
+      "sha": "61af19acc627deb6c5d20b01196208a135f3639a"
+    },
+    {
+      "path": "gradle/wrapper/gradle-wrapper.jar",
+      "sha": "2c3521197d7c4586c843d1d3e9090525f1898cde"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.LoveAdvisor" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item><item name="android:colorAccent">#3979FF</item>
+        <item name="android:windowLightStatusBar">true</item><item name="android:statusBarColor">#F4F7FC</item>
+        <item name="android:navigationBarColor">#F4F7FC</item><item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">#F4F7FC</item>
+    </style>
+</resources>

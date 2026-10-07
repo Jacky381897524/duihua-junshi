@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}#glass{position:absolute;inset:0;border-radius:24px;background:rgba(245,249,255,.94);isolation:isolate}#source{display:none}html.dark #glass{background:rgba(27,37,54,.95)}#glass[data-liquid-glass=webgl]{background:transparent}
+</style></head><body><div id="glass"></div><script type="module">
+import {LiquidGlass} from './src/index.js';
+const target=document.getElementById('glass'),canvas=document.createElement('canvas');
+let material=null,latest=null,decoding=false,destroyed=false,frameEpoch=0;
+document.documentElement.classList.toggle('dark',matchMedia('(prefers-color-scheme: dark)').matches);
+window.setAppearance=dark=>{document.documentElement.classList.toggle('dark',dark);material?.update({tintTone:dark?'dark':'light',tint:dark?.72:.66});};
+window.acceptFrame=encoded=>{if(destroyed)return;latest=encoded;decode();};
+function decode(){if(decoding||!latest||destroyed)return;decoding=true;const encoded=latest,epoch=frameEpoch;latest=null;const image=new Image();image.onload=()=>{if(!destroyed&&epoch===frameEpoch){canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;canvas.getContext('2d').drawImage(image,0,0);if(!material){try{material=new LiquidGlass(target,{backdrop:{source:canvas,anchor:target,fit:'fill'},frost:.105,tint:document.documentElement.classList.contains('dark')?.72:.66,tintTone:document.documentElement.classList.contains('dark')?'dark':'light',maxDpr:1.35,live:false,material:{refraction:88,dispersion:1.5}});material.ready.catch(()=>{});}catch{target.dataset.liquidGlass='fallback';}}else material.refresh();}image.src='';decoding=false;decode();};image.onerror=()=>{decoding=false;decode();};image.src='data:image/jpeg;base64,'+encoded;}
+window.clearGlassFrame=()=>{frameEpoch++;latest=null;material?.destroy();material=null;canvas.width=1;canvas.height=1;target.dataset.liquidGlass='fallback';};
+window.releaseGlass=()=>{destroyed=true;latest=null;material?.destroy();material=null;canvas.width=1;canvas.height=1;};
+addEventListener('resize',()=>material?.refresh());
+</script></body></html>

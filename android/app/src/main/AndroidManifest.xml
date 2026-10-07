@@ -1,0 +1,32 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries><package android:name="com.tencent.mm"/><package android:name="com.tencent.mobileqq"/><package android:name="com.ss.android.ugc.aweme"/><package android:name="com.twitter.android"/><package android:name="com.ss.android.lark"/></queries>
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <application android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@style/Theme.LoveAdvisor" android:usesCleartextTraffic="true">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity>
+        <activity android:name=".settings.SettingsActivity" android:exported="false"/>
+        <activity android:name=".settings.ReplyStyleActivity" android:exported="false"/>
+        <activity android:name=".knowledge.KnowledgeActivity" android:exported="false"/>
+        <activity android:name=".memory.ProfilesActivity" android:exported="false"/>
+        <activity android:name=".memory.MemoryActivity" android:exported="false"/>
+        <activity android:name=".advisor.ConsultationActivity" android:exported="false"/>
+        <activity android:name=".advisor.PracticeActivity" android:exported="false"/>
+        <activity android:name=".advisor.ImportActivity" android:exported="false"/>
+        <activity android:name=".advisor.ComparisonActivity" android:exported="false"/>
+        <activity android:name=".capture.CapturePreviewActivity" android:exported="false"/>
+        <activity android:name=".capture.ocr.ProjectionConsentActivity" android:exported="false"/>
+        <activity android:name=".ui.PermissionsActivity" android:exported="false"/>
+        <activity android:name=".ui.DiagnosticsActivity" android:exported="false"/>
+        <activity android:name=".ui.AboutActivity" android:exported="false"/>
+        <service android:name=".capture.ocr.ProjectionService" android:exported="false" android:foregroundServiceType="mediaProjection"/>
+        <service android:name=".capture.ChatCaptureService" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service"/>
+        </service>
+    </application>
+</manifest>

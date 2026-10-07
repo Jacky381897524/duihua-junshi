@@ -1,0 +1,1 @@
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:inset="15%"><bitmap android:src="@drawable/advisor_logo_new" android:gravity="fill"/></inset>

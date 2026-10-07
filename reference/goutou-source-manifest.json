@@ -1,0 +1,430 @@
+{
+  "repository": "shengjidaguai-china/goutoujunshi",
+  "commit": "6db7354a4002dc7c448a9c87ffdad8132570c9d3",
+  "files": [
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bfc9d99fb47f85bc00ca9231383b4fe097a5a9e1",
+      "size": 1065,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/bfc9d99fb47f85bc00ca9231383b4fe097a5a9e1"
+    },
+    {
+      "path": "LICENSE.zh-CN.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0ed0ad3dc3d840f8c8e1485a525383dc713aed28",
+      "size": 788,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/0ed0ad3dc3d840f8c8e1485a525383dc713aed28"
+    },
+    {
+      "path": "SKILL.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f9c34540c1440ae1a4de8c6790ba107ba4d40a3b",
+      "size": 9518,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/f9c34540c1440ae1a4de8c6790ba107ba4d40a3b"
+    },
+    {
+      "path": "documentation/architecture.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b8baa026d241493b1ed30b58e3e5b1a9b419d022",
+      "size": 4036,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/b8baa026d241493b1ed30b58e3e5b1a9b419d022"
+    },
+    {
+      "path": "documentation/automation.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f75004502ae3a3990a8464bd1c725206f021f695",
+      "size": 2163,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/f75004502ae3a3990a8464bd1c725206f021f695"
+    },
+    {
+      "path": "documentation/flows.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9b4770ff3a41f41aaf26f444c338f9f27cab150c",
+      "size": 5812,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/9b4770ff3a41f41aaf26f444c338f9f27cab150c"
+    },
+    {
+      "path": "documentation/knowledge-base.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f5055290449e7dcfcff5613fd6f4921d7d522233",
+      "size": 2613,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/f5055290449e7dcfcff5613fd6f4921d7d522233"
+    },
+    {
+      "path": "documentation/permissions.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3a852396f93db96ee0bf88c63da2bdb18e15e086",
+      "size": 1974,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/3a852396f93db96ee0bf88c63da2bdb18e15e086"
+    },
+    {
+      "path": "documentation/product.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b3bbdd4b814cdb2aa1b5ff78e6d11b800327cd17",
+      "size": 5484,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/b3bbdd4b814cdb2aa1b5ff78e6d11b800327cd17"
+    },
+    {
+      "path": "documentation/variables.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dbf565548c37f3f8f718b8473f5f382865d76203",
+      "size": 893,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/dbf565548c37f3f8f718b8473f5f382865d76203"
+    },
+    {
+      "path": "references/knowledge/01-证据分级与内容边界.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1a15cca25dd65952d828555afc5cc6831e747015",
+      "size": 4203,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/1a15cca25dd65952d828555afc5cc6831e747015"
+    },
+    {
+      "path": "references/knowledge/02-亲密关系心理学总论.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "08337a5b1ddd4a122c6c7e4466549b1640e2752b",
+      "size": 5765,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/08337a5b1ddd4a122c6c7e4466549b1640e2752b"
+    },
+    {
+      "path": "references/knowledge/03-依恋理论与情绪调节.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5aaa98debc5d9f211c1140eb3ca86b84092a0e6a",
+      "size": 3600,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/5aaa98debc5d9f211c1140eb3ca86b84092a0e6a"
+    },
+    {
+      "path": "references/knowledge/04-MBTI人格与匹配.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7ad34df18bc8ccec5a696a7075fc38884d13baba",
+      "size": 3994,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/7ad34df18bc8ccec5a696a7075fc38884d13baba"
+    },
+    {
+      "path": "references/knowledge/05-PUA操控与伦理替代.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ee82caeab1391f01a49d66bdd0ada20c229624a0",
+      "size": 5232,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/ee82caeab1391f01a49d66bdd0ada20c229624a0"
+    },
+    {
+      "path": "references/knowledge/06-吸引约会与关系启动.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cbf463e2ca73ca76628eba597758e83ac3d611c2",
+      "size": 4691,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/cbf463e2ca73ca76628eba597758e83ac3d611c2"
+    },
+    {
+      "path": "references/knowledge/07-沟通冲突与修复.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "565b825180656a0385b651f4546ad2f810a38a10",
+      "size": 4471,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/565b825180656a0385b651f4546ad2f810a38a10"
+    },
+    {
+      "path": "references/knowledge/08-同意边界性与亲密.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "15bc38658e2e4757931ce008b9bf51fb2e7d4bd2",
+      "size": 4037,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/15bc38658e2e4757931ce008b9bf51fb2e7d4bd2"
+    },
+    {
+      "path": "references/knowledge/09-在线约会与数字关系.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e68b7bd2f1411a6584663831c0f344b6a624110c",
+      "size": 6488,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/e68b7bd2f1411a6584663831c0f344b6a624110c"
+    },
+    {
+      "path": "references/knowledge/10-恋爱哲学.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cfe21a0ca8c611578e396c5e585ceebc7f4d91ae",
+      "size": 4633,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/cfe21a0ca8c611578e396c5e585ceebc7f4d91ae"
+    },
+    {
+      "path": "references/knowledge/11-婚姻家庭与生命周期.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f57284bc4e1b261dca21d5fdbd8ca9a5b9d5bbc0",
+      "size": 4657,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/f57284bc4e1b261dca21d5fdbd8ca9a5b9d5bbc0"
+    },
+    {
+      "path": "references/knowledge/12-金钱家务育儿与双方家庭.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "77a2619392de698b184df73f952a101466e24d01",
+      "size": 4556,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/77a2619392de698b184df73f952a101466e24d01"
+    },
+    {
+      "path": "references/knowledge/13-现代婚姻变迁史.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6b5ab8469d22f60997eab8813318746fc1ea1fc4",
+      "size": 5143,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/6b5ab8469d22f60997eab8813318746fc1ea1fc4"
+    },
+    {
+      "path": "references/knowledge/14-社会发展与家庭变迁.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1acda319555c6624dc76811ec3c27d42ddbd4159",
+      "size": 5238,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/1acda319555c6624dc76811ec3c27d42ddbd4159"
+    },
+    {
+      "path": "references/knowledge/15-分手背叛与关系修复.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c5f7f3932420e56ac21342e3064593b565478e7f",
+      "size": 4475,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/c5f7f3932420e56ac21342e3064593b565478e7f"
+    },
+    {
+      "path": "references/knowledge/16-多元关系与反刻板印象.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f360966269747905dc88d2df8accbf450a432325",
+      "size": 4385,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/f360966269747905dc88d2df8accbf450a432325"
+    },
+    {
+      "path": "references/knowledge/17-中国法律安全与危机转介.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f30393d881d76cd621728eeed5a5b9c75ecaad19",
+      "size": 5372,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/f30393d881d76cd621728eeed5a5b9c75ecaad19"
+    },
+    {
+      "path": "references/knowledge/18-实用练习与对话卡.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+      "size": 4569,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/c850d5ba7f63a117e0f1a38b1e57148eef9fd40a"
+    },
+    {
+      "path": "references/knowledge/19-核心书单与论文索引.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5bf54af364fe02c9170d55b23795feba565660ee",
+      "size": 7153,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/5bf54af364fe02c9170d55b23795feba565660ee"
+    },
+    {
+      "path": "references/knowledge/20-经典社交体系的机制、证据与风险边界.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "03684d06a770f05036d91556be4ee247c39d83b0",
+      "size": 9435,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/03684d06a770f05036d91556be4ee247c39d83b0"
+    },
+    {
+      "path": "references/practical/00-导读与使用分级.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "875213432d72baecf0c5a0ac0025c5fa4b7986a7",
+      "size": 5658,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/875213432d72baecf0c5a0ac0025c5fa4b7986a7"
+    },
+    {
+      "path": "references/practical/ChatLab聊天记录分析适配.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "104d9fd45f21f311f6323486df6719eae338b015",
+      "size": 4236,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/104d9fd45f21f311f6323486df6719eae338b015"
+    },
+    {
+      "path": "references/practical/万能吵架技巧：理性冲突处理指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "920c33943a84827487e51c8a97367ba63a5e4e37",
+      "size": 6616,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/920c33943a84827487e51c8a97367ba63a5e4e37"
+    },
+    {
+      "path": "references/practical/万能夸人的话术技巧：真诚认可的实用指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "eca39e353f4c6941d43b639ec9ba62e8d1fefb2f",
+      "size": 11278,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/eca39e353f4c6941d43b639ec9ba62e8d1fefb2f"
+    },
+    {
+      "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0d52128312b2def237e675b92629eb79e3212758",
+      "size": 12247,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/0d52128312b2def237e675b92629eb79e3212758"
+    },
+    {
+      "path": "references/practical/主动表达、第一次见面与自然接触.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "906713d0d7ca6aeb54c19b96c85f408498550cf9",
+      "size": 6657,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/906713d0d7ca6aeb54c19b96c85f408498550cf9"
+    },
+    {
+      "path": "references/practical/公开表达案例的伦理转译.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d782078ca4ba7099accdb0dc1c060f031231af28",
+      "size": 2390,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/d782078ca4ba7099accdb0dc1c060f031231af28"
+    },
+    {
+      "path": "references/practical/关系投入失衡：互惠判断、降级投入与退出决策.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fb83bf2c6fcc98d5f698467871d0d38f9cf5a65b",
+      "size": 6808,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/fb83bf2c6fcc98d5f698467871d0d38f9cf5a65b"
+    },
+    {
+      "path": "references/practical/化解尴尬：轻松救场的实用指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6b408aa1945c737a6b98d229932e31e0b9618f3b",
+      "size": 10460,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/6b408aa1945c737a6b98d229932e31e0b9618f3b"
+    },
+    {
+      "path": "references/practical/场景感、松弛感与社交校准：从接话到关系推进.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c31631916a1c754fdf7e594cf00d2316f1b9d72f",
+      "size": 7013,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/c31631916a1c754fdf7e594cf00d2316f1b9d72f"
+    },
+    {
+      "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+      "size": 9239,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/393a2fe5a903929290960ee73ea51e5fb1b96136"
+    },
+    {
+      "path": "references/practical/巧妙接话技巧：让沟通更流畅的实用指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d32be229b6b7af93c379362e37a784bac8696efc",
+      "size": 10732,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/d32be229b6b7af93c379362e37a784bac8696efc"
+    },
+    {
+      "path": "references/practical/废话文学回复指南：轻松应对各类场景.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6c0138946b6b508987948c56f1903ff77fca33be",
+      "size": 7602,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/6c0138946b6b508987948c56f1903ff77fca33be"
+    },
+    {
+      "path": "references/practical/托人办事的高效话术指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cca288c5c8b341399b0927a1255e5fede03d273f",
+      "size": 7540,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/cca288c5c8b341399b0927a1255e5fede03d273f"
+    },
+    {
+      "path": "references/practical/提升表达逻辑性：从混乱到清晰的实用指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "93155c36766b7e1e513250044f91da77bab250d9",
+      "size": 13162,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/93155c36766b7e1e513250044f91da77bab250d9"
+    },
+    {
+      "path": "references/practical/提高气场：从内到外的力量感塑造指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0432215a48badbb557d574b5c1b356183c6d4bca",
+      "size": 9708,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/0432215a48badbb557d574b5c1b356183c6d4bca"
+    },
+    {
+      "path": "references/practical/有效拓展人脉：从建立到维护的实用指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ad74f8774d1105422ecfd2fa9c347999101cc220",
+      "size": 11114,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/ad74f8774d1105422ecfd2fa9c347999101cc220"
+    },
+    {
+      "path": "references/practical/聊天化被动为主动：引导互动的实用指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a8201024cd229aacbb5779e14a2844ea9aa55483",
+      "size": 12283,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/a8201024cd229aacbb5779e14a2844ea9aa55483"
+    },
+    {
+      "path": "references/practical/自然流、内在状态与结构化互动：伦理能力转译.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "723426b28028c1b23c30f20f3007b9506a036e34",
+      "size": 7055,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/723426b28028c1b23c30f20f3007b9506a036e34"
+    },
+    {
+      "path": "references/practical/获得领导青睐：从价值匹配到信任建立的实用指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "462cd21215470fd48b4cf1475cb592f0f25d4b46",
+      "size": 9328,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/462cd21215470fd48b4cf1475cb592f0f25d4b46"
+    },
+    {
+      "path": "references/practical/被孤立如何破局：从自我调适到建立连接的实用指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "53eb1ff47db1de827e239165f05baeadc360aca0",
+      "size": 9687,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/53eb1ff47db1de827e239165f05baeadc360aca0"
+    },
+    {
+      "path": "references/practical/长期记忆与关系档案.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ac79c532b79808bb64d949405c6f33ea0b2c9b6e",
+      "size": 5606,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/ac79c532b79808bb64d949405c6f33ea0b2c9b6e"
+    },
+    {
+      "path": "references/practical/高情商拒绝他人：体面护边界的实用指南.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4844f5aae83408e844facf5229be3b9b32e24acf",
+      "size": 13089,
+      "url": "https://api.github.com/repos/shengjidaguai-china/goutoujunshi/git/blobs/4844f5aae83408e844facf5229be3b9b32e24acf"
+    }
+  ]
+}

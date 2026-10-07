@@ -1,0 +1,17 @@
+.toolchain/
+.superpowers/
+.build/
+android/.gradle/
+android/**/build/
+android/local.properties
+output/*.apk
+private-signing/
+.release-prep/
+**/__pycache__/
+*.pyc
+*.p12
+*.jks
+*.keystore
+.env
+.env.*
+*.log

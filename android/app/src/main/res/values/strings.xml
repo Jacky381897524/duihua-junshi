@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">对话军师</string>
+    <string name="accessibility_description">点击读取信息后，读取微信、QQ与抖音单聊原文与左右位置，必要时截取当前聊天窗口供视觉识别，生成六条候选；不会随聊天变化自动采集或调用模型。点击填入写入草稿，由你核对并发送。聊天和视觉数据发送至你配置的 AI 服务。</string>
+</resources>
