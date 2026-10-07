@@ -6,6 +6,8 @@
 
 ## 下载与使用
 
+[下载 V1.2.12 APK](https://github.com/Jacky381897524/duihua-junshi/releases/download/v1.2.12/duihua-junshi-V1.2.12.apk) · [完整发布页、源码包与校验文件](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.2.12)
+
 在本仓库的 **Releases** 下载 APK 和 SHA256 校验文件。Android 11+、ARM64。安装后开启悬浮窗及无障碍服务，在微信、QQ或抖音单聊中点击悬浮球，再点「读取信息」。
 
 [完整使用说明](docs/verification/user-guide.md)
@@ -54,3 +56,4 @@ Windows使用 `gradlew.bat`。干净克隆默认生成本地调试签名；自�
 基于 [jev-chat-jarvis](https://github.com/jev-chat/jev-chat-jarvis) 和相关 [goutoujunshi-jev-chat](https://github.com/shengjidaguai-china/goutoujunshi-jev-chat) 开源资料结合开发。实际知识资料固定取自 [goutoujunshi](https://github.com/shengjidaguai-china/goutoujunshi) 的对应版本；来源清单及许可见 [第三方说明](THIRD_PARTY_NOTICES.md)。
 
 保留上游原文、版权和MIT许可。本项目名称与作者信息用于标识整合版，不表示上游作者参与或背书。
+
