@@ -1,9 +1,16 @@
 package com.loveadvisor.core.api
 import com.google.gson.Gson
 import com.google.gson.JsonParser
+import com.google.gson.JsonElement
 import com.loveadvisor.core.model.*
 import com.loveadvisor.core.capture.ChatApps
 import com.loveadvisor.core.capture.TextSceneParser
+import kotlin.math.roundToInt
+
+/** Only static reasons and a row number leave the parser; never echo model/chat content. */
+private class VisionReadRejected(code:String,reason:String,row:Int?=null):RuntimeException(
+    "$reason${row?.let { "（第${it+1}条）" }.orEmpty()} [$code]；请重新读取，暂不生成新候选"
+)
 
 data class VisionConversation(val title:String,val messages:List<ChatMessage>,val mediaIds:Set<String> = emptySet(),val positions:Map<String,Double> = emptyMap(),val composer:RectI?=null,val normalizedCoordinates:Boolean=false,val keyboardButton:RectI?=null)
 class VisionClient(private val transport:HttpTransport) {
@@ -17,7 +24,7 @@ class VisionClient(private val transport:HttpTransport) {
         val platformPrompt=prompt.replace("微信",label).replace("微信小程序", "小程序")+
             "当前来源固定为$label（$packageName），只接受此应用原生一对一私信。抖音视频流、评论区、直播、QQ频道、群聊、联系人列表都返回UNKNOWN。不能把嵌在消息里的聊天截图或网页当作当前聊天界面。"
         val geometryPrompt="""
-            必须进行几何核验。坐标协议：所有坐标都按整张截图归一化到0–1000，左上(0,0)，右下(1000,1000)。每个坐标必须为整数，不要小数。
+            必须进行几何核验。坐标协议：所有坐标都按整张截图归一化到0–1000，左上(0,0)，右下(1000,1000)。优先返回整数坐标，小数坐标会由程序取整。
             顶层必须返回reliable和chatBounds:[left,top,right,bottom]，chatBounds只包含导航下、输入栏上的消息区域。
             每条必须返回bubble:[left,top,right,bottom]，精确框住真实的整条消息气泡而非文字外接框；TEXT还须返回textBounds，文字必须位于该气泡内部；可辨认的相邻头像返回avatar:[left,top,right,bottom]，否则null。
             composer改为同样的0–1000归一化坐标，必须是当前可见文字输入框，否则null。不要把最后一条自动当对方。左右身份最终由程序按气泡和头像位置计算。
@@ -35,49 +42,59 @@ class VisionClient(private val transport:HttpTransport) {
         return try {
             val raw=JsonParser.parseString(response.body).asJsonObject["choices"].asJsonArray[0].asJsonObject["message"].asJsonObject["content"].asString.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
             val o=JsonParser.parseString(raw).asJsonObject
-            fun rectangle(value:com.google.gson.JsonElement?):RectI? {
+            fun rectangle(value:JsonElement?):RectI? = runCatching {
                 if(value==null || !value.isJsonArray || value.asJsonArray.size()!=4)return null
-                val a=value.asJsonArray.map { it.asDouble }.also { a->require(a.all { it.isFinite() && it in 0.0..1000.0 && it==it.toInt().toDouble() }) }
-                return RectI(a[0].toInt(),a[1].toInt(),a[2].toInt(),a[3].toInt()).also { require(it.width>0 && it.height>0) }
-            }
-            fun contains(outer:RectI,inner:RectI)=inner.left>=outer.left && inner.right<=outer.right && inner.top>=outer.top && inner.bottom<=outer.bottom
-            require(o["reliable"]?.asBoolean==true)
-            val chat=rectangle(o["chatBounds"]) ?: error("chat bounds missing")
-            require(chat.top>=50 && chat.height>=100)
+                val a=value.asJsonArray.map { require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber);it.asDouble }
+                require(a.all { it.isFinite() && it in 0.0..1000.0 })
+                RectI(a[0].roundToInt(),a[1].roundToInt(),a[2].roundToInt(),a[3].roundToInt()).also { require(it.width>0 && it.height>0) }
+            }.getOrNull()
+            fun checkRead(ok:Boolean,code:String,reason:String,row:Int?=null) { if(!ok)throw VisionReadRejected(code,reason,row) }
+            // At most 0.3% of the image for independent bounding-box/rounding estimates.
+            fun contains(outer:RectI,inner:RectI)=inner.left>=outer.left-3 && inner.right<=outer.right+3 && inner.top>=outer.top-3 && inner.bottom<=outer.bottom+3
+            val reliability=o["reliable"]?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }
+            checkRead(reliability!=null,"V_CONFIDENCE","视觉接口未返回可靠性标记")
+            checkRead(reliability!!.asBoolean,"V_UNCERTAIN","视觉模型未能确认全部消息")
+            val chat=rectangle(o["chatBounds"]) ?: throw VisionReadRejected("V_CHAT","聊天区域坐标缺失或无效")
+            checkRead(chat.top>=50 && chat.height>=100,"V_CHAT","聊天区域坐标不符合消息区域")
             val frame=RectI(0,0,1000,1000)
-            require(o["kind"].asString=="DIRECT"); val title=o["title"].asString.trim(); require(title.isNotBlank() && title.length<=100)
-            val rows=o["messages"].asJsonArray; require(rows.size() in 1..50)
+            checkRead(o["kind"]?.asString=="DIRECT","V_KIND","当前画面未确认为原生单聊")
+            val title=o["title"]?.asString.orEmpty().trim();checkRead(title.isNotBlank() && title.length<=100,"V_TITLE","未识别到有效的聊天对象名称")
+            val rows=o["messages"]?.takeIf { it.isJsonArray }?.asJsonArray
+                ?: throw VisionReadRejected("V_MESSAGES","视觉接口未返回消息列表")
+            checkRead(rows.size() in 1..50,"V_MESSAGES","未识别到有效消息或消息超过50条")
             val media=mutableSetOf<String>(); val positions=mutableMapOf<String,Double>()
             val messages=rows.mapIndexed { i,row ->
                 val record=row.asJsonObject
-                val bubble=rectangle(record["bubble"]) ?: error("bubble missing")
-                require(contains(chat,bubble) && bubble.width in 10..900)
+                val bubble=rectangle(record["bubble"]) ?: throw VisionReadRejected("V_BUBBLE","消息气泡坐标缺失或无效",i)
+                checkRead(contains(chat,bubble) && bubble.width in 10..900,"V_BUBBLE","消息气泡位置或大小不符合校验",i)
                 val geometry=TextSceneParser.speaker(bubble,frame)
                 val avatar=rectangle(record["avatar"])
                 val side=if(avatar==null) geometry else {
-                    require(avatar.width<=200 && avatar.height<=200 && kotlin.math.abs(avatar.top-bubble.top)<=35)
-                    val inferred=when { avatar.right<=200 && avatar.right<=bubble.left -> Speaker.OTHER;avatar.left>=800 && avatar.left>=bubble.right -> Speaker.ME;else->Speaker.UNKNOWN }
-                    require(geometry==Speaker.UNKNOWN || geometry==inferred)
+                    checkRead(avatar.width<=200 && avatar.height<=200 && kotlin.math.abs(avatar.top-bubble.top)<=35,"V_AVATAR","头像与消息气泡未对齐",i)
+                    val inferred=when { avatar.right<=200 && avatar.right<=bubble.left+3 -> Speaker.OTHER;avatar.left>=800 && avatar.left>=bubble.right-3 -> Speaker.ME;else->Speaker.UNKNOWN }
+                    checkRead(geometry==Speaker.UNKNOWN || geometry==inferred,"V_SIDE","气泡与头像的左右身份冲突",i)
                     inferred
                 }
-                require(side!=Speaker.UNKNOWN)
-                val kind=record["kind"]?.asString ?: "TEXT";require(kind in setOf("TEXT","IMAGE","STICKER"))
+                checkRead(side!=Speaker.UNKNOWN,"V_SIDE","无法确认消息位于左侧还是右侧",i)
+                val kind=record["kind"]?.asString ?: "TEXT";checkRead(kind in setOf("TEXT","IMAGE","STICKER"),"V_MESSAGE_KIND","消息类型不受支持",i)
                 val id="vision-$i"
                 val text=if(kind=="TEXT") {
-                    require(contains(bubble,rectangle(record["textBounds"]) ?: error("text bounds missing")))
+                    val textBounds=rectangle(record["textBounds"]) ?: throw VisionReadRejected("V_TEXT_BOUNDS","正文坐标缺失或无效",i)
+                    checkRead(contains(bubble,textBounds),"V_TEXT_BOUNDS","正文坐标超出气泡，可能混入背景文字",i)
                     record["text"].asString
                 } else {
-                    val description=record["description"]?.asString.orEmpty().trim().take(600);require(description.isNotEmpty())
+                    val description=record["description"]?.asString.orEmpty().trim().take(600);checkRead(description.isNotEmpty(),"V_MEDIA","图片或表情包缺少可见内容描述",i)
                     val emotion=record["emotion"]?.asString.orEmpty().trim().take(150)
                     media.add(id);"[${if(kind=="IMAGE") "图片" else "表情包"}] $description${if(emotion.isNotEmpty()) "（可能情绪：$emotion）" else ""}"
                 }
                 positions[id]=(bubble.top+bubble.bottom)/2.0
-                require(text.isNotBlank() && text.length<=6000)
+                checkRead(text.isNotBlank() && text.length<=6000,"V_TEXT","消息正文为空或超长",i)
                 ChatMessage(id,side,null,text)
             }
             val composer=rectangle(o["composer"])?.takeIf { it.top>=chat.bottom && it.width in 250..850 }
             val keyboard=rectangle(o["keyboardButton"])?.takeIf { composer==null && it.right<=250 && it.top>=chat.bottom && it.width in 20..180 && it.height in 10..120 }
             VisionConversation(title,messages.sortedBy { positions.getValue(it.id) },media,positions,composer,normalizedCoordinates=true,keyboardButton=keyboard)
-        } catch(_:Exception) { throw ApiException(message="本次识别不可靠，请重新读取；暂不生成新候选") }
+        } catch(e:VisionReadRejected) { throw ApiException(message=e.message.orEmpty()) }
+        catch(_:Exception) { throw ApiException(message="视觉接口返回的 JSON 不完整或格式错误 [V_FORMAT]；请重新读取，暂不生成新候选") }
     }
 }

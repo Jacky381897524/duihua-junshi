@@ -23,7 +23,7 @@ class TopCapsuleView(context:Context,onTap:()->Unit,onBegin:()->Unit,onMove:(Flo
     init {
         orientation=HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
         background=ViewStyles.shape(context,0xFF181A20.toInt(),11f,0xFF434752.toInt());clipToOutline=true;elevation=0f
-        setPadding(dp(4),0,dp(2),0)
+        setPadding(dp(4),0,dp(3),0)
         logo.setImageBitmap(bitmap);logo.scaleType=ImageView.ScaleType.CENTER_CROP
         logo.background=ViewStyles.shape(context,0xFFFFDA3B.toInt(),7f);logo.clipToOutline=true
         addView(logo,LayoutParams(dp(14),dp(14)).apply { rightMargin=dp(2) })
@@ -53,7 +53,7 @@ class TopCapsuleView(context:Context,onTap:()->Unit,onBegin:()->Unit,onMove:(Flo
     private fun dp(value:Int)=ViewStyles.dp(context,value.toFloat())
     fun contentWidthDp():Float {
         val paint=android.text.TextPaint(label.paint).apply { textSize=label.textSize/factor }
-        return 23f+paint.measureText(label.text.toString())/resources.displayMetrics.density
+        return 24f+paint.measureText(label.text.toString())/resources.displayMetrics.density
     }
     fun applyOptions(isLocked:Boolean,scale:Float) {
         gesture.setLocked(isLocked);locked=isLocked
@@ -61,7 +61,7 @@ class TopCapsuleView(context:Context,onTap:()->Unit,onBegin:()->Unit,onMove:(Flo
         if(factor!=next) {
             factor=next
             fun size(value:Float)=ViewStyles.dp(context,value*factor)
-            setPadding(size(4f),0,size(2f),0)
+            setPadding(size(4f),0,size(3f),0)
             logo.layoutParams=LayoutParams(size(14f),size(14f)).apply { rightMargin=size(2f) }
             logo.background=ViewStyles.shape(context,0xFFFFDA3B.toInt(),7f*factor)
             label.setTextSize(TypedValue.COMPLEX_UNIT_SP,9f*factor)

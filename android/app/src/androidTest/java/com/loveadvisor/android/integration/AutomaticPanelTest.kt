@@ -8,6 +8,28 @@ import com.loveadvisor.core.model.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticPanelTest {
+    @Test fun emptyPanelGrowsForCompleteMenuAndShrinksWhenDismissed() {
+        val i=InstrumentationRegistry.getInstrumentation()
+        i.runOnMainSync {
+            var resizes=0
+            val panel=AdvisorPanelView(i.targetContext,{},{_,_->},{},{},{},{},{true},{true},onResize={resizes++})
+            val density=i.targetContext.resources.displayMetrics.density
+            val w=(320*density).toInt()
+            val initial=panel.preferredHeight(w)
+            panel.toggleMenu(listOf("回复风格设置","完整咨询","悬浮窗设置","模型设置","连接诊断").map { it to {} },CapsuleMenuControls(false,1.27f,{true},{_,_->},{ }))
+            assertEquals(1,resizes);assertTrue(panel.menuExpanded)
+            val expanded=panel.preferredHeight(w)
+            assertTrue("空候选面板必须按完整菜单增高",expanded>initial)
+            panel.measure(View.MeasureSpec.makeMeasureSpec(w,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(expanded,View.MeasureSpec.EXACTLY));panel.layout(0,0,w,expanded)
+            fun all(v:View):List<View> = listOf(v)+if(v is ViewGroup) (0 until v.childCount).flatMap { all(v.getChildAt(it)) } else emptyList()
+            val last=all(panel).filterIsInstance<Button>().first { it.text=="连接诊断" }
+            val bounds=android.graphics.Rect();last.getDrawingRect(bounds);panel.offsetDescendantRectToMyCoords(last,bounds)
+            assertTrue("最后一项应完整显示并留出底部收起区域",bounds.bottom<=expanded-48*density)
+            assertFalse((last.parent.parent as ScrollView).canScrollVertically(1))
+            panel.dismissMenu();assertEquals(2,resizes);assertFalse(panel.menuExpanded)
+            assertEquals(initial,panel.preferredHeight(w))
+        }
+    }
     @Test fun integratedCollapseUsesEntireBottomBandAtBothEdges() {
         val i=InstrumentationRegistry.getInstrumentation()
         i.runOnMainSync {

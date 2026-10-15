@@ -7,8 +7,8 @@ android {
         applicationId = "com.loveadvisor.android"
         minSdk = 30
         targetSdk = 35
-        versionCode = 19
-        versionName = "V1.3.01"
+        versionCode = 20
+        versionName = "V1.3.02"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
     }

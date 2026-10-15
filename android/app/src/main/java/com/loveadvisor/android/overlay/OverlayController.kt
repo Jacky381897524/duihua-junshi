@@ -186,7 +186,7 @@ class OverlayController(private val service:ChatCaptureService) {
             panel?.toggleMenu(listOf("回复风格设置" to ReplyStyleActivity::class.java,"完整咨询" to ConsultationActivity::class.java,"悬浮窗设置" to com.loveadvisor.android.settings.OverlaySettingsActivity::class.java,"模型设置" to SettingsActivity::class.java,"连接诊断" to DiagnosticsActivity::class.java).map { (label,activity) -> label to {
                 service.startActivity(Intent(service,activity).putExtra("contactTitle",service.currentChatSnapshot?.identity?.displayTitle).putExtra("targetPackage",service.currentChatSnapshot?.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } },capsuleMenuControls())
-        },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE)
+        },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() })
         view.contentDescription="聊天候选面板"
         panel=view; panelParams=params(1,1,"LoveAdvisorPanel"); panelOnLeft=null
         if(native) dragIsland(view.dragHandle) else drag(view.dragHandle); view.setReading(reading); view.setFilling(filling); view.render(state); layout(); panelWindow.attach { manager.addView(view,panelParams) }
@@ -290,7 +290,10 @@ class OverlayController(private val service:ChatCaptureService) {
         }
         else {
             val initial=OverlayGeometry.measure(a,InsetsI(),null,service.resources.displayMetrics.density)
-            val measured=initial.copy(heightPx=panel!!.preferredHeight(initial.widthPx).coerceIn(1,initial.heightPx))
+            // A complete settings menu may be taller than the normal three-candidate panel.
+            // Still respect the current keyboard/composer-safe viewport; small screens scroll.
+            val maxHeight=if(panel!!.menuExpanded)a.height else initial.heightPx
+            val measured=initial.copy(heightPx=panel!!.preferredHeight(initial.widthPx).coerceIn(1,maxHeight.coerceAtLeast(1)))
             if(islandPanel) {
                 val opened=IslandPanelGeometry.open(measured,a,ViewStyles.dp(service,12f))
                 candidate=islandBounds?.let { OverlayGeometry.clamp(opened.copy(leftPx=it.leftPx,topPx=it.topPx),a) } ?: opened

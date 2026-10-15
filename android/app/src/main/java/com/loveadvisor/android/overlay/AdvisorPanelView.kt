@@ -10,7 +10,7 @@ import com.loveadvisor.core.model.SessionToken
 
 enum class PanelDragMode { TITLE, TOP_GRIP }
 data class CapsuleMenuControls(val locked:Boolean,val scale:Float,val toggleLock:()->Boolean,val resize:(Float,Boolean)->Unit,val finishResize:()->Unit)
-class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,private val onFill:(ReplyPlan,SessionToken)->Unit,private val onRefresh:()->Unit,onRead:()->Unit,onMenu:(View)->Unit,onClose:()->Unit,private val isCurrent:(SessionToken)->Boolean,private val reduced:()->Boolean,private val onDetails:((ReplyPlan,SessionToken,(String)->Unit)->Unit)?=null,dragMode:PanelDragMode=PanelDragMode.TITLE):FrameLayout(context) {
+class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,private val onFill:(ReplyPlan,SessionToken)->Unit,private val onRefresh:()->Unit,onRead:()->Unit,onMenu:(View)->Unit,onClose:()->Unit,private val isCurrent:(SessionToken)->Boolean,private val reduced:()->Boolean,private val onDetails:((ReplyPlan,SessionToken,(String)->Unit)->Unit)?=null,dragMode:PanelDragMode=PanelDragMode.TITLE,private val onResize:()->Unit={}):FrameLayout(context) {
     val dragHandle:View
     private val palette=PanelPalette(context)
     private val scoreLabel=if(com.loveadvisor.android.AppGraph.get(context).settings.load().judgeProvider=="CUSTOM")"评分" else "Jev"
@@ -20,7 +20,9 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private var displayed:VisibleBatch?=null
     private var reading=false; private var loading=false; private var filling=false
     private var menuLayer:View?=null
+    private var menuContent:LinearLayout?=null
     private var menuFinished:(()->Unit)?=null
+    val menuExpanded get()=menuLayer!=null
     init {
         background=ViewStyles.shape(context,palette.surface,24f,palette.border); clipToOutline=true; elevation=0f
         val pad=dp(12); column.setPadding(pad,pad,pad,0); addView(column,LayoutParams(-1,-1))
@@ -111,9 +113,16 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         items.drop(1).forEach { item(it) }
         val viewport=ScrollView(context).apply { isFillViewport=false;addView(menu) }
         layer.addView(viewport,LayoutParams(dp(200),-2,Gravity.TOP or Gravity.RIGHT).apply { topMargin=dp(44);rightMargin=dp(12);bottomMargin=dp(6) })
-        menuLayer=layer;addView(layer,LayoutParams(-1,-1).apply { bottomMargin=dp(48) })
+        menuLayer=layer;menuContent=menu;addView(layer,LayoutParams(-1,-1).apply { bottomMargin=dp(48) })
+        onResize()
     }
-    fun dismissMenu() { menuFinished?.invoke();menuFinished=null;menuLayer?.let { removeView(it) };menuLayer=null }
+    fun dismissMenu() {
+        val wasOpen=menuExpanded
+        val finished=menuFinished;menuFinished=null
+        menuLayer?.let { removeView(it) };menuLayer=null;menuContent=null
+        finished?.invoke()
+        if(wasOpen)onResize()
+    }
     /** Measure real cards including font scaling; long replies remain fully scrollable. */
     fun preferredHeight(widthPx:Int):Int {
         val available=(widthPx-column.paddingLeft-column.paddingRight).coerceAtLeast(1)
@@ -124,12 +133,17 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             child.measure(MeasureSpec.makeMeasureSpec(available,MeasureSpec.EXACTLY),if(lp.height>=0) MeasureSpec.makeMeasureSpec(lp.height,MeasureSpec.EXACTLY) else MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
             height+=child.measuredHeight+lp.topMargin+lp.bottomMargin
         }
-        if(cards.childCount==0) return height+dp(90)
+        if(cards.childCount==0) height+=dp(90)
         for(i in 0 until minOf(3,cards.childCount)) {
             val card=cards.getChildAt(i)
             card.measure(MeasureSpec.makeMeasureSpec(available,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
             val lp=card.layoutParams as LinearLayout.LayoutParams
             height+=card.measuredHeight+lp.topMargin+if(i<2) lp.bottomMargin else 0
+        }
+        menuContent?.let { menu ->
+            val menuWidth=minOf(dp(200),(widthPx-dp(24)).coerceAtLeast(1))
+            menu.measure(MeasureSpec.makeMeasureSpec(menuWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
+            height=maxOf(height,dp(44)+menu.measuredHeight+dp(6)+dp(48))
         }
         return height
     }

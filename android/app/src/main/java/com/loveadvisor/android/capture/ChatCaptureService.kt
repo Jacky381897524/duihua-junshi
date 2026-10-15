@@ -263,7 +263,11 @@ class ChatCaptureService:AccessibilityService() {
                             }
                         }
                     } catch(_:java.util.concurrent.CancellationException) { }
-                    catch(e:Exception) { main.post { if(!cancel.cancelled && lease==navigation && manualRead.accepts(ticket)) finishRead(ticket,graph.safeError(e)) } }
+                    catch(e:Exception) { main.post { if(!cancel.cancelled && lease==navigation && manualRead.accepts(ticket)) {
+                        val reason=graph.safeError(e)
+                        lastWechatDiagnosticStatus="视觉读取失败 · $reason"
+                        finishRead(ticket,reason)
+                    } } }
                     finally { if(!image.bitmap.isRecycled) image.bitmap.recycle() }
                 }
             }
