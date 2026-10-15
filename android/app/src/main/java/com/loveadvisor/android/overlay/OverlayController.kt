@@ -4,6 +4,12 @@ import android.graphics.BitmapFactory
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.view.*
 import android.widget.ImageView
 import com.loveadvisor.android.R
@@ -19,6 +25,7 @@ import com.loveadvisor.core.overlay.*
 import com.loveadvisor.core.advisor.BatchState
 import com.loveadvisor.core.capture.ChatApps
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** Both surfaces use one anchor and dock calculation; their windows contain no empty touch column. */
 class OverlayController(private val service:ChatCaptureService) {
@@ -35,6 +42,24 @@ class OverlayController(private val service:ChatCaptureService) {
     private var confirmation:DraftConfirmWindow?=null
     private var cancelFill:(()->Unit)?=null
     private var imeInsetBottom=0
+    private val main=Handler(Looper.getMainLooper())
+    private val idle=BubbleIdlePolicy()
+    private var edge:BubbleEdge?=null
+    private var edgeAnimator:ValueAnimator?=null
+    private var motionX:Float?=null
+    private var dragging=false
+    private var lastAvailable:RectI?=null
+    private val autoHide=Runnable {
+        if(!canAutoHide()) idle.pause()
+        else if(idle.hideIfDue(SystemClock.uptimeMillis())) {
+            val p=bubbleParams ?: return@Runnable
+            val a=available();val current=PanelBounds(p.x,p.y,p.width,p.height)
+            edge=BubbleEdgeGeometry.nearest(current,a)
+            val full=BubbleEdgeGeometry.place(current,a,edge!!,false)
+            anchorX=full.leftPx;anchorY=full.topPx
+            moveBubbleTo(BubbleEdgeGeometry.place(full,a,edge!!,true,physicalDisplay()).leftPx)
+        }
+    }
     private val listener:(BatchState)->Unit={ render(it) }
     init { graph.controller.listen(listener) }
     private fun create() {
@@ -46,7 +71,7 @@ class OverlayController(private val service:ChatCaptureService) {
             scaleType=ImageView.ScaleType.CENTER_CROP; setImageBitmap(image)
             background=ViewStyles.shape(service,0xFFFFDA3B.toInt(),20f); clipToOutline=true; elevation=0f
             contentDescription="打开对话军师悬浮窗"
-            setOnClickListener { if(panel==null) show() else hide() }
+            setOnClickListener { bubbleClick() }
             setOnApplyWindowInsetsListener { _,insets ->
                 val bottom=if(insets.isVisible(WindowInsets.Type.ime()))insets.getInsets(WindowInsets.Type.ime()).bottom else 0
                 if(bottom!=imeInsetBottom) { imeInsetBottom=bottom;post { resize() } }
@@ -55,7 +80,7 @@ class OverlayController(private val service:ChatCaptureService) {
         }
         bubble=icon
         val a=available(); anchorX=a.right-size-ViewStyles.dp(service,8f); anchorY=a.top+(a.height*.25).toInt()
-        bubbleParams=params(size,size,"LoveAdvisorBubble"); drag(icon)
+        bubbleParams=params(size,size,"LoveAdvisorBubble").apply { flags=flags or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS }; drag(icon)
     }
     private fun params(width:Int,height:Int,titleValue:String)=WindowManager.LayoutParams(width,height,WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT).apply { gravity=Gravity.TOP or Gravity.LEFT; title=titleValue;setFitInsetsTypes(0) }
     fun showBubble() {
@@ -63,10 +88,12 @@ class OverlayController(private val service:ChatCaptureService) {
         create(); layout()
         panel?.let { panelWindow.attach { manager.addView(it,panelParams) } }
         bubble?.let { bubbleWindow.attach { manager.addView(it,bubbleParams) } }
+        scheduleAutoHide()
     }
     fun show() {
         if(!service.overlayAllowed()) return
         showBubble(); if(panel!=null) return
+        stopEdgeMotion();idle.interact(SystemClock.uptimeMillis(),idleSeconds());idle.pause();main.removeCallbacks(autoHide)
         val view=AdvisorPanelView(service,{ ClipboardController.copy(service,it.text);hide() },{ plan,token ->
             if(!filling) {
                 filling=true;panel?.setFilling(true)
@@ -80,7 +107,7 @@ class OverlayController(private val service:ChatCaptureService) {
                 })
             }
         },{ service.refresh() },{ service.captureNow() },{ anchor ->
-            panel?.toggleMenu(listOf("完整咨询" to ConsultationActivity::class.java,"回复风格设置" to ReplyStyleActivity::class.java,"模型设置" to SettingsActivity::class.java,"连接诊断" to DiagnosticsActivity::class.java).map { (label,activity) -> label to {
+            panel?.toggleMenu(listOf("完整咨询" to ConsultationActivity::class.java,"回复风格设置" to ReplyStyleActivity::class.java,"悬浮窗设置" to com.loveadvisor.android.settings.OverlaySettingsActivity::class.java,"模型设置" to SettingsActivity::class.java,"连接诊断" to DiagnosticsActivity::class.java).map { (label,activity) -> label to {
                 service.startActivity(Intent(service,activity).putExtra("contactTitle",service.currentChatSnapshot?.identity?.displayTitle).putExtra("targetPackage",service.currentChatSnapshot?.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } })
         },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) })
@@ -92,9 +119,63 @@ class OverlayController(private val service:ChatCaptureService) {
     fun render(value:BatchState) { if(state==value) return; state=value; panel?.render(value);layout() }
     fun setReading(value:Boolean) { reading=value; panel?.setReading(value) }
     fun themeChanged() { val expanded=panel!=null;hide();if(expanded && service.overlayAllowed())show() }
-    fun hide() { cancelFill?.invoke();cancelFill=null;filling=false;confirmation?.close();confirmation=null; panel?.let { it.release(); panelWindow.detach { manager.removeViewImmediate(it) } }; panel=null; panelParams=null; panelOnLeft=null; layout() }
+    fun hide() {
+        val expanded=panel!=null
+        cancelFill?.invoke();cancelFill=null;filling=false;confirmation?.close();confirmation=null
+        panel?.let { it.release(); panelWindow.detach { manager.removeViewImmediate(it) } }
+        panel=null;panelParams=null;panelOnLeft=null;layout();scheduleAutoHide(restart=expanded)
+    }
     /** Retain the shared anchor and expansion while temporarily detaching both surfaces. */
-    fun suppress() { if(confirmation!=null)filling=false;confirmation?.close();confirmation=null;panel?.let { it.dismissMenu();it.stopAnimations(); panelWindow.detach { manager.removeViewImmediate(it) } }; bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } } }
+    fun suppress() {
+        main.removeCallbacks(autoHide);idle.pause();stopEdgeMotion();dragging=false
+        if(confirmation!=null)filling=false;confirmation?.close();confirmation=null
+        panel?.let { it.dismissMenu();it.stopAnimations(); panelWindow.detach { manager.removeViewImmediate(it) } }
+        bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } }
+    }
+    private fun idleSeconds()=graph.settings.load().bubbleAutoHideSeconds
+    private fun canAutoHide()=panel==null && !dragging && bubbleWindow.registered && service.overlayAllowed()
+    private fun scheduleAutoHide(restart:Boolean=false) {
+        main.removeCallbacks(autoHide)
+        if(!canAutoHide()) { idle.pause();return }
+        val now=SystemClock.uptimeMillis()
+        if(restart && !idle.hidden) idle.interact(now,idleSeconds()) else idle.resume(now,idleSeconds())
+        idle.deadlineAt?.let { main.postDelayed(autoHide,(it-now).coerceAtLeast(0)) }
+    }
+    private fun bubbleClick() {
+        if(idle.reveal(SystemClock.uptimeMillis(),idleSeconds())) {
+            val p=bubbleParams ?: return
+            val a=available();val current=PanelBounds(p.x,p.y,p.width,p.height)
+            val full=BubbleEdgeGeometry.place(current,a,edge ?: BubbleEdgeGeometry.nearest(current,a),false)
+            anchorX=full.leftPx;anchorY=full.topPx
+            moveBubbleTo(full.leftPx);scheduleAutoHide()
+        } else if(panel==null) show() else hide()
+    }
+    private fun stopEdgeMotion(freeze:Boolean=false) {
+        edgeAnimator?.let { it.removeAllUpdateListeners();it.removeAllListeners();it.cancel() };edgeAnimator=null
+        motionX=if(freeze) bubbleParams?.x?.toFloat() else null
+    }
+    private fun moveBubbleTo(targetX:Int) {
+        val p=bubbleParams ?: return
+        val from=p.x.toFloat();stopEdgeMotion()
+        bubble?.contentDescription=if(idle.hidden) "显示对话军师悬浮球" else "打开对话军师悬浮窗"
+        if(graph.settings.load().reducedMotion || !ValueAnimator.areAnimatorsEnabled() || !bubbleWindow.registered || from==targetX.toFloat()) { layout();return }
+        motionX=from
+        val animation=ValueAnimator.ofFloat(from,targetX.toFloat()).apply {
+            duration=250;interpolator=android.view.animation.DecelerateInterpolator()
+            addUpdateListener {
+                motionX=it.animatedValue as Float
+                // Only the icon's small window moves each frame; no screen reads or model requests.
+                val x=motionX!!.roundToInt()
+                if(bubbleWindow.registered && panel==null && p.x!=x) { p.x=x;bubble?.let { v -> manager.updateViewLayout(v,p) } }
+            }
+            addListener(object:AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation:Animator) {
+                    if(edgeAnimator===animation) { edgeAnimator=null;motionX=null;layout() }
+                }
+            })
+        }
+        edgeAnimator=animation;animation.start()
+    }
     fun resize() {
         val ime=service.windows.any { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
         keyboardVisible=ime; layout()
@@ -109,12 +190,19 @@ class OverlayController(private val service:ChatCaptureService) {
         val bottom=ime?.let { OverlayGeometry.composerSafeBottom(it,service.resources.displayMetrics.density) } ?: (r.bottom-inset.bottom)
         return RectI(r.left+inset.left,top,maxOf(r.left+inset.left+1,r.right-inset.right),maxOf(top+1,minOf(r.bottom-inset.bottom,bottom)))
     }
+    private fun physicalDisplay():RectI=manager.maximumWindowMetrics.bounds.let { RectI(it.left,it.top,it.right,it.bottom) }
     private fun layout() {
         val icon=bubble ?: return; val bp=bubbleParams ?: return
-        val a=available(); val size=ViewStyles.dp(service,40f).coerceAtMost(minOf(a.width,a.height)).coerceAtLeast(1)
+        val a=available()
+        if(lastAvailable!=null && lastAvailable!=a) stopEdgeMotion()
+        lastAvailable=a
+        val size=ViewStyles.dp(service,40f).coerceAtMost(minOf(a.width,a.height)).coerceAtLeast(1)
         val anchor=PanelBounds(anchorX ?: a.left,anchorY ?: a.top,size,size)
         val ball:PanelBounds; val candidate:PanelBounds?
-        if(panel==null) { ball=OverlayGeometry.clamp(anchor,a); candidate=null }
+        if(panel==null) {
+            ball=if(idle.hidden) BubbleEdgeGeometry.place(anchor,a,edge ?: BubbleEdgeGeometry.nearest(anchor,a),false) else OverlayGeometry.clamp(anchor,a)
+            candidate=null
+        }
         else {
             val initial=OverlayGeometry.measure(a,InsetsI(),null,service.resources.displayMetrics.density)
             val measured=initial.copy(heightPx=panel!!.preferredHeight(initial.widthPx).coerceIn(1,initial.heightPx))
@@ -130,19 +218,32 @@ class OverlayController(private val service:ChatCaptureService) {
         }
         // Apply the two positions together on the main thread from the same dock result.
         panel?.let { v -> candidate?.let { b -> panelParams?.let { position(v,it,b,panelWindow) }; v.compact(b.heightPx<200*service.resources.displayMetrics.density) } }
-        position(icon,bp,ball,bubbleWindow)
+        val resting=if(panel==null && idle.hidden) BubbleEdgeGeometry.place(ball,a,edge ?: BubbleEdgeGeometry.nearest(ball,a),true,physicalDisplay()) else ball
+        val displayed=if(panel==null && motionX!=null) resting.copy(leftPx=motionX!!.roundToInt()) else resting
+        icon.contentDescription=if(idle.hidden) "显示对话军师悬浮球" else "打开对话军师悬浮窗"
+        position(icon,bp,displayed,bubbleWindow)
     }
     private fun drag(view:View) {
         var x=0f; var y=0f; var px=0; var py=0; var moved=false
         view.setOnTouchListener { v,event ->
             when(event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { x=event.rawX; y=event.rawY; px=anchorX ?: 0; py=anchorY ?: 0; moved=false; true }
-                MotionEvent.ACTION_MOVE -> { val dx=event.rawX-x; val dy=event.rawY-y; if(abs(dx)+abs(dy)>ViewStyles.dp(service,6f)) moved=true; if(moved) { anchorX=(px+dx).toInt(); anchorY=(py+dy).toInt(); layout() }; true }
-                MotionEvent.ACTION_UP -> { if(!moved) v.performClick(); true }
-                MotionEvent.ACTION_CANCEL -> true
+                MotionEvent.ACTION_DOWN -> {
+                    main.removeCallbacks(autoHide);idle.pause();stopEdgeMotion(freeze=true);dragging=true
+                    x=event.rawX;y=event.rawY;px=bubbleParams?.x ?: 0;py=anchorY ?: 0;moved=false;true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx=event.rawX-x;val dy=event.rawY-y
+                    if(abs(dx)+abs(dy)>ViewStyles.dp(service,6f)) moved=true
+                    if(moved) {
+                        idle.interact(SystemClock.uptimeMillis(),idleSeconds());idle.pause();motionX=null;edge=null
+                        anchorX=(px+dx).toInt();anchorY=(py+dy).toInt();layout()
+                    };true
+                }
+                MotionEvent.ACTION_UP -> { dragging=false;motionX=null;if(!moved) v.performClick();scheduleAutoHide(restart=true);true }
+                MotionEvent.ACTION_CANCEL -> { dragging=false;motionX=null;layout();scheduleAutoHide(restart=true);true }
                 else -> false
             }
         }
     }
-    fun destroy() { hide();suppress();bubble?.drawable?.let { (it as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle() }; bubble=null; panel=null; bubbleParams=null; panelParams=null; graph.controller.unlisten(listener) }
+    fun destroy() { hide();suppress();main.removeCallbacksAndMessages(null);bubble?.drawable?.let { (it as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle() }; bubble=null; panel=null; bubbleParams=null; panelParams=null; graph.controller.unlisten(listener) }
 }

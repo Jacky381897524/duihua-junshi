@@ -4,6 +4,16 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun oldSettingsHaveFifteenSecondIdleTimeoutAndCustomTimeoutSurvivesReopening() {
+        val defaults=Gson().toJsonTree(AppSettings.decode("{}")).asJsonObject
+        assertEquals(15,defaults["bubbleAutoHideSeconds"]?.asInt)
+        val reopened=Gson().toJsonTree(AppSettings.decode(Gson().toJson(AppSettings.decode("""{"bubbleAutoHideSeconds":45}""")))).asJsonObject
+        assertEquals(45,reopened["bubbleAutoHideSeconds"]?.asInt)
+        for (invalid in listOf(-1,0,Int.MAX_VALUE)) {
+            val migrated=Gson().toJsonTree(AppSettings.decode("""{"bubbleAutoHideSeconds":$invalid}""" )).asJsonObject
+            assertEquals(15,migrated["bubbleAutoHideSeconds"]?.asInt)
+        }
+    }
     @Test fun globalReplyStylePersistsAndOldSettingsDefaultToEmpty() {
         val saved=SettingsData(globalReplyStyle="没有标点符号",replyStyles=mapOf("object-key" to "浪漫"))
         val reopened=AppSettings.decode(Gson().toJson(saved))

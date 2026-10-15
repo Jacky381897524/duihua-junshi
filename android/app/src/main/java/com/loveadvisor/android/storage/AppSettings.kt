@@ -3,7 +3,8 @@ import com.google.gson.Gson
 import com.loveadvisor.core.api.*
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-data class SettingsData(val profile:ApiProfile=ProviderPresets.OPENROUTER.reply(),val models:List<ApiModel> = emptyList(),val manualModel:Boolean=false,val overlayEnabled:Boolean=true,val automaticAnalysis:Boolean=true,val reducedMotion:Boolean=false,val historyEnabled:Boolean=false,val jev:JevProfile=JevProfile(true,ProviderPresets.JEV_ENDPOINT,"",ProviderPresets.JEV_MODEL),val vision:ApiProfile=ProviderPresets.OPENROUTER.vision(),val visionModels:List<ApiModel> = emptyList(),val replyProvider:String="OPENROUTER",val visionProvider:String="OPENROUTER",val providerProfiles:Map<String,ApiProfile> = emptyMap(),val replyStyles:Map<String,String> = emptyMap(),val fillPanelBehavior:String="collapse",val replyStyleTitles:Map<String,String> = emptyMap(),val judgeProvider:String="OPENROUTER",val judgeCustom:ApiProfile=ApiProfile(baseUrl="",apiKey=""),val replyStyleApps:Map<String,String> = emptyMap(),val globalReplyStyle:String="") {
+import com.loveadvisor.core.overlay.BubbleIdlePolicy
+data class SettingsData(val profile:ApiProfile=ProviderPresets.OPENROUTER.reply(),val models:List<ApiModel> = emptyList(),val manualModel:Boolean=false,val overlayEnabled:Boolean=true,val automaticAnalysis:Boolean=true,val reducedMotion:Boolean=false,val historyEnabled:Boolean=false,val jev:JevProfile=JevProfile(true,ProviderPresets.JEV_ENDPOINT,"",ProviderPresets.JEV_MODEL),val vision:ApiProfile=ProviderPresets.OPENROUTER.vision(),val visionModels:List<ApiModel> = emptyList(),val replyProvider:String="OPENROUTER",val visionProvider:String="OPENROUTER",val providerProfiles:Map<String,ApiProfile> = emptyMap(),val replyStyles:Map<String,String> = emptyMap(),val fillPanelBehavior:String="collapse",val replyStyleTitles:Map<String,String> = emptyMap(),val judgeProvider:String="OPENROUTER",val judgeCustom:ApiProfile=ApiProfile(baseUrl="",apiKey=""),val replyStyleApps:Map<String,String> = emptyMap(),val globalReplyStyle:String="",val bubbleAutoHideSeconds:Int=BubbleIdlePolicy.DEFAULT_SECONDS) {
     fun judgeProfile():JevProfile=if(judgeProvider=="CUSTOM") JevProfile(true,judgeCustom.baseUrl,judgeCustom.apiKey,judgeCustom.selectedModelId.orEmpty(),judgeCustom.allowLanHttp,true) else jev.copy(custom=false,apiKey=jev.apiKey.ifBlank { ProviderPresets.openRouterKey(profile,vision) })
 }
 class AppSettings(private val documents:AndroidDocumentStore) {
@@ -26,7 +27,7 @@ class AppSettings(private val documents:AndroidDocumentStore) {
             val oldJudge=old.get("jev")?.takeIf { it.isJsonObject }?.asJsonObject
             val oldEndpoint=oldJudge?.get("endpoint")?.takeIf { it.isJsonPrimitive }?.asString
             val judgeKey=if(oldEndpoint!=null && runCatching { java.net.URI(oldEndpoint).host=="openrouter.ai" }.getOrDefault(false).not()) "" else loaded.jev.apiKey
-            return loaded.copy(profile=profile,replyProvider=replyProvider,automaticAnalysis=true,jev=loaded.jev.copy(enabled=true,endpoint=ProviderPresets.JEV_ENDPOINT,apiKey=judgeKey,model=ProviderPresets.JEV_MODEL,allowLanHttp=false))
+            return loaded.copy(profile=profile,replyProvider=replyProvider,automaticAnalysis=true,bubbleAutoHideSeconds=BubbleIdlePolicy.safeSeconds(loaded.bubbleAutoHideSeconds),jev=loaded.jev.copy(enabled=true,endpoint=ProviderPresets.JEV_ENDPOINT,apiKey=judgeKey,model=ProviderPresets.JEV_MODEL,allowLanHttp=false))
         }
     }
 }

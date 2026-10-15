@@ -11,6 +11,7 @@
         </activity>
         <activity android:name=".settings.SettingsActivity" android:exported="false"/>
         <activity android:name=".settings.ReplyStyleActivity" android:exported="false"/>
+        <activity android:name=".settings.OverlaySettingsActivity" android:exported="false"/>
         <activity android:name=".knowledge.KnowledgeActivity" android:exported="false"/>
         <activity android:name=".memory.ProfilesActivity" android:exported="false"/>
         <activity android:name=".memory.MemoryActivity" android:exported="false"/>

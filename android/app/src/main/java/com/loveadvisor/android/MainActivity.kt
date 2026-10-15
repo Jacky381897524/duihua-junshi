@@ -6,6 +6,7 @@ import com.loveadvisor.android.ui.*
 import com.loveadvisor.android.capture.ChatCaptureService
 import com.loveadvisor.android.settings.SettingsActivity
 import com.loveadvisor.android.settings.ReplyStyleActivity
+import com.loveadvisor.android.settings.OverlaySettingsActivity
 import com.loveadvisor.android.knowledge.KnowledgeActivity
 import com.loveadvisor.android.memory.ProfilesActivity
 import com.loveadvisor.android.advisor.*
@@ -25,6 +26,7 @@ class MainActivity : BaseActivity() {
         val config=graph.settings.load(); val model=ViewStyles.card(this); body.addView(model); model.addView(ViewStyles.text(this,"你的模型",19f,bold=true)); model.addView(ViewStyles.text(this,config.profile.selectedModelId ?: "填写服务地址与密钥，刷新选择模型",14f,ViewStyles.MUTED)); model.addView(ViewStyles.button(this,"模型与连接设置") { open(SettingsActivity::class.java) })
         body.addView(ViewStyles.button(this,"回复风格设置") { open(ReplyStyleActivity::class.java) })
         body.addView(ViewStyles.switch(this,"启用聊天悬浮窗",config.overlayEnabled) { enabled -> graph.settings.update { it.copy(overlayEnabled=enabled) }; if(!enabled && com.loveadvisor.core.capture.CapturePolicy.invalidateForDisabledCapture(graph.tracker.currentToken)) graph.controller.invalidate(); ChatCaptureService.instance?.settingsChanged() })
+        body.addView(ViewStyles.button(this,"悬浮窗设置 · ${config.bubbleAutoHideSeconds} 秒后隐藏") { open(OverlaySettingsActivity::class.java) })
         body.addView(ViewStyles.text(this,"微信 · QQ · 抖音单聊按需读取 · 最近 50 条上下文\n点击悬浮图标展开，再点读取信息；刷新使用已读取上下文，复制后收起，填入后由你发送。",14f,ViewStyles.MUTED))
         body.addView(ViewStyles.switch(this,"减少动效",config.reducedMotion) { enabled -> graph.settings.update { it.copy(reducedMotion=enabled) } })
         body.addView(ViewStyles.button(this,"融合知识库与我的笔记") { open(KnowledgeActivity::class.java) })
@@ -46,6 +48,6 @@ class MainActivity : BaseActivity() {
         authorName.addView(ViewStyles.text(this,"作者",12f,ViewStyles.MUTED))
         authorName.addView(ViewStyles.text(this,"海街寺庙",17f,bold=true))
         authorRow.addView(authorName,android.widget.LinearLayout.LayoutParams(0,-2,1f))
-        authorRow.addView(ViewStyles.text(this,"V1.2.12",12f,ViewStyles.MUTED))
+        authorRow.addView(ViewStyles.text(this,"V1.2.13",12f,ViewStyles.MUTED))
     }
 }
