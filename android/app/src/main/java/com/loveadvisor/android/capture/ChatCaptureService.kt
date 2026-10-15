@@ -40,6 +40,24 @@ class ChatCaptureService:AccessibilityService() {
     private var foregroundWindowId:Int?=null
     private var wechatForeground=false
     private var foregroundPackage:String?=null
+    private var islandTestRequested=false
+    private var islandLease:com.loveadvisor.android.island.IslandLease?=null
+    private val islandNotification by lazy { com.loveadvisor.android.island.NativeIslandNotification(this) }
+    var islandDiagnostic="原生岛测试未开启"; private set
+    fun startNativeIslandTest() { islandTestRequested=true;checkForeground() }
+    fun onNativeIslandTap(leaseId:String,complete:(Boolean)->Unit={}) {
+        val lease=islandLease
+        if(!::reader.isInitialized || lease==null || lease.id!=leaseId || !overlayAllowed() || overlaySuspensions!=0) { complete(false);return }
+        nativeWorker.execute {
+            val fresh=runCatching { reader.foreground() }.getOrNull()
+            main.post {
+                val valid=lease===islandLease && lease.generation==navigation && overlayAllowed() && overlaySuspensions==0 && fresh?.packageName==lease.packageName && fresh.windowId==lease.windowId
+                val opened=valid && runCatching { overlay.showFromIsland() }.getOrDefault(false)
+                islandDiagnostic=if(opened) "原生专用点击已打开面板（测试，仍保留球）" else "原生点击已过期，保留悬浮球"
+                complete(opened)
+            }
+        }
+    }
     val currentChatSnapshot get()=conversation.current
     val glassWindow get()=lastForegroundWindow?.takeIf { overlayAllowed() }
     private var lastForegroundWindow:WindowSnapshot?=null
@@ -354,7 +372,21 @@ class ChatCaptureService:AccessibilityService() {
     }
     fun canCapture()=graph.settings.load().overlayEnabled && !locked()
     fun overlayAllowed()=CapturePolicy.overlayVisible(graph.settings.load().overlayEnabled,locked(),projecting,wechatForeground)
-    fun ensureOverlay() { if(::overlay.isInitialized) { if(overlayAllowed() && overlaySuspensions==0) overlay.showBubble() else overlay.suppress() } }
+    fun ensureOverlay() { if(::overlay.isInitialized) {
+        if(overlayAllowed() && overlaySuspensions==0) {
+            overlay.showBubble()
+            if(islandTestRequested && islandLease==null) {
+                val pkg=foregroundPackage;val id=foregroundWindowId
+                if(pkg!=null && id!=null) {
+                    islandLease=com.loveadvisor.android.island.IslandLease(UUID.randomUUID().toString(),pkg,id,navigation)
+                    islandDiagnostic=when(val result=islandNotification.publish("待读取",islandLease!!)) {
+                        is com.loveadvisor.android.island.IslandPublishResult.FAILED -> result.reason
+                        else -> "已发送测试通知，等待真实原生岛点击；普通通知不算成功"
+                    }
+                }
+            }
+        } else { overlay.suppress();islandNotification.end();islandLease=null }
+    } }
     fun showFloating() { graph.settings.update { it.copy(overlayEnabled=true) }; checkForeground() }
     fun settingsChanged() { if(!canObserve()) leaveForeground() else checkForeground() }
     fun beginProjectionCapture() { projecting=true; leaveForeground() }
@@ -385,6 +417,6 @@ class ChatCaptureService:AccessibilityService() {
     }
     override fun onInterrupt() { readGate.invalidate(); reset(); if(::overlay.isInitialized) { overlay.hide();overlay.suppress() } }
     override fun onConfigurationChanged(newConfig:android.content.res.Configuration) { super.onConfigurationChanged(newConfig);if(::overlay.isInitialized)overlay.themeChanged();if(::reader.isInitialized)checkForeground() }
-    override fun onDestroy() { main.removeCallbacksAndMessages(null); readGate.invalidate(); reset(); if(::overlay.isInitialized) overlay.destroy(); worker.shutdownNow(); nativeWorker.shutdownNow(); runCatching { unregisterReceiver(receiver) }; instance=null; super.onDestroy() }
+    override fun onDestroy() { islandNotification.end();islandLease=null; main.removeCallbacksAndMessages(null); readGate.invalidate(); reset(); if(::overlay.isInitialized) overlay.destroy(); worker.shutdownNow(); nativeWorker.shutdownNow(); runCatching { unregisterReceiver(receiver) }; instance=null; super.onDestroy() }
     companion object { @Volatile var instance:ChatCaptureService?=null; private set }
 }

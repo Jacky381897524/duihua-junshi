@@ -11,6 +11,8 @@ class DiagnosticsActivity:BaseActivity() {
         val config=graph.settings.load(); val text="设备：${Build.MANUFACTURER} ${Build.MODEL}\nAndroid：${Build.VERSION.RELEASE}（API ${Build.VERSION.SDK_INT}）\n微信：$wechat\n悬浮窗：${Settings.canDrawOverlays(this)}\n服务连接：${ChatCaptureService.instance!=null}\n选定模型：${config.profile.selectedModelId ?: "未选择"}\n\n脱敏事件（最近100条）：\n${graph.diagnosticText()}"
         body.addView(ViewStyles.text(this,text,15f).apply { setTextIsSelectable(true) })
         val service=ChatCaptureService.instance
+        body.addView(ViewStyles.text(this,"原生岛：${service?.islandDiagnostic ?: "服务未连接"}",14f))
+        body.addView(ViewStyles.button(this,"原生岛测试（返回聊天应用后观察）") { service?.startNativeIslandTest();toast("请返回微信、QQ或抖音；普通通知不代表上岛成功") })
         val captureStatus="回复模型：${config.profile.selectedModelId ?: "未选择"}\n视觉模型：${config.vision.selectedModelId ?: "未选择"}\n最近读取：${service?.diagnosticStatus ?: "无障碍服务未连接"}\n最近微信读取：${service?.lastWechatDiagnosticStatus ?: "无障碍服务未连接"}"
         val fillStatus="最近填入：${service?.lastFillDiagnosticStatus ?: "无障碍服务未连接"}"
         body.addView(ViewStyles.text(this,captureStatus+"\n"+fillStatus,15f).apply { setTextIsSelectable(true) })

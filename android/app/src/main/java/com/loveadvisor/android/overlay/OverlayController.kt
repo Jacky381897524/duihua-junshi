@@ -117,6 +117,7 @@ class OverlayController(private val service:ChatCaptureService) {
         OverlayAnimator.enter(view,graph.settings.load().reducedMotion,panel=true)
     }
     fun render(value:BatchState) { if(state==value) return; state=value; panel?.render(value);layout() }
+    fun showFromIsland():Boolean { show();return panelWindow.registered }
     fun setReading(value:Boolean) { reading=value; panel?.setReading(value) }
     fun themeChanged() { val expanded=panel!=null;hide();if(expanded && service.overlayAllowed())show() }
     fun hide() {
