@@ -13,7 +13,7 @@ class OverlaySettingsActivity:BaseActivity() {
         page("悬浮窗设置","减少遮挡，需要时轻点唤出。")
         val card=ViewStyles.card(this);body.addView(card)
         card.addView(ViewStyles.text(this,"自动隐藏等待时间",19f,bold=true))
-        card.addView(ViewStyles.text(this,"面板收起且无操作后，悬浮球滑到最近的屏幕边缘，只露出约四分之一。点一下完整露出，再点一下展开面板。",14f,ViewStyles.MUTED))
+        card.addView(ViewStyles.text(this,"面板收起且无操作后，悬浮球滑到最近的屏幕边缘，只露出约三分之一。点一下完整露出，再点一下展开面板。",14f,ViewStyles.MUTED))
         val seconds=ViewStyles.field(this,"等待秒数（1–3600）",graph.settings.load().bubbleAutoHideSeconds.toString()).apply {
             inputType=InputType.TYPE_CLASS_NUMBER
             contentDescription="自动隐藏等待秒数"

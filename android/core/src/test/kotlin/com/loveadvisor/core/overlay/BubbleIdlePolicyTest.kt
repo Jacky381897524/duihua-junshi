@@ -69,11 +69,11 @@ class BubbleIdlePolicyTest {
         assertTrue(policy.hideIfDue(3600000))
     }
 
-    @Test fun rightEdgeLeavesExactlyAQuarterVisibleAndRestoresTheFullIcon() {
+    @Test fun rightEdgeLeavesAThirdVisibleAndRestoresTheFullIcon() {
         val screen=RectI(0,30,390,790)
         val bubble=PanelBounds(342,160,40,40)
         assertEquals(BubbleEdge.RIGHT,BubbleEdgeGeometry.nearest(bubble,screen))
-        assertEquals(PanelBounds(380,160,40,40),BubbleEdgeGeometry.place(bubble,screen,BubbleEdge.RIGHT,true))
+        assertEquals(PanelBounds(376,160,40,40),BubbleEdgeGeometry.place(bubble,screen,BubbleEdge.RIGHT,true))
         assertEquals(PanelBounds(350,160,40,40),BubbleEdgeGeometry.place(bubble,screen,BubbleEdge.RIGHT,false))
     }
 
@@ -81,7 +81,7 @@ class BubbleIdlePolicyTest {
         val screen=RectI(12,30,390,490)
         val bubble=PanelBounds(20,700,40,40)
         assertEquals(BubbleEdge.LEFT,BubbleEdgeGeometry.nearest(bubble,screen))
-        assertEquals(PanelBounds(-18,450,40,40),BubbleEdgeGeometry.place(bubble,screen,BubbleEdge.LEFT,true))
+        assertEquals(PanelBounds(-14,450,40,40),BubbleEdgeGeometry.place(bubble,screen,BubbleEdge.LEFT,true))
         assertEquals(PanelBounds(12,450,40,40),BubbleEdgeGeometry.place(bubble,screen,BubbleEdge.LEFT,false))
     }
 
@@ -93,8 +93,8 @@ class BubbleIdlePolicyTest {
         val safe=RectI(48,30,752,490)
         val physical=RectI(0,0,800,520)
         val bubble=PanelBounds(710,160,40,40)
-        assertEquals(PanelBounds(790,160,40,40),BubbleEdgeGeometry.place(bubble,safe,BubbleEdge.RIGHT,true,physical))
-        assertEquals(PanelBounds(-30,160,40,40),BubbleEdgeGeometry.place(bubble,safe,BubbleEdge.LEFT,true,physical))
+        assertEquals(PanelBounds(786,160,40,40),BubbleEdgeGeometry.place(bubble,safe,BubbleEdge.RIGHT,true,physical))
+        assertEquals(PanelBounds(-26,160,40,40),BubbleEdgeGeometry.place(bubble,safe,BubbleEdge.LEFT,true,physical))
         assertEquals(PanelBounds(712,160,40,40),BubbleEdgeGeometry.place(bubble,safe,BubbleEdge.RIGHT,false,physical))
     }
 }

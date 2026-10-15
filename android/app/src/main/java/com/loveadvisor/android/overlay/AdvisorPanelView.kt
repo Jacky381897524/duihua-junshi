@@ -8,8 +8,9 @@ import com.loveadvisor.android.ui.ViewStyles
 import com.loveadvisor.core.advisor.*
 import com.loveadvisor.core.model.SessionToken
 
-class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,private val onFill:(ReplyPlan,SessionToken)->Unit,private val onRefresh:()->Unit,onRead:()->Unit,onMenu:(View)->Unit,onClose:()->Unit,private val isCurrent:(SessionToken)->Boolean,private val reduced:()->Boolean,private val onDetails:((ReplyPlan,SessionToken,(String)->Unit)->Unit)?=null):FrameLayout(context) {
-    val dragHandle:TextView
+enum class PanelDragMode { TITLE, TOP_GRIP }
+class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,private val onFill:(ReplyPlan,SessionToken)->Unit,private val onRefresh:()->Unit,onRead:()->Unit,onMenu:(View)->Unit,onClose:()->Unit,private val isCurrent:(SessionToken)->Boolean,private val reduced:()->Boolean,private val onDetails:((ReplyPlan,SessionToken,(String)->Unit)->Unit)?=null,dragMode:PanelDragMode=PanelDragMode.TITLE):FrameLayout(context) {
+    val dragHandle:View
     private val palette=PanelPalette(context)
     private val scoreLabel=if(com.loveadvisor.android.AppGraph.get(context).settings.load().judgeProvider=="CUSTOM")"评分" else "Jev"
     private val column=ViewStyles.column(context)
@@ -22,8 +23,15 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         background=ViewStyles.shape(context,palette.surface,24f,palette.border); clipToOutline=true; elevation=0f
         val pad=dp(12); column.setPadding(pad,pad,pad,pad); addView(column,LayoutParams(-1,-1))
         val header=ViewStyles.row(context)
-        dragHandle=palette.text("军师分析",17f,bold=true)
-        header.addView(dragHandle,LinearLayout.LayoutParams(0,-1,1f))
+        val title=palette.text("军师分析",17f,bold=true)
+        dragHandle=if(dragMode==PanelDragMode.TOP_GRIP) {
+            val row=FrameLayout(context)
+            val grip=palette.text("•••",18f,palette.blue,bold=true).apply { gravity=Gravity.CENTER;contentDescription="拖动候选面板" }
+            row.addView(grip,FrameLayout.LayoutParams(dp(64),dp(24),Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+            column.addView(row,LinearLayout.LayoutParams(-1,dp(24)))
+            grip
+        } else title
+        header.addView(title,LinearLayout.LayoutParams(0,-1,1f))
         val menu=palette.button("⋯") {}; menu.contentDescription="更多设置"
         menu.setOnClickListener { onMenu(menu) }
         header.addView(menu,LinearLayout.LayoutParams(dp(28),dp(28)))

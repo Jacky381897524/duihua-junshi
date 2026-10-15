@@ -49,6 +49,9 @@ class OverlayController(private val service:ChatCaptureService) {
     private var motionX:Float?=null
     private var dragging=false
     private var lastAvailable:RectI?=null
+    private var entryMode=OverlayEntryMode.BUBBLE
+    private var islandPanel=false
+    private var islandBounds:PanelBounds?=null
     private val autoHide=Runnable {
         if(!canAutoHide()) idle.pause()
         else if(idle.hideIfDue(SystemClock.uptimeMillis())) {
@@ -87,12 +90,15 @@ class OverlayController(private val service:ChatCaptureService) {
         if(!service.overlayAllowed()) return
         create(); layout()
         panel?.let { panelWindow.attach { manager.addView(it,panelParams) } }
-        bubble?.let { bubbleWindow.attach { manager.addView(it,bubbleParams) } }
+        if(entryMode!=OverlayEntryMode.ISLAND) bubble?.let { bubbleWindow.attach { manager.addView(it,bubbleParams) } }
+        else bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } }
         scheduleAutoHide()
     }
-    fun show() {
+    fun show() { showPanel(false) }
+    private fun showPanel(native:Boolean) {
         if(!service.overlayAllowed()) return
-        showBubble(); if(panel!=null) return
+        if(panel!=null) { if(islandPanel==native) return else hide() }
+        showBubble();islandPanel=native;islandBounds=null
         stopEdgeMotion();idle.interact(SystemClock.uptimeMillis(),idleSeconds());idle.pause();main.removeCallbacks(autoHide)
         val view=AdvisorPanelView(service,{ ClipboardController.copy(service,it.text);hide() },{ plan,token ->
             if(!filling) {
@@ -110,21 +116,28 @@ class OverlayController(private val service:ChatCaptureService) {
             panel?.toggleMenu(listOf("完整咨询" to ConsultationActivity::class.java,"回复风格设置" to ReplyStyleActivity::class.java,"悬浮窗设置" to com.loveadvisor.android.settings.OverlaySettingsActivity::class.java,"模型设置" to SettingsActivity::class.java,"连接诊断" to DiagnosticsActivity::class.java).map { (label,activity) -> label to {
                 service.startActivity(Intent(service,activity).putExtra("contactTitle",service.currentChatSnapshot?.identity?.displayTitle).putExtra("targetPackage",service.currentChatSnapshot?.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } })
-        },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) })
+        },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE)
         view.contentDescription="聊天候选面板"
         panel=view; panelParams=params(1,1,"LoveAdvisorPanel"); panelOnLeft=null
-        drag(view.dragHandle); view.setReading(reading); view.setFilling(filling); view.render(state); layout(); panelWindow.attach { manager.addView(view,panelParams) }
+        if(native) dragIsland(view.dragHandle) else drag(view.dragHandle); view.setReading(reading); view.setFilling(filling); view.render(state); layout(); panelWindow.attach { manager.addView(view,panelParams) }
         OverlayAnimator.enter(view,graph.settings.load().reducedMotion,panel=true)
     }
     fun render(value:BatchState) { if(state==value) return; state=value; panel?.render(value);layout() }
-    fun showFromIsland():Boolean { show();return panelWindow.registered }
+    fun showFromIsland():Boolean { showPanel(true);return panelWindow.registered }
+    fun setEntryMode(value:OverlayEntryMode) {
+        if(entryMode==value) return
+        // Confirmation of the already open native test must not close that panel.
+        if(panel!=null && !(islandPanel && value==OverlayEntryMode.ISLAND)) hide()
+        entryMode=value
+        if(value==OverlayEntryMode.ISLAND) { main.removeCallbacks(autoHide);idle.pause();stopEdgeMotion();bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } } }
+    }
     fun setReading(value:Boolean) { reading=value; panel?.setReading(value) }
-    fun themeChanged() { val expanded=panel!=null;hide();if(expanded && service.overlayAllowed())show() }
+    fun themeChanged() { val expanded=panel!=null;val native=islandPanel;hide();if(expanded && service.overlayAllowed())showPanel(native) }
     fun hide() {
         val expanded=panel!=null
         cancelFill?.invoke();cancelFill=null;filling=false;confirmation?.close();confirmation=null
         panel?.let { it.release(); panelWindow.detach { manager.removeViewImmediate(it) } }
-        panel=null;panelParams=null;panelOnLeft=null;layout();scheduleAutoHide(restart=expanded)
+        panel=null;panelParams=null;panelOnLeft=null;islandPanel=false;islandBounds=null;layout();scheduleAutoHide(restart=expanded)
     }
     /** Retain the shared anchor and expansion while temporarily detaching both surfaces. */
     fun suppress() {
@@ -134,7 +147,7 @@ class OverlayController(private val service:ChatCaptureService) {
         bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } }
     }
     private fun idleSeconds()=graph.settings.load().bubbleAutoHideSeconds
-    private fun canAutoHide()=panel==null && !dragging && bubbleWindow.registered && service.overlayAllowed()
+    private fun canAutoHide()=entryMode!=OverlayEntryMode.ISLAND && panel==null && !dragging && bubbleWindow.registered && service.overlayAllowed()
     private fun scheduleAutoHide(restart:Boolean=false) {
         main.removeCallbacks(autoHide)
         if(!canAutoHide()) { idle.pause();return }
@@ -207,9 +220,15 @@ class OverlayController(private val service:ChatCaptureService) {
         else {
             val initial=OverlayGeometry.measure(a,InsetsI(),null,service.resources.displayMetrics.density)
             val measured=initial.copy(heightPx=panel!!.preferredHeight(initial.widthPx).coerceIn(1,initial.heightPx))
-            val dock=OverlayGeometry.dock(anchor,measured,a,panelOnLeft)
-            ball=dock.bubble; candidate=dock.panel
-            if(panelOnLeft==null) panelOnLeft=candidate.leftPx<ball.leftPx
+            if(islandPanel) {
+                val opened=IslandPanelGeometry.open(measured,a,ViewStyles.dp(service,12f))
+                candidate=islandBounds?.let { OverlayGeometry.clamp(opened.copy(leftPx=it.leftPx,topPx=it.topPx),a) } ?: opened
+                islandBounds=candidate;ball=OverlayGeometry.clamp(anchor,a)
+            } else {
+                val dock=OverlayGeometry.dock(anchor,measured,a,panelOnLeft)
+                ball=dock.bubble;candidate=dock.panel
+                if(panelOnLeft==null) panelOnLeft=candidate.leftPx<ball.leftPx
+            }
         }
         anchorX=ball.leftPx; anchorY=ball.topPx
         fun position(view:View,p:WindowManager.LayoutParams,b:PanelBounds,window:WindowRegistration) {
@@ -223,6 +242,17 @@ class OverlayController(private val service:ChatCaptureService) {
         val displayed=if(panel==null && motionX!=null) resting.copy(leftPx=motionX!!.roundToInt()) else resting
         icon.contentDescription=if(idle.hidden) "显示对话军师悬浮球" else "打开对话军师悬浮窗"
         position(icon,bp,displayed,bubbleWindow)
+    }
+    private fun dragIsland(view:View) {
+        var startX=0f;var startY=0f;var origin:PanelBounds?=null
+        view.setOnTouchListener { _,event ->
+            when(event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { startX=event.rawX;startY=event.rawY;origin=islandBounds;true }
+                MotionEvent.ACTION_MOVE -> { origin?.let { islandBounds=it.copy(leftPx=it.leftPx+(event.rawX-startX).toInt(),topPx=it.topPx+(event.rawY-startY).toInt());layout() };true }
+                MotionEvent.ACTION_UP,MotionEvent.ACTION_CANCEL -> { origin=null;true }
+                else -> false
+            }
+        }
     }
     private fun drag(view:View) {
         var x=0f; var y=0f; var px=0; var py=0; var moved=false

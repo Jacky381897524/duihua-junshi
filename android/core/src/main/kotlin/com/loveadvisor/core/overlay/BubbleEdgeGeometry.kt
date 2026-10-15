@@ -10,7 +10,7 @@ object BubbleEdgeGeometry {
     fun place(bubble:PanelBounds,screen:RectI,edge:BubbleEdge,hidden:Boolean,display:RectI=screen):PanelBounds {
         val width=bubble.widthPx.coerceIn(1,screen.width.coerceAtLeast(1))
         val height=bubble.heightPx.coerceIn(1,screen.height.coerceAtLeast(1))
-        val visible=if(hidden) (width/4).coerceAtLeast(1) else width
+        val visible=if(hidden) ((width+2)/3).coerceAtLeast(1) else width
         // Off-screen clipping follows the physical display, not side navigation/cutout insets.
         val horizontal=if(hidden) display else screen
         val x=if(edge==BubbleEdge.LEFT) horizontal.left-width+visible else horizontal.right-visible
