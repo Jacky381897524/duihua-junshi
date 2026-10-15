@@ -111,7 +111,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         items.drop(1).forEach { item(it) }
         val viewport=ScrollView(context).apply { isFillViewport=false;addView(menu) }
         layer.addView(viewport,LayoutParams(dp(200),-2,Gravity.TOP or Gravity.RIGHT).apply { topMargin=dp(44);rightMargin=dp(12);bottomMargin=dp(6) })
-        menuLayer=layer;addView(layer,LayoutParams(-1,-1))
+        menuLayer=layer;addView(layer,LayoutParams(-1,-1).apply { bottomMargin=dp(48) })
     }
     fun dismissMenu() { menuFinished?.invoke();menuFinished=null;menuLayer?.let { removeView(it) };menuLayer=null }
     /** Measure real cards including font scaling; long replies remain fully scrollable. */

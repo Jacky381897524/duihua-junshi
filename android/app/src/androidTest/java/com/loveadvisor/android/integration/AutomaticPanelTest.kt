@@ -16,10 +16,14 @@ class AutomaticPanelTest {
             val density=i.targetContext.resources.displayMetrics.density
             val w=(320*density).toInt();val h=(474*density).toInt()
             panel.measure(View.MeasureSpec.makeMeasureSpec(w,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(h,View.MeasureSpec.EXACTLY));panel.layout(0,0,w,h)
+            for(menuOpen in listOf(false,true)) {
+            if(menuOpen)panel.toggleMenu(listOf("回复风格设置" to {}))
+            panel.measure(View.MeasureSpec.makeMeasureSpec(w,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(h,View.MeasureSpec.EXACTLY));panel.layout(0,0,w,h)
             for(x in listOf(3f,w-3f)) {
                 val before=closed;val now=android.os.SystemClock.uptimeMillis()
                 for(action in listOf(MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP)) { val e=MotionEvent.obtain(now,now+30,action,x,h-24*density,0);panel.dispatchTouchEvent(e);e.recycle() }
                 assertEquals("底部远离箭头的两端也必须可点",before+1,closed)
+            }
             }
         }
     }

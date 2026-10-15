@@ -17,7 +17,7 @@ class VisionClient(private val transport:HttpTransport) {
         val platformPrompt=prompt.replace("微信",label).replace("微信小程序", "小程序")+
             "当前来源固定为$label（$packageName），只接受此应用原生一对一私信。抖音视频流、评论区、直播、QQ频道、群聊、联系人列表都返回UNKNOWN。不能把嵌在消息里的聊天截图或网页当作当前聊天界面。"
         val geometryPrompt="""
-            必须进行几何核验。坐标协议：所有坐标都按整张截图归一化到0–1000，左上(0,0)，右下(1000,1000)。
+            必须进行几何核验。坐标协议：所有坐标都按整张截图归一化到0–1000，左上(0,0)，右下(1000,1000)。每个坐标必须为整数，不要小数。
             顶层必须返回reliable和chatBounds:[left,top,right,bottom]，chatBounds只包含导航下、输入栏上的消息区域。
             每条必须返回bubble:[left,top,right,bottom]，精确框住真实的整条消息气泡而非文字外接框；TEXT还须返回textBounds，文字必须位于该气泡内部；可辨认的相邻头像返回avatar:[left,top,right,bottom]，否则null。
             composer改为同样的0–1000归一化坐标，必须是当前可见文字输入框，否则null。不要把最后一条自动当对方。左右身份最终由程序按气泡和头像位置计算。
