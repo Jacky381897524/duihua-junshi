@@ -4,12 +4,23 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun topCapsuleDefaultsOffAndRemembersItsAdjustedPosition() {
+        val defaults=Gson().toJsonTree(AppSettings.decode("{}")).asJsonObject
+        assertEquals(false,defaults["topCapsuleEnabled"]?.asBoolean)
+        val saved=AppSettings.decode("""{"topCapsuleEnabled":true,"capsuleOffsetXdp":9.5,"capsuleOffsetYdp":-2,"globalReplyStyle":"简短"}""")
+        val reopened=Gson().toJsonTree(AppSettings.decode(Gson().toJson(saved))).asJsonObject
+        assertEquals(true,reopened["topCapsuleEnabled"]?.asBoolean)
+        assertEquals(9.5,reopened["capsuleOffsetXdp"]!!.asDouble,0.001)
+        assertEquals(-2.0,reopened["capsuleOffsetYdp"]!!.asDouble,0.001)
+        assertEquals("简短",saved.globalReplyStyle)
+    }
     @Test fun nativeIslandIsOptInAndMigrationPreservesOtherSettings() {
         val defaults=Gson().toJsonTree(AppSettings.decode("{}")).asJsonObject
         assertEquals(false,defaults["nativeIslandEnabled"]?.asBoolean)
         val saved=AppSettings.decode("""{"nativeIslandEnabled":true,"nativeIslandConfirmedBuild":"test-build","bubbleAutoHideSeconds":60,"globalReplyStyle":"简短","profile":{"apiKey":"fake"}}""")
         val json=Gson().toJsonTree(AppSettings.decode(Gson().toJson(saved))).asJsonObject
-        assertEquals(true,json["nativeIslandEnabled"]?.asBoolean)
+        assertEquals(false,json["nativeIslandEnabled"]?.asBoolean)
+        assertEquals(true,json["topCapsuleEnabled"]?.asBoolean)
         assertEquals("test-build",json["nativeIslandConfirmedBuild"]?.asString)
         assertEquals(60,saved.bubbleAutoHideSeconds);assertEquals("简短",saved.globalReplyStyle);assertEquals("fake",saved.profile.apiKey)
     }

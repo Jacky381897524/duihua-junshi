@@ -1,0 +1,56 @@
+package com.loveadvisor.core.overlay
+
+import com.loveadvisor.core.model.RectI
+import org.junit.Assert.*
+import org.junit.Test
+
+class TopCapsuleTest {
+    private val display=RectI(0,0,390,844)
+    @Test fun defaultIsBesideTheClockAndNotAtTheCenterCamera() {
+        val cutout=RectI(176,0,214,30)
+        val placed=TopCapsuleGeometry.place(display,30,1f,listOf(cutout))
+        assertEquals(PanelBounds(56,4,64,22),placed)
+        assertTrue(placed.leftPx>=56);assertTrue(placed.leftPx+placed.widthPx<cutout.left)
+    }
+    @Test fun savedOffsetsAreAppliedWithoutMovingIntoTheClockOrCutout() {
+        val placed=TopCapsuleGeometry.place(display,30,1f,listOf(RectI(176,0,214,30)),500f,-100f)
+        assertTrue(placed.leftPx>=56);assertTrue(placed.leftPx+placed.widthPx<=168);assertEquals(0,placed.topPx)
+        assertEquals(PanelBounds(66,9,64,22),TopCapsuleGeometry.place(display,30,1f,emptyList(),10f,5f))
+    }
+    @Test fun aNarrowStatusBarFallsBelowItInsteadOfCoveringTheTime() {
+        val placed=TopCapsuleGeometry.place(RectI(0,0,220,500),24,1f,listOf(RectI(95,0,125,24)))
+        assertTrue(placed.topPx>=24);assertTrue(placed.leftPx+placed.widthPx<=220)
+        val tiny=TopCapsuleGeometry.place(RectI(0,0,12,10),20,3f,emptyList())
+        assertTrue(tiny.widthPx>0 && tiny.heightPx>0 && tiny.bottomPx<=10)
+    }
+    @Test fun densityAndKeyboardBoundsDoNotPutTheCapsuleOffScreen() {
+        val placed=TopCapsuleGeometry.place(RectI(0,0,1080,1200),90,3f,listOf(RectI(500,0,580,90)),0f,900f)
+        assertEquals(192,placed.widthPx);assertTrue(placed.bottomPx<=1200)
+        assertTrue(placed.leftPx+placed.widthPx<=1080)
+    }
+    @Test fun quickTapClicksWithoutMovingTheCapsule() {
+        val gesture=CapsuleDragGesture(500,8f)
+        gesture.down(10f,20f,0)
+        assertNull(gesture.move(12f,22f,80))
+        assertEquals(CapsuleTouchAction.CLICK,gesture.finish(100))
+    }
+    @Test fun movingBeforeLongPressCancelsBothClickAndDrag() {
+        val gesture=CapsuleDragGesture(500,8f)
+        gesture.down(0f,0f,0)
+        assertNull(gesture.move(20f,0f,100));assertFalse(gesture.hold(500))
+        assertNull(gesture.move(40f,30f,600));assertEquals(CapsuleTouchAction.NONE,gesture.finish(700))
+    }
+    @Test fun heldDragReportsTotalDeltaAndDoesNotClickOnRelease() {
+        val gesture=CapsuleDragGesture(500,8f)
+        gesture.down(10f,20f,0);assertTrue(gesture.hold(500))
+        assertEquals(CapsuleDelta(25f,-5f),gesture.move(35f,15f,550))
+        assertEquals(CapsuleTouchAction.DRAG_END,gesture.finish(600))
+        assertEquals(CapsuleTouchAction.NONE,gesture.finish(650))
+    }
+    @Test fun cancellationAndAnUnmovedLongPressNeverOpenThePanel() {
+        val gesture=CapsuleDragGesture(500,8f)
+        gesture.down(0f,0f,0);assertEquals(CapsuleTouchAction.DRAG_END,gesture.finish(600))
+        gesture.down(0f,0f,1000);gesture.hold(1500);gesture.cancel()
+        assertNull(gesture.move(20f,0f,1600));assertEquals(CapsuleTouchAction.NONE,gesture.finish(1700))
+    }
+}

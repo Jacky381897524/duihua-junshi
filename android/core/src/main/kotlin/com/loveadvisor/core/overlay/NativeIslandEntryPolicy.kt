@@ -1,6 +1,6 @@
 package com.loveadvisor.core.overlay
 
-enum class OverlayEntryMode { BUBBLE, ISLAND_TEST, ISLAND }
+enum class OverlayEntryMode { BUBBLE, ISLAND_TEST, ISLAND, TOP_CAPSULE }
 data class IslandEnvironment(val allowed:Boolean,val vivo:Boolean,val notificationsEnabled:Boolean,val osBuild:String)
 object NativeIslandEntryPolicy {
     fun status(reading:Boolean,state:com.loveadvisor.core.advisor.BatchState,current:Boolean)=status(reading,state.loading,current,state.isFailure)

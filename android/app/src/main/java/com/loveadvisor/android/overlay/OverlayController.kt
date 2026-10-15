@@ -52,6 +52,12 @@ class OverlayController(private val service:ChatCaptureService) {
     private var entryMode=OverlayEntryMode.BUBBLE
     private var islandPanel=false
     private var islandBounds:PanelBounds?=null
+    private var capsule:TopCapsuleView?=null
+    private val capsuleWindow=WindowRegistration()
+    private var capsuleParams:WindowManager.LayoutParams?=null
+    private var capsuleBounds:PanelBounds?=null
+    private var capsuleX:Float?=null;private var capsuleY:Float?=null
+    private var capsuleStartX=0f;private var capsuleStartY=0f
     private val autoHide=Runnable {
         if(!canAutoHide()) idle.pause()
         else if(idle.hideIfDue(SystemClock.uptimeMillis())) {
@@ -85,12 +91,56 @@ class OverlayController(private val service:ChatCaptureService) {
         val a=available(); anchorX=a.right-size-ViewStyles.dp(service,8f); anchorY=a.top+(a.height*.25).toInt()
         bubbleParams=params(size,size,"LoveAdvisorBubble").apply { flags=flags or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS }; drag(icon)
     }
+    private fun createCapsule() {
+        if(capsule!=null)return
+        capsule=TopCapsuleView(service,{ if(panel==null)showPanel(true) else hide() },{
+            val config=graph.settings.load();capsuleStartX=config.capsuleOffsetXdp;capsuleStartY=config.capsuleOffsetYdp
+        },{ dx,dy ->
+            val density=service.resources.displayMetrics.density
+            capsuleX=capsuleStartX+dx/density;capsuleY=capsuleStartY+dy/density;layout()
+        },{
+            val actual=capsuleBounds;val base=capsuleGeometry(0f,0f);val density=service.resources.displayMetrics.density
+            if(actual!=null)graph.settings.update { it.copy(capsuleOffsetXdp=(actual.leftPx-base.leftPx)/density,capsuleOffsetYdp=(actual.topPx-base.topPx)/density) }
+            capsuleX=null;capsuleY=null;layout()
+        },{
+            capsuleX=null;capsuleY=null
+            main.post { if(capsuleWindow.registered)layout() }
+        })
+        capsuleParams=params(1,1,"LoveAdvisorTopCapsule").apply {
+            flags=flags or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        }
+        updateCapsuleStatus()
+    }
+    private fun updateCapsuleStatus() {
+        val current=state.current?.let { graph.tracker.sameConversation(it.ticket.session) && it.batch.replies.size==6 }==true
+        capsule?.setStatus(NativeIslandEntryPolicy.status(reading,state,current))
+    }
+    private fun capsuleGeometry(x:Float,y:Float):PanelBounds {
+        val metrics=manager.maximumWindowMetrics
+        val bars=metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars())
+        val physical=physicalDisplay();val safe=available()
+        val area=physical.copy(bottom=minOf(physical.bottom,safe.bottom))
+        val cuts=metrics.windowInsets.displayCutout?.boundingRects.orEmpty().map { RectI(it.left,it.top,it.right,it.bottom) }
+        return TopCapsuleGeometry.place(area,bars.top,service.resources.displayMetrics.density,cuts,x,y)
+    }
     private fun params(width:Int,height:Int,titleValue:String)=WindowManager.LayoutParams(width,height,WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT).apply { gravity=Gravity.TOP or Gravity.LEFT; title=titleValue;setFitInsetsTypes(0) }
     fun showBubble() {
         if(!service.overlayAllowed()) return
-        create(); layout()
+        create()
+        if(entryMode==OverlayEntryMode.TOP_CAPSULE) { createCapsule();updateCapsuleStatus() }
+        layout()
+        if(entryMode==OverlayEntryMode.TOP_CAPSULE) {
+            try {
+                val first=!capsuleWindow.registered
+                capsule?.let { capsuleWindow.attach { manager.addView(it,capsuleParams) };if(first)OverlayAnimator.enter(it,graph.settings.load().reducedMotion,panel=true) }
+            } catch(_:RuntimeException) {
+                graph.settings.update { it.copy(topCapsuleEnabled=false) };setEntryMode(OverlayEntryMode.BUBBLE)
+                service.notifyUser("未能显示左上角胶囊，已恢复悬浮球")
+            }
+        } else capsule?.let { capsuleWindow.detach { manager.removeViewImmediate(it) } }
         panel?.let { panelWindow.attach { manager.addView(it,panelParams) } }
-        if(entryMode!=OverlayEntryMode.ISLAND) bubble?.let { bubbleWindow.attach { manager.addView(it,bubbleParams) } }
+        if(entryMode==OverlayEntryMode.BUBBLE || entryMode==OverlayEntryMode.ISLAND_TEST) bubble?.let { bubbleWindow.attach { manager.addView(it,bubbleParams) } }
         else bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } }
         scheduleAutoHide()
     }
@@ -122,16 +172,16 @@ class OverlayController(private val service:ChatCaptureService) {
         if(native) dragIsland(view.dragHandle) else drag(view.dragHandle); view.setReading(reading); view.setFilling(filling); view.render(state); layout(); panelWindow.attach { manager.addView(view,panelParams) }
         OverlayAnimator.enter(view,graph.settings.load().reducedMotion,panel=true)
     }
-    fun render(value:BatchState) { if(state==value) return; state=value; panel?.render(value);layout() }
+    fun render(value:BatchState) { if(state==value) return; state=value; panel?.render(value);updateCapsuleStatus();layout() }
     fun showFromIsland():Boolean { showPanel(true);return panelWindow.registered }
     fun setEntryMode(value:OverlayEntryMode) {
         if(entryMode==value) return
         // Confirmation of the already open native test must not close that panel.
         if(panel!=null && !(islandPanel && value!=OverlayEntryMode.BUBBLE)) hide()
         entryMode=value
-        if(value==OverlayEntryMode.ISLAND) { main.removeCallbacks(autoHide);idle.pause();stopEdgeMotion();bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } } }
+        if(value==OverlayEntryMode.ISLAND || value==OverlayEntryMode.TOP_CAPSULE) { main.removeCallbacks(autoHide);idle.pause();stopEdgeMotion();bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } } }
     }
-    fun setReading(value:Boolean) { reading=value; panel?.setReading(value);service.islandReading(value) }
+    fun setReading(value:Boolean) { reading=value; panel?.setReading(value);updateCapsuleStatus();service.islandReading(value) }
     fun themeChanged() { val expanded=panel!=null;val native=islandPanel;hide();if(expanded && service.overlayAllowed())showPanel(native) }
     fun hide() {
         val expanded=panel!=null
@@ -145,9 +195,10 @@ class OverlayController(private val service:ChatCaptureService) {
         if(confirmation!=null)filling=false;confirmation?.close();confirmation=null
         panel?.let { it.dismissMenu();it.stopAnimations(); panelWindow.detach { manager.removeViewImmediate(it) } }
         bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } }
+        capsule?.let { OverlayAnimator.stop(it);capsuleWindow.detach { manager.removeViewImmediate(it) } }
     }
     private fun idleSeconds()=graph.settings.load().bubbleAutoHideSeconds
-    private fun canAutoHide()=entryMode!=OverlayEntryMode.ISLAND && panel==null && !dragging && bubbleWindow.registered && service.overlayAllowed()
+    private fun canAutoHide()=entryMode!=OverlayEntryMode.ISLAND && entryMode!=OverlayEntryMode.TOP_CAPSULE && panel==null && !dragging && bubbleWindow.registered && service.overlayAllowed()
     private fun scheduleAutoHide(restart:Boolean=false) {
         main.removeCallbacks(autoHide)
         if(!canAutoHide()) { idle.pause();return }
@@ -199,7 +250,7 @@ class OverlayController(private val service:ChatCaptureService) {
         val windowIme=service.windows.firstOrNull { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }?.let { val b=Rect(); it.getBoundsInScreen(b); b.top }?.takeIf { it>r.top+r.height()*.25 && it<r.bottom }
         val insetIme=imeInsetBottom.takeIf { it>0 }?.let { r.bottom-it }
         val ime=listOfNotNull(windowIme,insetIme).minOrNull()
-        val top=r.top+inset.top
+        val top=r.top+if(entryMode==OverlayEntryMode.TOP_CAPSULE)maxOf(inset.top,metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars()).top) else inset.top
         // Keep the composer and its toolbar visible above the keyboard even if no editable nodes are exposed.
         val bottom=ime?.let { OverlayGeometry.composerSafeBottom(it,service.resources.displayMetrics.density) } ?: (r.bottom-inset.bottom)
         return RectI(r.left+inset.left,top,maxOf(r.left+inset.left+1,r.right-inset.right),maxOf(top+1,minOf(r.bottom-inset.bottom,bottom)))
@@ -236,7 +287,13 @@ class OverlayController(private val service:ChatCaptureService) {
             p.x=b.leftPx; p.y=b.topPx; p.width=b.widthPx; p.height=b.heightPx
             if(changed && window.registered) manager.updateViewLayout(view,p)
         }
-        // Apply the two positions together on the main thread from the same dock result.
+        if(entryMode==OverlayEntryMode.TOP_CAPSULE) {
+            val config=graph.settings.load()
+            val b=capsuleGeometry(capsuleX ?: config.capsuleOffsetXdp,capsuleY ?: config.capsuleOffsetYdp)
+            capsuleBounds=b
+            capsule?.let { v -> capsuleParams?.let { position(v,it,b,capsuleWindow) } }
+        }
+        // Ordinary ball/panel dock together; the capsule is a separate fixed-size entry.
         panel?.let { v -> candidate?.let { b -> panelParams?.let { position(v,it,b,panelWindow) }; v.compact(b.heightPx<200*service.resources.displayMetrics.density) } }
         val resting=if(panel==null && idle.hidden) BubbleEdgeGeometry.place(ball,a,edge ?: BubbleEdgeGeometry.nearest(ball,a),true,physicalDisplay()) else ball
         val displayed=if(panel==null && motionX!=null) resting.copy(leftPx=motionX!!.roundToInt()) else resting
@@ -276,5 +333,5 @@ class OverlayController(private val service:ChatCaptureService) {
             }
         }
     }
-    fun destroy() { hide();suppress();main.removeCallbacksAndMessages(null);bubble?.drawable?.let { (it as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle() }; bubble=null; panel=null; bubbleParams=null; panelParams=null; graph.controller.unlisten(listener) }
+    fun destroy() { hide();suppress();capsule?.release();capsule=null;main.removeCallbacksAndMessages(null);bubble?.drawable?.let { (it as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle() }; bubble=null; panel=null; bubbleParams=null; panelParams=null; graph.controller.unlisten(listener) }
 }

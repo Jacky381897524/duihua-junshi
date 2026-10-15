@@ -383,7 +383,10 @@ class ChatCaptureService:AccessibilityService() {
     fun overlayAllowed()=CapturePolicy.overlayVisible(graph.settings.load().overlayEnabled,locked(),projecting,wechatForeground)
     fun ensureOverlay() { if(::overlay.isInitialized) {
         if(overlayAllowed() && overlaySuspensions==0) {
-            if(::island.isInitialized)island.refreshEligibility(islandEnvironment())
+            if(graph.settings.load().topCapsuleEnabled) {
+                if(::island.isInitialized && island.lease!=null)island.suspend()
+                overlay.setEntryMode(com.loveadvisor.core.overlay.OverlayEntryMode.TOP_CAPSULE)
+            } else if(::island.isInitialized)island.refreshEligibility(islandEnvironment())
             overlay.showBubble()
         } else {
             if(::island.isInitialized) { if(overlaySuspensions>0)island.suspend() else island.stop() }
@@ -392,7 +395,7 @@ class ChatCaptureService:AccessibilityService() {
     } }
     fun islandReading(value:Boolean) { if(::island.isInitialized)island.updateStatus(value,graph.coordinator.state,graph.coordinator.state.current?.let { graph.tracker.sameConversation(it.ticket.session) }==true) }
     fun showFloating() { graph.settings.update { it.copy(overlayEnabled=true) }; checkForeground() }
-    fun settingsChanged() { if(::island.isInitialized && !graph.settings.load().nativeIslandEnabled)island.stop();if(!canObserve()) leaveForeground() else checkForeground() }
+    fun settingsChanged() { if(::island.isInitialized && !graph.settings.load().nativeIslandEnabled) { if(graph.settings.load().topCapsuleEnabled)island.suspend() else island.stop() };if(!canObserve()) leaveForeground() else checkForeground() }
     fun beginProjectionCapture() { projecting=true; leaveForeground() }
     fun endProjectionCapture() { projecting=false; checkForeground() }
     fun previewOcr(draft:ConversationDraft) { graph.controller.status("请返回微信，点击读取信息获取当前聊天") }
