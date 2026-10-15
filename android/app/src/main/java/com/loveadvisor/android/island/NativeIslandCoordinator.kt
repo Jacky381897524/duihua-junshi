@@ -41,7 +41,7 @@ class NativeIslandCoordinator(private val service:ChatCaptureService,private val
         environment=value
         val settings=graph.settings.load()
         if(!settings.nativeIslandEnabled || !value.allowed || !value.vivo || !value.notificationsEnabled) {
-            stop()
+            NativeIslandEntryPolicy.fallback(value.allowed,{ stop();if(!value.allowed)overlay.suppress() },{ overlay.showBubble() })
             diagnostic=when {
                 !settings.nativeIslandEnabled -> "原生岛已关闭"
                 !value.vivo -> "当前设备不支持 vivo 原生岛，使用悬浮球"
@@ -56,7 +56,7 @@ class NativeIslandCoordinator(private val service:ChatCaptureService,private val
         if(session.enter(key,UUID.randomUUID().toString(),SystemClock.uptimeMillis())) {
             sender.end();main.removeCallbacksAndMessages(null);displayed=null
             lease=scope.copy(id=session.id!!)
-            desired=NativeIslandEntryPolicy.status(reading,state.loading,isCurrent(state),state.error!=null)
+            desired=NativeIslandEntryPolicy.status(reading,state,isCurrent(state))
             publish();main.postDelayed(watch,2000)
         }
         applyMode()
@@ -81,7 +81,7 @@ class NativeIslandCoordinator(private val service:ChatCaptureService,private val
     }
     fun updateStatus(reading:Boolean,state:BatchState,current:Boolean) {
         this.reading=reading;this.state=state
-        desired=NativeIslandEntryPolicy.status(reading,state.loading,current,state.error!=null)
+        desired=NativeIslandEntryPolicy.status(reading,state,current)
         if(lease==null || desired==displayed) return
         main.removeCallbacks(update)
         // Conservative official rate limit until local behavior is verified on target hardware.

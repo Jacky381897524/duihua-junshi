@@ -3,6 +3,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NativeIslandEntryPolicyTest {
+    @Test fun losingNotificationEligibilityImmediatelyRestoresTheOnlyUsableEntry() {
+        val actions=mutableListOf<String>()
+        NativeIslandEntryPolicy.fallback(true,{actions.add("end-island")},{actions.add("attach-ball")})
+        assertEquals(listOf("end-island","attach-ball"),actions)
+        actions.clear()
+        NativeIslandEntryPolicy.fallback(false,{actions.add("end-island")},{actions.add("attach-ball")})
+        assertEquals(listOf("end-island"),actions)
+    }
     @Test fun statusNeverAnnouncesStaleCandidates() {
         assertEquals("待读取",NativeIslandEntryPolicy.status(false,false,false,false))
         assertEquals("分析中",NativeIslandEntryPolicy.status(true,false,false,false))

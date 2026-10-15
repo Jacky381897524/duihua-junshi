@@ -5,6 +5,16 @@ import com.loveadvisor.core.capture.WindowSnapshot
 import org.junit.Assert.*
 import org.junit.Test
 class BatchCoordinatorTest {
+    @Test fun islandReturnsToWaitingAfterLeavingACompletedConversation() {
+        show();c.pauseCapture("返回后点击图标展开")
+        assertEquals("待读取",com.loveadvisor.core.overlay.NativeIslandEntryPolicy.status(false,c.state,false))
+    }
+    @Test fun islandShowsActualFailuresButNeutralStatusClearsTheFailure() {
+        val pending=c.begin(chat)!!;c.fail(pending.requestTicket,"接口超时")
+        assertEquals("读取失败",com.loveadvisor.core.overlay.NativeIslandEntryPolicy.status(false,c.state,false))
+        c.status("等待点击读取")
+        assertEquals("待读取",com.loveadvisor.core.overlay.NativeIslandEntryPolicy.status(false,c.state,false))
+    }
     private val tracker=SessionTracker()
     private val c=BatchCoordinator(tracker,RequestGate(tracker))
     private val chat=AdvisorFixtures.snapshot()

@@ -304,7 +304,7 @@ class ChatCaptureService:AccessibilityService() {
         if(!manualRead.finish(ticket)) return
         visualCancel?.cancel(); visualCancel=null; pendingVision=null; main.removeCallbacks(readPending)
         overlay.setReading(false)
-        if(message!=null) graph.controller.status(message)
+        if(message!=null) graph.controller.status(message,failure=true)
     }
     fun parse(window:WindowSnapshot)=parser.extract(window)
     fun readConfirmedWindow()=reader.read(identity)

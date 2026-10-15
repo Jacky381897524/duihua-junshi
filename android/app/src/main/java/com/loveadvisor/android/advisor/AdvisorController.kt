@@ -54,7 +54,7 @@ class AdvisorController(private val graph:AppGraph) {
         if(old!=graph.tracker.currentToken) { cancel?.cancel(); cancel=null }
         publish()
     }
-    fun status(message:String) { graph.coordinator.status(message); publish() }
+    fun status(message:String,failure:Boolean=false) { graph.coordinator.status(message,failure); publish() }
     fun awaitCapture(message:String) { cancel?.cancel(); cancel=null; graph.coordinator.cancelPending(message); publish() }
     fun awaitVision(window:WindowSnapshot,message:String):Boolean {
         val retained=graph.coordinator.awaitVision(window,message)

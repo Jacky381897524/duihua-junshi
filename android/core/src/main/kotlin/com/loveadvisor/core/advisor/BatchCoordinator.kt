@@ -5,7 +5,7 @@ import com.loveadvisor.core.capture.WindowSnapshot
 class BatchCoordinator(private val tracker:SessionTracker,private val gate:RequestGate) {
     @Synchronized fun pauseCapture(message:String) {
         gate.cancel(); active=null; tracker.invalidate("capture-paused")
-        history.clear(); historySession=null; state=state.copy(loading=false,error=message)
+        history.clear(); historySession=null; state=state.copy(loading=false,error=message,isFailure=false)
     }
     var state=BatchState(); private set
     private var active:RequestTicket?=null
@@ -20,8 +20,8 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
         if(keep==null) { history.clear(); historySession=null }
         state=BatchState(keep,loading=false,error=message)
     }
-    @Synchronized fun status(message:String) { state=state.copy(error=message) }
-    @Synchronized fun cancelPending(message:String) { gate.cancel(); active=null; state=state.copy(loading=false,error=message) }
+    @Synchronized fun status(message:String,failure:Boolean=false) { state=state.copy(error=message,isFailure=failure) }
+    @Synchronized fun cancelPending(message:String) { gate.cancel(); active=null; state=state.copy(loading=false,error=message,isFailure=false) }
     @Synchronized fun awaitVision(window:WindowSnapshot,message:String):Boolean {
         val token=tracker.currentToken
         val same=token!=null && token.packageName==window.packageName && token.windowId==window.windowId
@@ -34,7 +34,7 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
         if(historySession!=token) { history.clear(); historySession=token }
         val previous=state.current?.takeIf { it.ticket.session==token }
         val ticket=gate.begin(token); active=ticket
-        state=state.copy(current=state.current?.takeIf { tracker.sameConversation(it.ticket.session) },loading=true,error=null)
+        state=state.copy(current=state.current?.takeIf { tracker.sameConversation(it.ticket.session) },loading=true,error=null,isFailure=false)
         return RefreshRequest(ticket,previous==null,history.previousTexts,previous?.batch?.analysis)
     }
     @Synchronized fun complete(ticket:RequestTicket,batch:AdvisorBatch):Boolean {
@@ -49,7 +49,7 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
     }
     @Synchronized fun fail(ticket:RequestTicket,message:String) {
         if(active!=ticket || !gate.accept(ticket)) return
-        state=state.copy(loading=false,error=message); active=null
+        state=state.copy(loading=false,error=message,isFailure=true); active=null
     }
     @Synchronized fun invalidate() {
         gate.cancel(); tracker.invalidate("capture-invalidated"); active=null
