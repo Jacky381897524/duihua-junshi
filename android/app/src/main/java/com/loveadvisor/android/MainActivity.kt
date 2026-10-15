@@ -48,6 +48,6 @@ class MainActivity : BaseActivity() {
         authorName.addView(ViewStyles.text(this,"作者",12f,ViewStyles.MUTED))
         authorName.addView(ViewStyles.text(this,"海街寺庙",17f,bold=true))
         authorRow.addView(authorName,android.widget.LinearLayout.LayoutParams(0,-2,1f))
-        authorRow.addView(ViewStyles.text(this,"V1.2.13",12f,ViewStyles.MUTED))
+        authorRow.addView(ViewStyles.text(this,"V1.2.14",12f,ViewStyles.MUTED))
     }
 }
