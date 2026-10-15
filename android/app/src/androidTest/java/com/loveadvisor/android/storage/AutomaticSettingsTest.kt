@@ -4,6 +4,15 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun nativeIslandIsOptInAndMigrationPreservesOtherSettings() {
+        val defaults=Gson().toJsonTree(AppSettings.decode("{}")).asJsonObject
+        assertEquals(false,defaults["nativeIslandEnabled"]?.asBoolean)
+        val saved=AppSettings.decode("""{"nativeIslandEnabled":true,"nativeIslandConfirmedBuild":"test-build","bubbleAutoHideSeconds":60,"globalReplyStyle":"简短","profile":{"apiKey":"fake"}}""")
+        val json=Gson().toJsonTree(AppSettings.decode(Gson().toJson(saved))).asJsonObject
+        assertEquals(true,json["nativeIslandEnabled"]?.asBoolean)
+        assertEquals("test-build",json["nativeIslandConfirmedBuild"]?.asString)
+        assertEquals(60,saved.bubbleAutoHideSeconds);assertEquals("简短",saved.globalReplyStyle);assertEquals("fake",saved.profile.apiKey)
+    }
     @Test fun oldSettingsHaveFifteenSecondIdleTimeoutAndCustomTimeoutSurvivesReopening() {
         val defaults=Gson().toJsonTree(AppSettings.decode("{}")).asJsonObject
         assertEquals(15,defaults["bubbleAutoHideSeconds"]?.asInt)
