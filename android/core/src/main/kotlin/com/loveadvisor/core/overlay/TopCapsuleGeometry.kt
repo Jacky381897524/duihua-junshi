@@ -4,6 +4,11 @@ import com.loveadvisor.core.model.RectI
 
 /** The default anchor is beside the left clock. It never defaults to the center cutout. */
 object TopCapsuleGeometry {
+    /** Resume a drag from rendered bounds, including any rotation or keyboard clamp. */
+    fun offsetOf(visible:PanelBounds,base:PanelBounds,density:Float):CapsuleDelta {
+        val d=density.takeIf { it.isFinite() && it>0 } ?: 1f
+        return CapsuleDelta((visible.leftPx-base.leftPx)/d,(visible.topPx-base.topPx)/d)
+    }
     fun place(display:RectI,statusBarHeight:Int,density:Float,cutouts:List<RectI>,offsetXdp:Float=0f,offsetYdp:Float=0f):PanelBounds {
         val d=density.takeIf { it.isFinite() && it>0 } ?: 1f
         fun px(value:Float)=(value*d).toInt()

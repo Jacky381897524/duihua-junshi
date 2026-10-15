@@ -94,13 +94,18 @@ class OverlayController(private val service:ChatCaptureService) {
     private fun createCapsule() {
         if(capsule!=null)return
         capsule=TopCapsuleView(service,{ if(panel==null)showPanel(true) else hide() },{
-            val config=graph.settings.load();capsuleStartX=config.capsuleOffsetXdp;capsuleStartY=config.capsuleOffsetYdp
+            val base=capsuleGeometry(0f,0f)
+            val start=TopCapsuleGeometry.offsetOf(capsuleBounds ?: base,base,service.resources.displayMetrics.density)
+            capsuleStartX=start.x;capsuleStartY=start.y
         },{ dx,dy ->
             val density=service.resources.displayMetrics.density
             capsuleX=capsuleStartX+dx/density;capsuleY=capsuleStartY+dy/density;layout()
         },{
             val actual=capsuleBounds;val base=capsuleGeometry(0f,0f);val density=service.resources.displayMetrics.density
-            if(actual!=null)graph.settings.update { it.copy(capsuleOffsetXdp=(actual.leftPx-base.leftPx)/density,capsuleOffsetYdp=(actual.topPx-base.topPx)/density) }
+            if(actual!=null) {
+                val offset=TopCapsuleGeometry.offsetOf(actual,base,density)
+                graph.settings.update { it.copy(capsuleOffsetXdp=offset.x,capsuleOffsetYdp=offset.y) }
+            }
             capsuleX=null;capsuleY=null;layout()
         },{
             capsuleX=null;capsuleY=null

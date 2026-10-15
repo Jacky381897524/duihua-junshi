@@ -28,6 +28,23 @@ class TopCapsuleTest {
         assertEquals(192,placed.widthPx);assertTrue(placed.bottomPx<=1200)
         assertTrue(placed.leftPx+placed.widthPx<=1080)
     }
+    @Test fun draggingAfterRotationStartsAtTheVisiblePosition() {
+        val rotated=RectI(0,0,844,390)
+        val visible=TopCapsuleGeometry.place(rotated,30,1f,emptyList(),0f,600f)
+        val base=TopCapsuleGeometry.place(rotated,30,1f,emptyList())
+        val start=TopCapsuleGeometry.offsetOf(visible,base,1f)
+        val moved=TopCapsuleGeometry.place(rotated,30,1f,emptyList(),start.x,start.y-20f)
+        assertEquals(368,visible.topPx)
+        assertEquals(visible.topPx-20,moved.topPx)
+    }
+    @Test fun draggingAfterKeyboardClampUsesTheVisiblePositionAtDeviceDensity() {
+        val keyboardArea=RectI(0,0,1080,1200)
+        val visible=TopCapsuleGeometry.place(keyboardArea,90,3f,emptyList(),0f,900f)
+        val base=TopCapsuleGeometry.place(keyboardArea,90,3f,emptyList())
+        val start=TopCapsuleGeometry.offsetOf(visible,base,3f)
+        val moved=TopCapsuleGeometry.place(keyboardArea,90,3f,emptyList(),start.x,start.y-12f)
+        assertEquals(visible.topPx-36,moved.topPx)
+    }
     @Test fun quickTapClicksWithoutMovingTheCapsule() {
         val gesture=CapsuleDragGesture(500,8f)
         gesture.down(10f,20f,0)

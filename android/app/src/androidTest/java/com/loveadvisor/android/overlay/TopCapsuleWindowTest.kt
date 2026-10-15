@@ -55,4 +55,23 @@ class TopCapsuleWindowTest {
             }
         } finally { main { s.graph.settings.save(original);c.hide();s.settingsChanged() } }
     }
+    @Test fun heldDragMovesImmediatelyWhenSavedPositionWasClamped() {
+        val s=ChatCaptureService.instance?.takeIf { it.overlayAllowed() } ?: throw AssertionError("须启用无障碍并保持聊天前台")
+        val c=field(s,"overlay") as OverlayController;val original=s.graph.settings.load()
+        try {
+            main { c.hide();s.graph.settings.update { it.copy(topCapsuleEnabled=true,nativeIslandEnabled=false,capsuleOffsetYdp=4096f) };s.ensureOverlay() }
+            instrumentation.waitForIdleSync()
+            main {
+                val v=field(c,"capsule") as TopCapsuleView
+                val before=(field(c,"capsuleParams") as WindowManager.LayoutParams).y
+                val move=12*s.resources.displayMetrics.density
+                val start=android.os.SystemClock.uptimeMillis()
+                fun e(action:Int,delta:Long,y:Float) { val event=MotionEvent.obtain(start,start+delta,action,20f,y,0);v.dispatchTouchEvent(event);event.recycle() }
+                e(MotionEvent.ACTION_DOWN,0,10f);e(MotionEvent.ACTION_MOVE,700,10f-move)
+                assertEquals("被边界夹住后仍应立即跟手上移",(before-move).toDouble(),(field(c,"capsuleParams") as WindowManager.LayoutParams).y.toDouble(),1.0)
+                e(MotionEvent.ACTION_UP,750,10f-move)
+                assertTrue(s.graph.settings.load().capsuleOffsetYdp<4096f)
+            }
+        } finally { main { s.graph.settings.save(original);c.hide();s.settingsChanged() } }
+    }
 }
