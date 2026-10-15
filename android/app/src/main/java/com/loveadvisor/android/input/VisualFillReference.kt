@@ -5,7 +5,7 @@ import com.loveadvisor.core.model.RectI
 import java.security.MessageDigest
 
 /** Ephemeral title-strip fingerprint; never saved or sent to a model. */
-data class VisualFillReference(val windowId:Int,val generation:Long,val stamp:String,val composer:RectI?,val footerStamp:String?=null,val viewport:RectI?=null) {
+data class VisualFillReference(val windowId:Int,val generation:Long,val stamp:String,val composer:RectI?,val footerStamp:String?=null,val viewport:RectI?=null,val keyboardButton:RectI?=null) {
     companion object {
         fun footerStamp(bitmap:Bitmap):String? {
             val height=(bitmap.width*.2).toInt().coerceAtMost(bitmap.height)

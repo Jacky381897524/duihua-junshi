@@ -249,13 +249,16 @@ class ChatCaptureService:AccessibilityService() {
                         val bytes=ByteArrayOutputStream(); scaled.compress(Bitmap.CompressFormat.JPEG,90,bytes)
                         if(scaled!==original) scaled.recycle(); original.recycle()
                         val readVisual=graph.vision.read(config.vision.copy(apiKey=key),"data:image/jpeg;base64,"+Base64.encodeToString(bytes.toByteArray(),Base64.NO_WRAP),cancel,w.packageName)
-                        val input=readVisual.composer?.let { r -> RectI(w.viewport.left+(r.left*positionScale).toInt(),w.viewport.top+(r.top*positionScale).toInt(),w.viewport.left+(r.right*positionScale).toInt(),w.viewport.top+(r.bottom*positionScale).toInt()) }?.takeIf { ImeFillPolicy.composerAllowed(it,w.viewport) }
-                        val visual=readVisual.copy(positions=readVisual.positions.mapValues { (_,y)->w.viewport.top+y*positionScale })
+                        val xScale=if(readVisual.normalizedCoordinates)w.viewport.width/1000.0 else positionScale
+                        val yScale=if(readVisual.normalizedCoordinates)w.viewport.height/1000.0 else positionScale
+                        val input=readVisual.composer?.let { r -> RectI(w.viewport.left+(r.left*xScale).toInt(),w.viewport.top+(r.top*yScale).toInt(),w.viewport.left+(r.right*xScale).toInt(),w.viewport.top+(r.bottom*yScale).toInt()) }?.takeIf { ImeFillPolicy.composerAllowed(it,w.viewport) }
+                        val keyboard=readVisual.keyboardButton?.let { r -> RectI(w.viewport.left+(r.left*xScale).toInt(),w.viewport.top+(r.top*yScale).toInt(),w.viewport.left+(r.right*xScale).toInt(),w.viewport.top+(r.bottom*yScale).toInt()) }?.takeIf { ImeFillPolicy.keyboardToggleAllowed(it,w.viewport) }
+                        val visual=readVisual.copy(positions=readVisual.positions.mapValues { (_,y)->w.viewport.top+y*yScale },normalizedCoordinates=false)
                         cancel.check()
                         main.post {
                             if(!cancel.cancelled && lease==navigation && manualRead.accepts(ticket) && overlayAllowed()) {
                                 graph.record("vision",SystemClock.elapsedRealtime()-started,null,null)
-                                pendingVision=VisionReply(visual,w.windowId,cancel,ticket,lease,titleStamp?.let { VisualFillReference(w.windowId,lease,it,input,footerStamp,w.viewport) })
+                                pendingVision=VisionReply(visual,w.windowId,cancel,ticket,lease,titleStamp?.let { VisualFillReference(w.windowId,lease,it,input,footerStamp,w.viewport,keyboard) })
                                 observe() // One local verification read; no second screenshot or automatic retry.
                             }
                         }
@@ -304,7 +307,7 @@ class ChatCaptureService:AccessibilityService() {
         if(!manualRead.finish(ticket)) return
         visualCancel?.cancel(); visualCancel=null; pendingVision=null; main.removeCallbacks(readPending)
         overlay.setReading(false)
-        if(message!=null) graph.controller.status(message,failure=true)
+        if(message!=null) { graph.controller.pauseCapture(message);graph.controller.status(message,failure=true) }
     }
     fun parse(window:WindowSnapshot)=parser.extract(window)
     fun readConfirmedWindow()=reader.read(identity)
@@ -360,7 +363,7 @@ class ChatCaptureService:AccessibilityService() {
         }
     }
     fun focusVisualComposer(token:SessionToken,callback:(Boolean)->Unit) {
-        val ref=visualFill;val input=ref?.composer
+        val ref=visualFill;val input=ref?.composer ?: ref?.keyboardButton
         if(ref==null || input==null || ref.generation!=navigation || ref.windowId!=token.windowId || !overlayAllowed() || !graph.tracker.sameConversation(token)) { callback(false);return }
         // Never tap a stale bottom coordinate when the IME has already changed the layout.
         if(windows.any { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }) { callback(false);return }

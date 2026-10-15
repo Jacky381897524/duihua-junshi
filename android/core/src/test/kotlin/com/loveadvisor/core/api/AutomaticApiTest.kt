@@ -10,7 +10,7 @@ class AutomaticApiTest {
         override fun execute(request:ApiRequest,cancel:Cancellation):ApiResponse { cancel.check(); requests.add(request); return handler(request) }
     }
     @Test fun visionSendsImageAndKeepsOriginalSpeakerText() {
-        val w=Wire { ApiResponse(200,"""{"choices":[{"message":{"content":"{\"kind\":\"DIRECT\",\"title\":\"小雨\",\"messages\":[{\"speaker\":\"OTHER\",\"text\":\"今天过得怎么样 😊\"},{\"speaker\":\"ME\",\"text\":\"还不错\"}]}"}}]}""") }
+        val w=Wire { ApiResponse(200,com.google.gson.Gson().toJson(mapOf("choices" to listOf(mapOf("message" to mapOf("content" to VisionFixtures.content("""{"kind":"DIRECT","title":"小雨","messages":[{"speaker":"OTHER","text":"今天过得怎么样 😊"},{"speaker":"ME","text":"还不错"}]}"""))))))) }
         val result=VisionClient(w).read(ProviderPresets.OPENROUTER.vision("fake"),"data:image/jpeg;base64,AA==",Cancellation())
         assertEquals("今天过得怎么样 😊",result.messages[0].text)
         assertEquals(com.loveadvisor.core.model.Speaker.ME,result.messages[1].speaker)
@@ -48,5 +48,21 @@ class AutomaticApiTest {
     @Test fun missingCandidateScoreDoesNotPublishAnUnrankedBatch() {
         val w=Wire { ApiResponse(200,"""{"answers":{"true_intent":{"choice":"casual_chat"}}}""") }
         try { JevJudgeClient(w).rank(JevProfile(apiKey="fake"),AdvisorFixtures.snapshot(),"",AdvisorFixtures.valid().replies,Cancellation()); fail("missing six scores") } catch(_:ApiException) {}
+    }
+    @Test fun replyRequestKeepsRolesAndExplicitlyContinuesTheLastSelfTurn() {
+        val fixture=AdvisorFixtures.valid().replies
+        val compact=com.google.gson.Gson().toJson(mapOf("replies" to fixture.map { mapOf("strategy" to it.strategy.name,"text" to it.text) }))
+        val answers=(0..5).associate { "candidate_$it" to mapOf("score" to 3) }+mapOf("true_intent" to mapOf("choice" to "casual_chat"),"danger_level" to mapOf("score" to 0),"best_action" to mapOf("choice" to "acknowledge"))
+        for((last,mode) in listOf(com.loveadvisor.core.model.Speaker.ME to "CONTINUE_SELF",com.loveadvisor.core.model.Speaker.OTHER to "REPLY_OTHER")) {
+            val wire=Wire { ApiResponse(200,com.google.gson.Gson().toJson(if(it.url.endsWith("decisions")) mapOf("answers" to answers) else mapOf("choices" to listOf(mapOf("message" to mapOf("content" to compact)))))) }
+            val snapshot=AdvisorFixtures.snapshot().copy(messages=listOf(com.loveadvisor.core.model.ChatMessage("left",com.loveadvisor.core.model.Speaker.OTHER,null,"对方的话"),com.loveadvisor.core.model.ChatMessage("last",last,null,"最后一句")))
+            AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(AdvisorInput(ProviderPresets.OPENROUTER.reply("fake"),snapshot),JevProfile(apiKey="fake"),emptyList(),Cancellation())
+            val envelope=JsonParser.parseString(wire.requests.first().body).asJsonObject["messages"].asJsonArray[1].asJsonObject["content"].asString
+            val data=JsonParser.parseString(envelope).asJsonObject
+            assertEquals("ME",data["replyAs"]?.asString);assertEquals(last.name,data["lastSpeaker"]?.asString);assertEquals(mode,data["responseMode"]?.asString)
+            assertEquals(last.name,data["messages"].asJsonArray.last().asJsonObject["speaker"].asString)
+            val decision=JsonParser.parseString(wire.requests.last().body).asJsonObject["state"].asJsonObject
+            assertEquals(mode,decision["responseMode"]?.asString)
+        }
     }
 }

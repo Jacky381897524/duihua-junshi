@@ -18,14 +18,14 @@ class ConnectionTestClientTest {
         assertFalse(wire.requests.single().body.orEmpty().contains("聊天记录"))
     }
     @Test fun visionTestActuallySendsAnImageAndValidatesRecognition() {
-        val wire=Wire { textResponse("""{"kind":"DIRECT","title":"连接测试","messages":[{"speaker":"OTHER","text":"你好"},{"speaker":"ME","text":"收到"}]}""") }
+        val wire=Wire { textResponse(VisionFixtures.content("""{"kind":"DIRECT","title":"连接测试","messages":[{"speaker":"OTHER","text":"你好"},{"speaker":"ME","text":"收到"}]}""")) }
         val result=ConnectionTestClient(wire).vision(ProviderPresets.DEEPSEEK.vision("fake").copy(selectedModelId="deepseek-flash"),"data:image/png;base64,AA==",Cancellation())
         assertTrue(result.detail.contains("2"))
         val body=JsonParser.parseString(wire.requests.single().body).asJsonObject
         assertEquals("image_url",body["messages"].asJsonArray[0].asJsonObject["content"].asJsonArray[1].asJsonObject["type"].asString)
     }
     @Test fun visionWithWrongTextDoesNotReportSuccess() {
-        val wire=Wire { textResponse("""{"kind":"DIRECT","title":"连接测试","messages":[{"speaker":"ME","text":"猜测内容"}]}""") }
+        val wire=Wire { textResponse(VisionFixtures.content("""{"kind":"DIRECT","title":"连接测试","messages":[{"speaker":"ME","text":"猜测内容"}]}""")) }
         try { ConnectionTestClient(wire).vision(ProviderPresets.DEEPSEEK.vision("fake").copy(selectedModelId="deepseek-flash"),"data:image/png;base64,AA==",Cancellation()); fail("not valid recognition") } catch(_:ApiException) {}
     }
     @Test fun judgeTestUsesFixedDecisionProtocolAndAllSixScores() {
@@ -53,7 +53,7 @@ class ConnectionTestClientTest {
         assertEquals("disabled",body.getAsJsonObject("thinking")?.get("type")?.asString)
     }
     @Test fun deepSeekVisionExtractionDisablesDefaultThinking() {
-        val wire=Wire { textResponse("""{"kind":"DIRECT","title":"连接测试","messages":[{"speaker":"OTHER","text":"你好"},{"speaker":"ME","text":"收到"}]}""") }
+        val wire=Wire { textResponse(VisionFixtures.content("""{"kind":"DIRECT","title":"连接测试","messages":[{"speaker":"OTHER","text":"你好"},{"speaker":"ME","text":"收到"}]}""")) }
         ConnectionTestClient(wire).vision(ProviderPresets.DEEPSEEK.vision("fake").copy(selectedModelId="deepseek-flash"),"data:image/png;base64,AA==",Cancellation())
         val body=JsonParser.parseString(wire.requests.single().body).asJsonObject
         assertEquals("disabled",body.getAsJsonObject("thinking")?.get("type")?.asString)

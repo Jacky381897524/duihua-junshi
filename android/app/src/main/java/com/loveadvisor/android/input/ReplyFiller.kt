@@ -22,10 +22,10 @@ class ReplyFiller(private val service:ChatCaptureService) {
         val finished=AtomicBoolean(false)
         val started=android.os.SystemClock.elapsedRealtime()
         fun active()=!finished.get() && ChatCaptureService.instance===service && service.overlayAllowed() && generation==service.captureGeneration() && guard.isCurrent(token)
-        fun done(success:Boolean,message:String) { if(!finished.compareAndSet(false,true))return;service.fillDiagnostic(message);service.graph.record("fill",android.os.SystemClock.elapsedRealtime()-started,null,if(success)null else "failure");callback(success,message) }
+        fun done(success:Boolean,message:String) { if(!finished.compareAndSet(false,true))return;val result=if(success || message.startsWith("填入失败："))message else FillFeedback.failure(message,false);service.fillDiagnostic(result);service.graph.record("fill",android.os.SystemClock.elapsedRealtime()-started,null,if(success)null else "failure");callback(success,result) }
         service.fillDiagnostic("正在检查当前聊天与输入框")
         main.postDelayed({ if(!finished.get())done(false,"填入超时，请在连接诊断查看最近填入") },25000)
-        fun fallback(message:String) { if(!active())done(false,"聊天已变化，请重新读取") else { ClipboardController.copy(service,text);done(false,message+"，已复制，请在微信手动粘贴") } }
+        fun fallback(message:String) { if(!active())done(false,"聊天已变化，请重新读取") else { ClipboardController.copy(service,text,notify=false);done(false,FillFeedback.failure(message,true)) } }
         fun read(callbackTarget:(FillTarget?)->Unit) {
             if(!active()) { done(false,"聊天已变化，请重新读取");return }
             worker.execute {
@@ -54,14 +54,14 @@ class ReplyFiller(private val service:ChatCaptureService) {
             read freshRead@{ fresh ->
                 if(fresh==null) { fallback("微信未提供可操作的聊天输入框");return@freshRead }
                 if(fresh.editable.text.orEmpty()!=expectedDraft) { done(false,"草稿已变化，已保留原稿，请重新选择回复");return@freshRead }
-                action(fresh,AccessibilityNodeInfo.ACTION_FOCUS) {
+                action(fresh,AccessibilityNodeInfo.ACTION_CLICK) { action(fresh,AccessibilityNodeInfo.ACTION_FOCUS) {
                     // IME appears asynchronously. Wait, reread the target, then write.
                     main.postDelayed({ read focusedRead@{ focused ->
                         if(focused==null) { fallback("无法确认聚焦后的聊天输入框");return@focusedRead }
                         if(focused.editable.text.orEmpty()!=expectedDraft) { done(false,"草稿已变化，已保留原稿");return@focusedRead }
                         action(focused,AccessibilityNodeInfo.ACTION_SET_TEXT,Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,text) }) { set ->
                             if(set) verify(0) else {
-                                ClipboardController.copy(service,text)
+                                ClipboardController.copy(service,text,notify=false)
                                 read pasteRead@{ paste ->
                                     if(paste==null || paste.editable.text.orEmpty()!=expectedDraft) { done(false,"输入框或草稿已变化，已复制回复");return@pasteRead }
                                     if(expectedDraft.isEmpty()) action(paste,AccessibilityNodeInfo.ACTION_PASTE) { verify(0) }
@@ -79,7 +79,7 @@ class ReplyFiller(private val service:ChatCaptureService) {
                             }
                         }
                     } },140)
-                }
+                } }
             }
         }
         read { first ->

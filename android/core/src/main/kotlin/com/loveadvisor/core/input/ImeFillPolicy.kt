@@ -2,6 +2,7 @@ package com.loveadvisor.core.input
 import com.loveadvisor.core.model.RectI
 import com.loveadvisor.core.capture.ChatApps
 object ImeFillPolicy {
+    fun keyboardToggleAllowed(r:RectI,v:RectI)=r.left>=v.left && r.right<=v.left+v.width*.25 && r.top>=v.top+v.height*.55 && r.bottom<=v.bottom && r.width in 16..(v.width*.18).toInt() && r.height in 16..(v.height*.08).toInt()
     fun editorAllowed(packageName:String?,inputType:Int,imeOptions:Int):Boolean {
         val variation=inputType and 0xff0
         return ChatApps.supported(packageName) && inputType and 0xf==1 && variation !in setOf(0x80,0x90,0xe0) && imeOptions and 0xff!=3 && (inputType and 0x20000!=0 || imeOptions and 0xff==4)

@@ -9,6 +9,7 @@ import com.loveadvisor.core.advisor.*
 import com.loveadvisor.core.model.SessionToken
 
 enum class PanelDragMode { TITLE, TOP_GRIP }
+data class CapsuleMenuControls(val locked:Boolean,val scale:Float,val toggleLock:()->Boolean,val resize:(Float,Boolean)->Unit,val finishResize:()->Unit)
 class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,private val onFill:(ReplyPlan,SessionToken)->Unit,private val onRefresh:()->Unit,onRead:()->Unit,onMenu:(View)->Unit,onClose:()->Unit,private val isCurrent:(SessionToken)->Boolean,private val reduced:()->Boolean,private val onDetails:((ReplyPlan,SessionToken,(String)->Unit)->Unit)?=null,dragMode:PanelDragMode=PanelDragMode.TITLE):FrameLayout(context) {
     val dragHandle:View
     private val palette=PanelPalette(context)
@@ -19,9 +20,10 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private var displayed:VisibleBatch?=null
     private var reading=false; private var loading=false; private var filling=false
     private var menuLayer:View?=null
+    private var menuFinished:(()->Unit)?=null
     init {
         background=ViewStyles.shape(context,palette.surface,24f,palette.border); clipToOutline=true; elevation=0f
-        val pad=dp(12); column.setPadding(pad,pad,pad,pad); addView(column,LayoutParams(-1,-1))
+        val pad=dp(12); column.setPadding(pad,pad,pad,0); addView(column,LayoutParams(-1,-1))
         val header=ViewStyles.row(context)
         val title=palette.text("军师分析",17f,bold=true)
         dragHandle=if(dragMode==PanelDragMode.TOP_GRIP) {
@@ -55,6 +57,11 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         scroll.setOnScrollChangeListener { _,_,_,_,_ -> updateCount() }
         refresh=palette.button("刷新换一批 · 6 条") { onRefresh() }.apply { textSize=12f }
         column.addView(refresh,LinearLayout.LayoutParams(-1,dp(30)).apply { topMargin=dp(9) })
+        val collapse=FrameLayout(context).apply {
+            contentDescription="收起候选面板";isFocusable=true;setOnClickListener { onClose() }
+        }
+        collapse.addView(palette.text("⌃",22f,palette.blue,bold=true).apply { gravity=Gravity.CENTER;importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },FrameLayout.LayoutParams(dp(180),dp(24),Gravity.CENTER))
+        column.addView(collapse,LinearLayout.LayoutParams(-1,dp(48)).apply { leftMargin=-pad;rightMargin=-pad })
         updateButtons()
     }
     private fun dp(value:Int)=ViewStyles.dp(context,value.toFloat())
@@ -65,7 +72,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         refresh.text=if(loading) "正在生成六条…" else "刷新换一批 · 6 条"
         for(i in 0 until cards.childCount) (cards.getChildAt(i) as? ReplyCardView)?.let { card ->
             card.copyButton.isEnabled=!filling
-            card.fillButton?.let { button -> button.isEnabled=!filling && displayed?.let { isCurrent(it.ticket.session) }==true;button.alpha=if(button.isEnabled)1f else .45f }
+            card.fillButton?.let { button -> button.isEnabled=!filling && !reading && !loading && displayed?.let { isCurrent(it.ticket.session) }==true;button.alpha=if(button.isEnabled)1f else .45f }
         }
     }
     fun setReading(value:Boolean) { reading=value; updateButtons() }
@@ -73,15 +80,40 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     fun fillResult(message:String) { status.text=message }
     fun release() { dismissMenu();stopAnimations() }
     /** An in-panel menu stays in the accessibility overlay and creates no application popup window. */
-    fun toggleMenu(items:List<Pair<String,()->Unit>>) {
+    fun toggleMenu(items:List<Pair<String,()->Unit>>,capsule:CapsuleMenuControls?=null) {
         if(menuLayer!=null) { dismissMenu();return }
         val layer=FrameLayout(context).apply { contentDescription="悬浮窗设置菜单";setOnClickListener { dismissMenu() } }
         val menu=ViewStyles.column(context,8).apply { background=ViewStyles.shape(context,palette.surface,16f,palette.border);elevation=dp(4).toFloat();setOnClickListener {} }
-        items.forEach { (label,action) -> menu.addView(palette.button(label) { dismissMenu();action() },LinearLayout.LayoutParams(-1,dp(34)).apply { bottomMargin=dp(4) }) }
-        layer.addView(menu,LayoutParams(dp(180),-2,Gravity.TOP or Gravity.RIGHT).apply { topMargin=dp(44);rightMargin=dp(12) })
+        fun item(entry:Pair<String,()->Unit>) { menu.addView(palette.button(entry.first) { dismissMenu();entry.second() },LinearLayout.LayoutParams(-1,dp(34)).apply { bottomMargin=dp(4) }) }
+        items.firstOrNull()?.let { item(it) }
+        if(capsule!=null) {
+            val lock=palette.button("") {}
+            fun showLock(locked:Boolean) {
+                val color=if(locked)0xFFC53838.toInt() else 0xFF16723E.toInt()
+                lock.text=if(locked)"解锁胶囊 · 已锁定" else "锁定胶囊 · 已解锁"
+                lock.setTextColor(color);lock.background=ViewStyles.shape(context,if(locked)0xFFFFE8E8.toInt() else 0xFFE6F6EB.toInt(),12f,color)
+                lock.contentDescription=lock.text
+            }
+            showLock(capsule.locked);lock.setOnClickListener { showLock(capsule.toggleLock()) }
+            menu.addView(lock,LinearLayout.LayoutParams(-1,dp(36)).apply { bottomMargin=dp(7) })
+            val sizeLabel=palette.text("胶囊大小 · ${(capsule.scale*100).toInt()}%",12f)
+            menu.addView(sizeLabel)
+            val slider=SeekBar(context).apply { max=1300;progress=((capsule.scale-.7f)*1000).toInt().coerceIn(0,1300);contentDescription="胶囊大小，70%至200%" }
+            slider.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(view:SeekBar,progress:Int,fromUser:Boolean) { if(fromUser) { val value=.7f+progress/1000f;sizeLabel.text="胶囊大小 · ${(value*100).toInt()}%";capsule.resize(value,false) } }
+                override fun onStartTrackingTouch(view:SeekBar) {}
+                override fun onStopTrackingTouch(view:SeekBar) { capsule.resize(.7f+view.progress/1000f,true) }
+            })
+            menu.addView(slider,LinearLayout.LayoutParams(-1,dp(36)))
+            menu.addView(palette.text("70%                                      200%",10f,palette.muted),LinearLayout.LayoutParams(-1,dp(20)))
+            menuFinished=capsule.finishResize
+        }
+        items.drop(1).forEach { item(it) }
+        val viewport=ScrollView(context).apply { isFillViewport=false;addView(menu) }
+        layer.addView(viewport,LayoutParams(dp(200),-2,Gravity.TOP or Gravity.RIGHT).apply { topMargin=dp(44);rightMargin=dp(12);bottomMargin=dp(6) })
         menuLayer=layer;addView(layer,LayoutParams(-1,-1))
     }
-    fun dismissMenu() { menuLayer?.let { removeView(it) };menuLayer=null }
+    fun dismissMenu() { menuFinished?.invoke();menuFinished=null;menuLayer?.let { removeView(it) };menuLayer=null }
     /** Measure real cards including font scaling; long replies remain fully scrollable. */
     fun preferredHeight(widthPx:Int):Int {
         val available=(widthPx-column.paddingLeft-column.paddingRight).coerceAtLeast(1)

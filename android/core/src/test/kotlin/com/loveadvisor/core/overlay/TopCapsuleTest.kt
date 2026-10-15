@@ -70,4 +70,19 @@ class TopCapsuleTest {
         gesture.down(0f,0f,1000);gesture.hold(1500);gesture.cancel()
         assertNull(gesture.move(20f,0f,1600));assertEquals(CapsuleTouchAction.NONE,gesture.finish(1700))
     }
+    @Test fun lockedCapsuleStillClicksButHeldMovementNeverMovesIt() {
+        val gesture=CapsuleDragGesture(500,8f)
+        gesture.setLocked(true)
+        gesture.down(0f,0f,0);assertEquals(CapsuleTouchAction.CLICK,gesture.finish(100))
+        gesture.down(0f,0f,1000);assertFalse(gesture.hold(1500))
+        assertNull(gesture.move(30f,40f,1600));assertEquals(CapsuleTouchAction.NONE,gesture.finish(1700))
+        gesture.setLocked(false);gesture.down(0f,0f,2000);assertTrue(gesture.hold(2500));assertNotNull(gesture.move(20f,0f,2600))
+    }
+    @Test fun contentWidthAndScaleUseTightBoundsAndRemainOnScreen() {
+        val small=TopCapsuleGeometry.place(display,30,1f,emptyList(),scale=.7f,contentWidthDp=50f)
+        val large=TopCapsuleGeometry.place(display,30,1f,emptyList(),scale=2f,contentWidthDp=50f)
+        assertEquals(35,small.widthPx);assertEquals(15,small.heightPx)
+        assertEquals(100,large.widthPx);assertEquals(44,large.heightPx);assertTrue(large.topPx>=30)
+        assertTrue(large.leftPx+large.widthPx<=390)
+    }
 }

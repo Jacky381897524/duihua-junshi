@@ -58,6 +58,7 @@ class OverlayController(private val service:ChatCaptureService) {
     private var capsuleBounds:PanelBounds?=null
     private var capsuleX:Float?=null;private var capsuleY:Float?=null
     private var capsuleStartX=0f;private var capsuleStartY=0f
+    private var capsulePreviewScale:Float?=null
     private val autoHide=Runnable {
         if(!canAutoHide()) idle.pause()
         else if(idle.hideIfDue(SystemClock.uptimeMillis())) {
@@ -127,7 +128,21 @@ class OverlayController(private val service:ChatCaptureService) {
         val physical=physicalDisplay();val safe=available()
         val area=physical.copy(bottom=minOf(physical.bottom,safe.bottom))
         val cuts=metrics.windowInsets.displayCutout?.boundingRects.orEmpty().map { RectI(it.left,it.top,it.right,it.bottom) }
-        return TopCapsuleGeometry.place(area,bars.top,service.resources.displayMetrics.density,cuts,x,y)
+        return TopCapsuleGeometry.place(area,bars.top,service.resources.displayMetrics.density,cuts,x,y,capsulePreviewScale ?: graph.settings.load().capsuleScale,capsule?.contentWidthDp() ?: 52f)
+    }
+    private fun finishCapsuleScale() {
+        val value=capsulePreviewScale ?: return
+        graph.settings.update { it.copy(capsuleScale=value) };capsulePreviewScale=null;layout()
+    }
+    private fun capsuleMenuControls():CapsuleMenuControls {
+        val config=graph.settings.load()
+        return CapsuleMenuControls(config.capsuleLocked,capsulePreviewScale ?: config.capsuleScale,{
+            val locked=!graph.settings.load().capsuleLocked
+            graph.settings.update { it.copy(capsuleLocked=locked) };layout();locked
+        },{ value,commit ->
+            capsulePreviewScale=value.coerceIn(.7f,2f);layout()
+            if(commit)finishCapsuleScale()
+        },{ finishCapsuleScale() })
     }
     private fun params(width:Int,height:Int,titleValue:String)=WindowManager.LayoutParams(width,height,WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT).apply { gravity=Gravity.TOP or Gravity.LEFT; title=titleValue;setFitInsetsTypes(0) }
     fun showBubble() {
@@ -168,9 +183,9 @@ class OverlayController(private val service:ChatCaptureService) {
                 })
             }
         },{ service.refresh() },{ service.captureNow() },{ anchor ->
-            panel?.toggleMenu(listOf("完整咨询" to ConsultationActivity::class.java,"回复风格设置" to ReplyStyleActivity::class.java,"悬浮窗设置" to com.loveadvisor.android.settings.OverlaySettingsActivity::class.java,"模型设置" to SettingsActivity::class.java,"连接诊断" to DiagnosticsActivity::class.java).map { (label,activity) -> label to {
+            panel?.toggleMenu(listOf("回复风格设置" to ReplyStyleActivity::class.java,"完整咨询" to ConsultationActivity::class.java,"悬浮窗设置" to com.loveadvisor.android.settings.OverlaySettingsActivity::class.java,"模型设置" to SettingsActivity::class.java,"连接诊断" to DiagnosticsActivity::class.java).map { (label,activity) -> label to {
                 service.startActivity(Intent(service,activity).putExtra("contactTitle",service.currentChatSnapshot?.identity?.displayTitle).putExtra("targetPackage",service.currentChatSnapshot?.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            } })
+            } },capsuleMenuControls())
         },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE)
         view.contentDescription="聊天候选面板"
         panel=view; panelParams=params(1,1,"LoveAdvisorPanel"); panelOnLeft=null
@@ -186,7 +201,7 @@ class OverlayController(private val service:ChatCaptureService) {
         entryMode=value
         if(value==OverlayEntryMode.ISLAND || value==OverlayEntryMode.TOP_CAPSULE) { main.removeCallbacks(autoHide);idle.pause();stopEdgeMotion();bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } } }
     }
-    fun setReading(value:Boolean) { reading=value; panel?.setReading(value);updateCapsuleStatus();service.islandReading(value) }
+    fun setReading(value:Boolean) { reading=value; panel?.setReading(value);updateCapsuleStatus();service.islandReading(value);layout() }
     fun themeChanged() { val expanded=panel!=null;val native=islandPanel;hide();if(expanded && service.overlayAllowed())showPanel(native) }
     fun hide() {
         val expanded=panel!=null
@@ -294,6 +309,7 @@ class OverlayController(private val service:ChatCaptureService) {
         }
         if(entryMode==OverlayEntryMode.TOP_CAPSULE) {
             val config=graph.settings.load()
+            capsule?.applyOptions(config.capsuleLocked,capsulePreviewScale ?: config.capsuleScale)
             val b=capsuleGeometry(capsuleX ?: config.capsuleOffsetXdp,capsuleY ?: config.capsuleOffsetYdp)
             capsuleBounds=b
             capsule?.let { v -> capsuleParams?.let { position(v,it,b,capsuleWindow) } }

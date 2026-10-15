@@ -7,6 +7,22 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TopCapsuleViewTest {
+    @Test fun lockedViewKeepsTapAndContentWidthDoesNotReserveAnEmptyTail() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val context=InstrumentationRegistry.getInstrumentation().targetContext
+            var taps=0;var moves=0
+            val view=TopCapsuleView(context,{taps++},{},{_,_->moves++},{},{})
+            view.setStatus("6条候选");view.applyOptions(true,1f)
+            val regular=view.contentWidthDp();assertTrue(regular<64f)
+            view.measure(View.MeasureSpec.makeMeasureSpec((regular*context.resources.displayMetrics.density).toInt(),View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(66,View.MeasureSpec.EXACTLY));view.layout(0,0,192,66)
+            fun e(action:Int,t:Long,x:Float) { val event=MotionEvent.obtain(0,t,action,x,20f,0);view.dispatchTouchEvent(event);event.recycle() }
+            e(MotionEvent.ACTION_DOWN,0,10f);e(MotionEvent.ACTION_UP,60,10f)
+            e(MotionEvent.ACTION_DOWN,1000,10f);e(MotionEvent.ACTION_MOVE,1700,80f);e(MotionEvent.ACTION_UP,1800,80f)
+            assertEquals(1,taps);assertEquals(0,moves)
+            view.applyOptions(false,2f);assertEquals(regular,view.contentWidthDp(),.01f)
+            assertTrue(view.contentDescription.toString().contains("长按"));view.release()
+        }
+    }
     @Test fun tapAndHeldDragHaveDifferentActionsOnTheActualView() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val context=InstrumentationRegistry.getInstrumentation().targetContext

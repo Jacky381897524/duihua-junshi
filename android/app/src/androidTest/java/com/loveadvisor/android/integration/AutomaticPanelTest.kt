@@ -8,6 +8,21 @@ import com.loveadvisor.core.model.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticPanelTest {
+    @Test fun integratedCollapseUsesEntireBottomBandAtBothEdges() {
+        val i=InstrumentationRegistry.getInstrumentation()
+        i.runOnMainSync {
+            var closed=0
+            val panel=AdvisorPanelView(i.targetContext,{},{_,_->},{},{},{},{closed++},{true},{true})
+            val density=i.targetContext.resources.displayMetrics.density
+            val w=(320*density).toInt();val h=(474*density).toInt()
+            panel.measure(View.MeasureSpec.makeMeasureSpec(w,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(h,View.MeasureSpec.EXACTLY));panel.layout(0,0,w,h)
+            for(x in listOf(3f,w-3f)) {
+                val before=closed;val now=android.os.SystemClock.uptimeMillis()
+                for(action in listOf(MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP)) { val e=MotionEvent.obtain(now,now+30,action,x,h-24*density,0);panel.dispatchTouchEvent(e);e.recycle() }
+                assertEquals("底部远离箭头的两端也必须可点",before+1,closed)
+            }
+        }
+    }
     @Test fun closeButtonInvokesCloseWithoutRaisedSystemButtonShadow() {
         val i=InstrumentationRegistry.getInstrumentation()
         i.runOnMainSync {

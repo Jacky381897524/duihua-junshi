@@ -6,6 +6,9 @@ import android.os.Handler
 import android.os.Looper
 import com.loveadvisor.android.capture.ChatCaptureService
 import com.loveadvisor.core.input.ImeFillPolicy
+import com.loveadvisor.core.input.ImeConnectionWait
+import com.loveadvisor.core.input.ImeConnectionStep
+import com.loveadvisor.core.input.FillFeedback
 import com.loveadvisor.core.model.SessionToken
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -19,7 +22,7 @@ class ImeReplyFiller(private val service:ChatCaptureService) {
         val boundEditor=AtomicLong(-1)
         fun active()=!finished.get() && parentActive() && (boundEditor.get()<0 || boundEditor.get()==service.editorGeneration()) && ChatCaptureService.instance===service && service.overlayAllowed() && service.captureGeneration()==generation && service.graph.tracker.sameConversation(token)
         fun done(success:Boolean,message:String) { if(finished.compareAndSet(false,true))callback(success,message) }
-        fun fail(message:String) { if(active())ClipboardController.copy(service,text);done(false,message+"，已复制回复") }
+        fun fail(message:String) { val copied=active();if(copied)ClipboardController.copy(service,text,notify=false);done(false,FillFeedback.failure(message,copied)) }
         fun connection():InputMethod.AccessibilityInputConnection? {
             if(Build.VERSION.SDK_INT<33 || !active())return null
             val method=service.inputMethod ?: return null
@@ -104,14 +107,19 @@ class ImeReplyFiller(private val service:ChatCaptureService) {
         }
         main.postDelayed({ if(!finished.get())fail("填入超时，请重试") },15000)
         if(Build.VERSION.SDK_INT<33) { fail("当前系统不支持备用输入接口");return }
-        if(connection()!=null)begin()
-        else service.focusVisualComposer(token) { focused ->
-                if(!focused)fail("未识别到微信文字输入区域，请先点输入框")
-                else {
-                    fun await(attempt:Int) { main.postDelayed({ if(!finished.get()) { if(connection()!=null)begin() else if(attempt<8 && active())await(attempt+1) else fail("微信输入连接未就绪，请先点输入框") } },150) }
-                    await(0)
-                }
+        val waiting=ImeConnectionWait()
+        fun awaitConnection() {
+            if(finished.get())return
+            if(!active()) { done(false,"聊天或输入连接已变化，已保留原稿");return }
+            val imeVisible=service.windows.any { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+            when(waiting.next(connection()!=null,imeVisible)) {
+                ImeConnectionStep.READY -> begin()
+                ImeConnectionStep.FOCUS -> service.focusVisualComposer(token) { if(!finished.get())main.postDelayed({ awaitConnection() },150) }
+                ImeConnectionStep.WAIT -> main.postDelayed({ awaitConnection() },150)
+                ImeConnectionStep.FAIL -> fail("聊天输入框未就绪，请点输入框后重试")
+            }
         }
+        awaitConnection()
     }
     companion object { private val worker=Executors.newSingleThreadExecutor { r -> Thread(r,"wechat-official-input") } }
 }

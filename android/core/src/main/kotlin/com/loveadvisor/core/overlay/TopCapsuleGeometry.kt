@@ -9,11 +9,13 @@ object TopCapsuleGeometry {
         val d=density.takeIf { it.isFinite() && it>0 } ?: 1f
         return CapsuleDelta((visible.leftPx-base.leftPx)/d,(visible.topPx-base.topPx)/d)
     }
-    fun place(display:RectI,statusBarHeight:Int,density:Float,cutouts:List<RectI>,offsetXdp:Float=0f,offsetYdp:Float=0f):PanelBounds {
+    fun place(display:RectI,statusBarHeight:Int,density:Float,cutouts:List<RectI>,offsetXdp:Float=0f,offsetYdp:Float=0f,scale:Float=1f,contentWidthDp:Float=64f):PanelBounds {
         val d=density.takeIf { it.isFinite() && it>0 } ?: 1f
         fun px(value:Float)=(value*d).toInt()
-        val width=px(64f).coerceIn(1,display.width.coerceAtLeast(1))
-        val height=px(22f).coerceIn(1,display.height.coerceAtLeast(1))
+        val factor=scale.takeIf { it.isFinite() }?.coerceIn(.7f,2f) ?: 1f
+        val content=contentWidthDp.takeIf { it.isFinite() }?.coerceIn(28f,160f) ?: 50f
+        val width=px(content*factor).coerceIn(1,display.width.coerceAtLeast(1))
+        val height=px(22f*factor).coerceIn(1,display.height.coerceAtLeast(1))
         val bar=statusBarHeight.coerceAtLeast(0)
         val gap=px(8f)
         val clockRight=display.left+px(56f)

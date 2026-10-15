@@ -3,6 +3,13 @@ import com.loveadvisor.core.model.RectI
 import org.junit.Assert.*
 import org.junit.Test
 class ImeFillPolicyTest {
+    @Test fun voiceModeToggleMustBeASmallBottomLeftButton() {
+        val screen=RectI(0,0,1080,2344)
+        assertTrue(ImeFillPolicy.keyboardToggleAllowed(RectI(25,2170,105,2255),screen))
+        assertFalse(ImeFillPolicy.keyboardToggleAllowed(RectI(970,2170,1060,2255),screen))
+        assertFalse(ImeFillPolicy.keyboardToggleAllowed(RectI(25,100,105,180),screen))
+        assertFalse(ImeFillPolicy.keyboardToggleAllowed(RectI(25,2170,850,2255),screen))
+    }
     @Test fun defaultInputConnectionUnknownOffsetCanStillReturnCompleteDraft() {
         assertTrue(ImeFillPolicy.completeDraft("",-1,0,0))
         assertTrue(ImeFillPolicy.completeDraft("原稿",-1,2,2))

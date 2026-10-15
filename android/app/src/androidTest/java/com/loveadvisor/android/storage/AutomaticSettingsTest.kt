@@ -4,6 +4,17 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun capsuleLockAndScalePersistWhileOlderUsersStartUnlocked() {
+        val defaults=Gson().toJsonTree(AppSettings.decode("{}")).asJsonObject
+        assertEquals(false,defaults["capsuleLocked"]?.asBoolean)
+        assertEquals(1.0,defaults["capsuleScale"]?.asDouble ?: -1.0,0.001)
+        val saved=AppSettings.decode("""{"capsuleLocked":true,"capsuleScale":1.73,"profile":{"apiKey":"fake"}}""")
+        val reopened=Gson().toJsonTree(AppSettings.decode(Gson().toJson(saved))).asJsonObject
+        assertEquals(true,reopened["capsuleLocked"]?.asBoolean);assertEquals(1.73,reopened["capsuleScale"]?.asDouble ?: -1.0,0.001)
+        assertEquals("fake",saved.profile.apiKey)
+        assertEquals(.7,Gson().toJsonTree(AppSettings.decode("""{"capsuleScale":0.1}""")).asJsonObject["capsuleScale"]?.asDouble ?: -1.0,.001)
+        assertEquals(2.0,Gson().toJsonTree(AppSettings.decode("""{"capsuleScale":9}""")).asJsonObject["capsuleScale"]?.asDouble ?: -1.0,.001)
+    }
     @Test fun topCapsuleDefaultsOffAndRemembersItsAdjustedPosition() {
         val defaults=Gson().toJsonTree(AppSettings.decode("{}")).asJsonObject
         assertEquals(false,defaults["topCapsuleEnabled"]?.asBoolean)
