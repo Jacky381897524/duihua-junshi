@@ -40,21 +40,30 @@ class ChatCaptureService:AccessibilityService() {
     private var foregroundWindowId:Int?=null
     private var wechatForeground=false
     private var foregroundPackage:String?=null
-    private var islandTestRequested=false
-    private var islandLease:com.loveadvisor.android.island.IslandLease?=null
-    private val islandNotification by lazy { com.loveadvisor.android.island.NativeIslandNotification(this) }
-    var islandDiagnostic="原生岛测试未开启"; private set
-    fun startNativeIslandTest() { islandTestRequested=true;checkForeground() }
+    private lateinit var island:com.loveadvisor.android.island.NativeIslandCoordinator
+    val islandDiagnostic get()=if(::island.isInitialized)island.diagnostic else "无障碍服务未连接"
+    fun islandScope():com.loveadvisor.android.island.IslandLease? {
+        val pkg=foregroundPackage ?: return null
+        val id=foregroundWindowId ?: return null
+        return if(overlayAllowed() && overlaySuspensions==0)com.loveadvisor.android.island.IslandLease("",pkg,id,navigation) else null
+    }
+    fun islandEnvironment()=com.loveadvisor.core.overlay.IslandEnvironment(
+        ::reader.isInitialized && overlayAllowed() && overlaySuspensions==0,
+        Build.MANUFACTURER.equals("vivo",true) || Build.BRAND.equals("vivo",true) || Build.BRAND.equals("iqoo",true),
+        com.loveadvisor.android.island.NativeIslandNotification(this).enabled(),Build.FINGERPRINT)
+    fun startNativeIslandTest() {
+        graph.settings.update { it.copy(nativeIslandEnabled=true,nativeIslandConfirmedBuild=null) }
+        if(::island.isInitialized)island.stop()
+        checkForeground()
+    }
     fun onNativeIslandTap(leaseId:String,complete:(Boolean)->Unit={}) {
-        val lease=islandLease
+        val lease=if(::island.isInitialized)island.lease else null
         if(!::reader.isInitialized || lease==null || lease.id!=leaseId || !overlayAllowed() || overlaySuspensions!=0) { complete(false);return }
         nativeWorker.execute {
             val fresh=runCatching { reader.foreground() }.getOrNull()
             main.post {
-                val valid=lease===islandLease && lease.generation==navigation && overlayAllowed() && overlaySuspensions==0 && fresh?.packageName==lease.packageName && fresh.windowId==lease.windowId
-                val opened=valid && runCatching { overlay.showFromIsland() }.getOrDefault(false)
-                islandDiagnostic=if(opened) "原生专用点击已打开面板（测试，仍保留球）" else "原生点击已过期，保留悬浮球"
-                complete(opened)
+                val valid=instance===this && lease===island.lease && lease.generation==navigation && overlayAllowed() && overlaySuspensions==0 && fresh?.packageName==lease.packageName && fresh.windowId==lease.windowId
+                complete(valid && island.handleNativeTap(leaseId))
             }
         }
     }
@@ -87,7 +96,7 @@ class ChatCaptureService:AccessibilityService() {
         when(intent?.action) { Intent.ACTION_SCREEN_OFF -> leaveForeground(); Intent.ACTION_USER_PRESENT -> checkForeground() }
     } }
     override fun onServiceConnected() {
-        instance=this; reader=NodeSnapshotReader(this); overlay=OverlayController(this)
+        instance=this; reader=NodeSnapshotReader(this); overlay=OverlayController(this);island=com.loveadvisor.android.island.NativeIslandCoordinator(this,overlay)
         imePackages=runCatching { getSystemService(android.view.inputmethod.InputMethodManager::class.java).inputMethodList.map { it.packageName }.toSet() }.getOrDefault(emptySet())
         val screenEvents=IntentFilter(Intent.ACTION_SCREEN_OFF).apply { addAction(Intent.ACTION_USER_PRESENT) }
         if(Build.VERSION.SDK_INT>=33) registerReceiver(receiver,screenEvents,RECEIVER_NOT_EXPORTED) else registerReceiver(receiver,screenEvents)
@@ -263,7 +272,7 @@ class ChatCaptureService:AccessibilityService() {
         val deadline=now+5000L
         val delay=CaptureTiming.delay(lastReservedCaptureStart,now,detach)
         lastReservedCaptureStart=now+delay
-        if(detach) { overlaySuspensions++;overlay.suppress() }
+        if(detach) { overlaySuspensions++;if(::island.isInitialized)island.suspend();overlay.suppress() }
         var completed=false
         fun finish(image:CaptureImageResult) {
             if(completed) { if(image is CaptureImageResult.Success)image.bitmap.recycle();return }
@@ -358,7 +367,7 @@ class ChatCaptureService:AccessibilityService() {
         verifyVisualFill(token,requireComposerLayout=true) { verified ->
         if(!verified || ref!==visualFill || ref.generation!=navigation || windows.any { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }) { callback(false);return@verifyVisualFill }
         val path=Path().apply { moveTo((input.left+input.right)/2f,(input.top+input.bottom)/2f) }
-        overlaySuspensions++;overlay.suppress()
+        overlaySuspensions++;if(::island.isInitialized)island.suspend();overlay.suppress()
         val gesture=GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path,0,80)).build()
         var completed=false
         fun finish(value:Boolean) { if(!completed) { completed=true;overlaySuspensions--;ensureOverlay();callback(value && ref.generation==navigation && overlayAllowed()) } }
@@ -374,21 +383,16 @@ class ChatCaptureService:AccessibilityService() {
     fun overlayAllowed()=CapturePolicy.overlayVisible(graph.settings.load().overlayEnabled,locked(),projecting,wechatForeground)
     fun ensureOverlay() { if(::overlay.isInitialized) {
         if(overlayAllowed() && overlaySuspensions==0) {
+            if(::island.isInitialized)island.refreshEligibility(islandEnvironment())
             overlay.showBubble()
-            if(islandTestRequested && islandLease==null) {
-                val pkg=foregroundPackage;val id=foregroundWindowId
-                if(pkg!=null && id!=null) {
-                    islandLease=com.loveadvisor.android.island.IslandLease(UUID.randomUUID().toString(),pkg,id,navigation)
-                    islandDiagnostic=when(val result=islandNotification.publish("待读取",islandLease!!)) {
-                        is com.loveadvisor.android.island.IslandPublishResult.FAILED -> result.reason
-                        else -> "已发送测试通知，等待真实原生岛点击；普通通知不算成功"
-                    }
-                }
-            }
-        } else { overlay.suppress();islandNotification.end();islandLease=null }
+        } else {
+            if(::island.isInitialized) { if(overlaySuspensions>0)island.suspend() else island.stop() }
+            overlay.suppress()
+        }
     } }
+    fun islandReading(value:Boolean) { if(::island.isInitialized)island.updateStatus(value,graph.coordinator.state,graph.coordinator.state.current?.let { graph.tracker.sameConversation(it.ticket.session) }==true) }
     fun showFloating() { graph.settings.update { it.copy(overlayEnabled=true) }; checkForeground() }
-    fun settingsChanged() { if(!canObserve()) leaveForeground() else checkForeground() }
+    fun settingsChanged() { if(::island.isInitialized && !graph.settings.load().nativeIslandEnabled)island.stop();if(!canObserve()) leaveForeground() else checkForeground() }
     fun beginProjectionCapture() { projecting=true; leaveForeground() }
     fun endProjectionCapture() { projecting=false; checkForeground() }
     fun previewOcr(draft:ConversationDraft) { graph.controller.status("请返回微信，点击读取信息获取当前聊天") }
@@ -415,8 +419,8 @@ class ChatCaptureService:AccessibilityService() {
         WeChatPageKind.INVALID -> "窗口范围暂不可用，请稍后点击读取信息"
         else -> "未识别为可读取的单聊，请重新读取"
     }
-    override fun onInterrupt() { readGate.invalidate(); reset(); if(::overlay.isInitialized) { overlay.hide();overlay.suppress() } }
+    override fun onInterrupt() { if(::island.isInitialized)island.stop();readGate.invalidate(); reset(); if(::overlay.isInitialized) { overlay.hide();overlay.suppress() } }
     override fun onConfigurationChanged(newConfig:android.content.res.Configuration) { super.onConfigurationChanged(newConfig);if(::overlay.isInitialized)overlay.themeChanged();if(::reader.isInitialized)checkForeground() }
-    override fun onDestroy() { islandNotification.end();islandLease=null; main.removeCallbacksAndMessages(null); readGate.invalidate(); reset(); if(::overlay.isInitialized) overlay.destroy(); worker.shutdownNow(); nativeWorker.shutdownNow(); runCatching { unregisterReceiver(receiver) }; instance=null; super.onDestroy() }
+    override fun onDestroy() { if(::island.isInitialized)island.destroy(); main.removeCallbacksAndMessages(null); readGate.invalidate(); reset(); if(::overlay.isInitialized) overlay.destroy(); worker.shutdownNow(); nativeWorker.shutdownNow(); runCatching { unregisterReceiver(receiver) }; instance=null; super.onDestroy() }
     companion object { @Volatile var instance:ChatCaptureService?=null; private set }
 }

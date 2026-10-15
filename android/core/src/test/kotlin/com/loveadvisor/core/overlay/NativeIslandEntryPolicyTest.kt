@@ -3,6 +3,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NativeIslandEntryPolicyTest {
+    @Test fun statusNeverAnnouncesStaleCandidates() {
+        assertEquals("待读取",NativeIslandEntryPolicy.status(false,false,false,false))
+        assertEquals("分析中",NativeIslandEntryPolicy.status(true,false,false,false))
+        assertEquals("分析中",NativeIslandEntryPolicy.status(false,true,true,false))
+        assertEquals("读取失败",NativeIslandEntryPolicy.status(false,false,false,true))
+        assertEquals("6条候选",NativeIslandEntryPolicy.status(false,false,true,false))
+    }
     private val eligible=IslandEnvironment(true,true,true,"build-one")
     @Test fun postingWithoutARealClickKeepsTheFallbackBall() {
         assertEquals(OverlayEntryMode.ISLAND_TEST,NativeIslandEntryPolicy.mode(true,null,eligible,true))

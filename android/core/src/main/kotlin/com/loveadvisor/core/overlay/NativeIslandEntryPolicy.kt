@@ -3,6 +3,12 @@ package com.loveadvisor.core.overlay
 enum class OverlayEntryMode { BUBBLE, ISLAND_TEST, ISLAND }
 data class IslandEnvironment(val allowed:Boolean,val vivo:Boolean,val notificationsEnabled:Boolean,val osBuild:String)
 object NativeIslandEntryPolicy {
+    fun status(reading:Boolean,loading:Boolean,current:Boolean,error:Boolean)=when {
+        reading || loading -> "分析中"
+        error -> "读取失败"
+        current -> "6条候选"
+        else -> "待读取"
+    }
     private fun eligible(e:IslandEnvironment)=e.allowed && e.vivo && e.notificationsEnabled
     fun mode(requested:Boolean,confirmedBuild:String?,environment:IslandEnvironment,published:Boolean):OverlayEntryMode=when {
         !requested || !eligible(environment) || !published -> OverlayEntryMode.BUBBLE

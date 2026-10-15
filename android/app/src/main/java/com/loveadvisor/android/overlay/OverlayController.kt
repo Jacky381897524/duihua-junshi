@@ -127,11 +127,11 @@ class OverlayController(private val service:ChatCaptureService) {
     fun setEntryMode(value:OverlayEntryMode) {
         if(entryMode==value) return
         // Confirmation of the already open native test must not close that panel.
-        if(panel!=null && !(islandPanel && value==OverlayEntryMode.ISLAND)) hide()
+        if(panel!=null && !(islandPanel && value!=OverlayEntryMode.BUBBLE)) hide()
         entryMode=value
         if(value==OverlayEntryMode.ISLAND) { main.removeCallbacks(autoHide);idle.pause();stopEdgeMotion();bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } } }
     }
-    fun setReading(value:Boolean) { reading=value; panel?.setReading(value) }
+    fun setReading(value:Boolean) { reading=value; panel?.setReading(value);service.islandReading(value) }
     fun themeChanged() { val expanded=panel!=null;val native=islandPanel;hide();if(expanded && service.overlayAllowed())showPanel(native) }
     fun hide() {
         val expanded=panel!=null
