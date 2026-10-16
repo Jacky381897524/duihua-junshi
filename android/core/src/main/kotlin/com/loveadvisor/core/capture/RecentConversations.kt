@@ -14,7 +14,7 @@ class RecentConversations {
     fun match(visible:ChatSnapshot):ChatSnapshot? {
         val messages=visible.messages
         if(messages.size<3 || messages.map { it.speaker }.distinct().size<2) return null
-        fun equal(a:ChatMessage,b:ChatMessage)=a.speaker==b.speaker && a.text==b.text
+        fun equal(a:ChatMessage,b:ChatMessage)=a.speaker==b.speaker && a.text==b.text && a.quote==b.quote
         val matches=entries.filter { entry ->
             if(entry.packageName!=visible.packageName || entry.identity?.displayTitle!=visible.identity?.displayTitle) false else {
                 (3..minOf(entry.messages.size,messages.size)).any { count ->

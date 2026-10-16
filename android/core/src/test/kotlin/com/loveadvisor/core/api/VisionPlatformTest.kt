@@ -9,7 +9,7 @@ class VisionPlatformTest {
             var sent=""
             val wire=object:HttpTransport { override fun execute(request:ApiRequest,cancel:Cancellation):ApiResponse {
                 sent=request.body.orEmpty()
-                val content=VisionFixtures.content(Gson().toJson(mapOf("kind" to "DIRECT","title" to "小雨","messages" to listOf(mapOf("speaker" to "OTHER","text" to "你好")))))
+                val content=Gson().toJson(mapOf("kind" to "DIRECT","title" to "小雨","messages" to listOf(mapOf("speaker" to "OTHER","text" to "你好"))))
                 return ApiResponse(200,Gson().toJson(mapOf("choices" to listOf(mapOf("message" to mapOf("content" to content))))))
             } }
             val result=VisionClient(wire).read(ProviderPresets.OPENROUTER.vision("fake"),"data:image/png;base64,AA==",Cancellation(),pkg)

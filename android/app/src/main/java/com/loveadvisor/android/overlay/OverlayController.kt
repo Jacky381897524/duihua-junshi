@@ -34,6 +34,8 @@ class OverlayController(private val service:ChatCaptureService) {
     private var bubble:ImageView?=null; private var panel:AdvisorPanelView?=null
     private val bubbleWindow=WindowRegistration()
     private val panelWindow=WindowRegistration()
+    private var frostedWindow:FrostedPanelWindow?=null
+    private var useFrostedWindow=false
     private var bubbleParams:WindowManager.LayoutParams?=null; private var panelParams:WindowManager.LayoutParams?=null
     private var anchorX:Int?=null; private var anchorY:Int?=null; private var panelOnLeft:Boolean?=null
     private var state=BatchState(); private var keyboardVisible=false
@@ -159,7 +161,7 @@ class OverlayController(private val service:ChatCaptureService) {
                 service.notifyUser("未能显示左上角胶囊，已恢复悬浮球")
             }
         } else capsule?.let { capsuleWindow.detach { manager.removeViewImmediate(it) } }
-        panel?.let { panelWindow.attach { manager.addView(it,panelParams) } }
+        panel?.let { attachPanel(it) }
         if(entryMode==OverlayEntryMode.BUBBLE || entryMode==OverlayEntryMode.ISLAND_TEST) bubble?.let { bubbleWindow.attach { manager.addView(it,bubbleParams) } }
         else bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } }
         scheduleAutoHide()
@@ -170,6 +172,7 @@ class OverlayController(private val service:ChatCaptureService) {
         if(panel!=null) { if(islandPanel==native) return else hide() }
         showBubble();islandPanel=native;islandBounds=null
         stopEdgeMotion();idle.interact(SystemClock.uptimeMillis(),idleSeconds());idle.pause();main.removeCallbacks(autoHide)
+        useFrostedWindow=graph.settings.load().frostedPanelEnabled && android.os.Build.VERSION.SDK_INT>=31
         val view=AdvisorPanelView(service,{ ClipboardController.copy(service,it.text);hide() },{ plan,token ->
             if(!filling) {
                 filling=true;panel?.setFilling(true)
@@ -186,11 +189,33 @@ class OverlayController(private val service:ChatCaptureService) {
             panel?.toggleMenu(listOf("回复风格设置" to ReplyStyleActivity::class.java,"完整咨询" to ConsultationActivity::class.java,"悬浮窗设置" to com.loveadvisor.android.settings.OverlaySettingsActivity::class.java,"模型设置" to SettingsActivity::class.java,"连接诊断" to DiagnosticsActivity::class.java).map { (label,activity) -> label to {
                 service.startActivity(Intent(service,activity).putExtra("contactTitle",service.currentChatSnapshot?.identity?.displayTitle).putExtra("targetPackage",service.currentChatSnapshot?.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } },capsuleMenuControls())
-        },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() })
+        },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() },frosted=useFrostedWindow)
         view.contentDescription="聊天候选面板"
         panel=view; panelParams=params(1,1,"LoveAdvisorPanel"); panelOnLeft=null
-        if(native) dragIsland(view.dragHandle) else drag(view.dragHandle); view.setReading(reading); view.setFilling(filling); view.render(state); layout(); panelWindow.attach { manager.addView(view,panelParams) }
+        if(native) dragIsland(view.dragHandle) else drag(view.dragHandle); view.setReading(reading); view.setFilling(filling); view.render(state); layout(); attachPanel(view)
         OverlayAnimator.enter(view,graph.settings.load().reducedMotion,panel=true)
+    }
+    private fun attachPanel(view:AdvisorPanelView) {
+        val p=panelParams ?: return
+        panelWindow.attach {
+            if(useFrostedWindow && android.os.Build.VERSION.SDK_INT>=31) {
+                try {
+                    val host=frostedWindow ?: FrostedPanelWindow(service,view).also { frostedWindow=it }
+                    host.show(p)
+                } catch(_:RuntimeException) {
+                    runCatching { frostedWindow?.release() };frostedWindow=null;useFrostedWindow=false
+                    view.useFrostedWindow(false)
+                    manager.addView(view,p)
+                    service.notifyUser("当前系统未能启用毛玻璃，已使用清晰面板")
+                }
+            } else manager.addView(view,p)
+        }
+    }
+    private fun detachPanel(view:AdvisorPanelView) {
+        panelWindow.detach {
+            val host=frostedWindow
+            if(host!=null && android.os.Build.VERSION.SDK_INT>=31)host.hide() else manager.removeViewImmediate(view)
+        }
     }
     fun render(value:BatchState) { if(state==value) return; state=value; panel?.render(value);updateCapsuleStatus();layout() }
     fun showFromIsland():Boolean { showPanel(true);return panelWindow.registered }
@@ -206,14 +231,16 @@ class OverlayController(private val service:ChatCaptureService) {
     fun hide() {
         val expanded=panel!=null
         cancelFill?.invoke();cancelFill=null;filling=false;confirmation?.close();confirmation=null
-        panel?.let { it.release(); panelWindow.detach { manager.removeViewImmediate(it) } }
+        panel?.let { it.release();detachPanel(it) }
+        if(android.os.Build.VERSION.SDK_INT>=31)frostedWindow?.release()
+        frostedWindow=null;useFrostedWindow=false
         panel=null;panelParams=null;panelOnLeft=null;islandPanel=false;islandBounds=null;layout();scheduleAutoHide(restart=expanded)
     }
     /** Retain the shared anchor and expansion while temporarily detaching both surfaces. */
     fun suppress() {
         main.removeCallbacks(autoHide);idle.pause();stopEdgeMotion();dragging=false
         if(confirmation!=null)filling=false;confirmation?.close();confirmation=null
-        panel?.let { it.dismissMenu();it.stopAnimations(); panelWindow.detach { manager.removeViewImmediate(it) } }
+        panel?.let { it.dismissMenu();it.stopAnimations();detachPanel(it) }
         bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } }
         capsule?.let { OverlayAnimator.stop(it);capsuleWindow.detach { manager.removeViewImmediate(it) } }
     }
@@ -308,7 +335,10 @@ class OverlayController(private val service:ChatCaptureService) {
         fun position(view:View,p:WindowManager.LayoutParams,b:PanelBounds,window:WindowRegistration) {
             val changed=p.x!=b.leftPx || p.y!=b.topPx || p.width!=b.widthPx || p.height!=b.heightPx
             p.x=b.leftPx; p.y=b.topPx; p.width=b.widthPx; p.height=b.heightPx
-            if(changed && window.registered) manager.updateViewLayout(view,p)
+            if(changed && window.registered) {
+                val host=frostedWindow
+                if(window===panelWindow && host!=null && android.os.Build.VERSION.SDK_INT>=31)host.update(p) else manager.updateViewLayout(view,p)
+            }
         }
         if(entryMode==OverlayEntryMode.TOP_CAPSULE) {
             val config=graph.settings.load()

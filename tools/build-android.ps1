@@ -27,7 +27,7 @@ New-Item -ItemType Directory -Force -Path $taskSigningMirror | Out-Null
 $env:LOVEADVISOR_SIGNING_STORE = Join-Path $taskSigningMirror 'love-advisor-dev.p12'
 Copy-Item -LiteralPath $taskSigningStore -Destination $env:LOVEADVISOR_SIGNING_STORE -Force
 $env:PATH = "$($taskConfig.java)\bin;$env:PATH"
-$taskLogDir = Join-Path $taskRoot '.superpowers/sdd/2026-10-15-v1302'
+$taskLogDir = Join-Path $taskRoot '.superpowers/sdd/2026-10-16-v1309-lighter-frost'
 New-Item -ItemType Directory -Force -Path $taskLogDir | Out-Null
 $taskLog = Join-Path $taskLogDir ('build-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 Push-Location $taskMirror
@@ -38,6 +38,6 @@ try {
 $taskOutput = Join-Path $taskRoot 'output'
 New-Item -ItemType Directory -Force -Path $taskOutput | Out-Null
 $taskApk = Join-Path $taskMirror 'app/build/outputs/apk/debug/app-debug.apk'
-if ($taskExitCode -eq 0 -and $Tasks -contains ':app:assembleDebug' -and (Test-Path -LiteralPath $taskApk)) { Copy-Item -LiteralPath $taskApk -Destination (Join-Path $taskOutput 'love-advisor-1.3.02-debug.apk') -Force }
+if ($taskExitCode -eq 0 -and $Tasks -contains ':app:assembleDebug' -and (Test-Path -LiteralPath $taskApk)) { Copy-Item -LiteralPath $taskApk -Destination (Join-Path $taskOutput 'love-advisor-1.3.09-debug.apk') -Force }
 Write-Output "Build log: $taskLog"
 exit $taskExitCode

@@ -35,6 +35,7 @@ class MainActivity : BaseActivity() {
         body.addView(ViewStyles.button(this,"导入聊天 / 本地截图识别") { open(ImportActivity::class.java) })
         body.addView(ViewStyles.button(this,"多对象独立分析与比较") { open(ComparisonActivity::class.java) })
         body.addView(ViewStyles.button(this,"连接诊断") { open(DiagnosticsActivity::class.java) }); body.addView(ViewStyles.button(this,"关于与许可") { open(AboutActivity::class.java) })
+        body.addView(ViewStyles.button(this,"更新记录") { open(ReleaseHistoryActivity::class.java) })
         val author=ViewStyles.card(this);body.addView(author)
         val authorRow=ViewStyles.row(this);author.addView(authorRow)
         val avatarSize=ViewStyles.dp(this,48f)
@@ -48,6 +49,6 @@ class MainActivity : BaseActivity() {
         authorName.addView(ViewStyles.text(this,"作者",12f,ViewStyles.MUTED))
         authorName.addView(ViewStyles.text(this,"海街寺庙",17f,bold=true))
         authorRow.addView(authorName,android.widget.LinearLayout.LayoutParams(0,-2,1f))
-        authorRow.addView(ViewStyles.text(this,"V1.3.02",12f,ViewStyles.MUTED))
+        authorRow.addView(ViewStyles.text(this,"V1.3.09",12f,ViewStyles.MUTED))
     }
 }

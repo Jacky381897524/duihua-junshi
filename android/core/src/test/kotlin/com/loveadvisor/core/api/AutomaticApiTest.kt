@@ -10,7 +10,7 @@ class AutomaticApiTest {
         override fun execute(request:ApiRequest,cancel:Cancellation):ApiResponse { cancel.check(); requests.add(request); return handler(request) }
     }
     @Test fun visionSendsImageAndKeepsOriginalSpeakerText() {
-        val w=Wire { ApiResponse(200,com.google.gson.Gson().toJson(mapOf("choices" to listOf(mapOf("message" to mapOf("content" to VisionFixtures.content("""{"kind":"DIRECT","title":"小雨","messages":[{"speaker":"OTHER","text":"今天过得怎么样 😊"},{"speaker":"ME","text":"还不错"}]}"""))))))) }
+        val w=Wire { ApiResponse(200,"""{"choices":[{"message":{"content":"{\"kind\":\"DIRECT\",\"title\":\"小雨\",\"messages\":[{\"speaker\":\"OTHER\",\"text\":\"今天过得怎么样 😊\"},{\"speaker\":\"ME\",\"text\":\"还不错\"}]}"}}]}""") }
         val result=VisionClient(w).read(ProviderPresets.OPENROUTER.vision("fake"),"data:image/jpeg;base64,AA==",Cancellation())
         assertEquals("今天过得怎么样 😊",result.messages[0].text)
         assertEquals(com.loveadvisor.core.model.Speaker.ME,result.messages[1].speaker)

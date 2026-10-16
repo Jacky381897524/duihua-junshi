@@ -4,6 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SessionTrackerTest {
+    @Test fun quoteOnlyChangesInvalidateCandidatesBuiltForDifferentContext() {
+        val t=SessionTracker();val screen=chat()
+        val old=t.update(screen.copy(messages=screen.messages.map { it.copy(quote=ChatQuote("前文甲","小雨")) }))!!
+        val updated=t.update(screen.copy(messages=screen.messages.map { it.copy(quote=ChatQuote("前文乙","小雨")) }))!!
+        assertNotEquals(old.revision,updated.revision);assertFalse(t.isCurrent(old))
+    }
     private fun chat(id: String = "contact-a", title: String? = "小雨", text: String = "今天怎么样", confirmed: Boolean = true, window: Int = 1) = ChatSnapshot("com.tencent.mm", window, ConversationIdentity(id, title, ChatKind.DIRECT, confirmed), listOf(ChatMessage("m1", Speaker.OTHER, null, text)))
     @Test fun confirmedConversationCanBeCurrent() {
         val tracker = SessionTracker()

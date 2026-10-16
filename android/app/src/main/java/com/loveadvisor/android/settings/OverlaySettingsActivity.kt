@@ -12,6 +12,14 @@ class OverlaySettingsActivity:BaseActivity() {
         super.onCreate(savedInstanceState)
         page("悬浮窗与左上角胶囊","选择聊天时的入口；只有点读取信息才会收集和分析。")
         val config=graph.settings.load()
+        val appearance=ViewStyles.card(this);body.addView(appearance)
+        appearance.addView(ViewStyles.text(this,"候选面板外观",19f,bold=true))
+        appearance.addView(ViewStyles.switch(this,"使用轻毛玻璃",config.frostedPanelEnabled) { enabled ->
+            graph.settings.update { it.copy(frostedPanelEnabled=enabled) }
+            ChatCaptureService.instance?.settingsChanged()
+            toast(if(enabled)"已选择轻毛玻璃，返回聊天后查看" else "已恢复普通面板")
+        })
+        appearance.addView(ViewStyles.text(this,"背景柔和模糊，文字和按钮保持清晰。省电模式或系统不支持模糊时，自动使用清晰底色。关闭开关即可恢复普通面板。",14f,ViewStyles.MUTED))
         val capsule=ViewStyles.card(this);body.addView(capsule)
         capsule.addView(ViewStyles.text(this,"左上角胶囊入口",19f,bold=true))
         capsule.addView(ViewStyles.text(this,"默认在时间右侧、摄像头左侧。仅微信、QQ、抖音前台显示，不依赖通知。点按打开候选，长按后拖动微调，位置自动保存。",14f,ViewStyles.MUTED))

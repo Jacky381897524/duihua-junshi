@@ -8,6 +8,26 @@ import com.loveadvisor.core.model.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticPanelTest {
+    @Test fun cachedHeightTracksNewRepliesAndExpandedDetails() {
+        val i=InstrumentationRegistry.getInstrumentation()
+        i.runOnMainSync {
+            val panel=AdvisorPanelView(i.targetContext,{},{_,_->},{},{},{},{},{true},{true})
+            val width=(320*i.targetContext.resources.displayMetrics.density).toInt()
+            fun show(text:String,id:Long) {
+                val plans=(0..5).map { ReplyPlan("$id-$it",Strategy.entries[it],text,"说明内容".repeat(30),"","",ReplyBranches("","",""),.8) }
+                val batch=AdvisorBatch(AdvisorAnalysis(emptyList(),emptyList(),emptyList(),"轻松交流",1,"接住分享"),plans,compact=true)
+                panel.render(BatchState(VisibleBatch(RequestTicket(SessionToken("com.tencent.mm",1,"c",1,1),id),batch)))
+            }
+            show("短句",1);val short=panel.preferredHeight(width)
+            repeat(20) { assertEquals(short,panel.preferredHeight(width)) }
+            show("较长的候选回复需要完整换行显示".repeat(8),2)
+            val long=panel.preferredHeight(width);assertTrue(long>short)
+            show("短句",3);assertEquals(short,panel.preferredHeight(width))
+            fun all(v:View):List<View> = listOf(v)+if(v is ViewGroup)(0 until v.childCount).flatMap { all(v.getChildAt(it)) } else emptyList()
+            all(panel).filterIsInstance<Button>().first { it.text=="详情" }.performClick()
+            assertTrue("展开详情后不可复用旧的卡片高度",panel.preferredHeight(width)>short)
+        }
+    }
     @Test fun emptyPanelGrowsForCompleteMenuAndShrinksWhenDismissed() {
         val i=InstrumentationRegistry.getInstrumentation()
         i.runOnMainSync {
@@ -24,7 +44,7 @@ class AutomaticPanelTest {
             fun all(v:View):List<View> = listOf(v)+if(v is ViewGroup) (0 until v.childCount).flatMap { all(v.getChildAt(it)) } else emptyList()
             val last=all(panel).filterIsInstance<Button>().first { it.text=="连接诊断" }
             val bounds=android.graphics.Rect();last.getDrawingRect(bounds);panel.offsetDescendantRectToMyCoords(last,bounds)
-            assertTrue("最后一项应完整显示并留出底部收起区域",bounds.bottom<=expanded-48*density)
+            assertTrue("最后一项应完整显示并留出底部收起区域",bounds.bottom<=expanded-30*density)
             assertFalse((last.parent.parent as ScrollView).canScrollVertically(1))
             panel.dismissMenu();assertEquals(2,resizes);assertFalse(panel.menuExpanded)
             assertEquals(initial,panel.preferredHeight(w))
@@ -43,7 +63,7 @@ class AutomaticPanelTest {
             panel.measure(View.MeasureSpec.makeMeasureSpec(w,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(h,View.MeasureSpec.EXACTLY));panel.layout(0,0,w,h)
             for(x in listOf(3f,w-3f)) {
                 val before=closed;val now=android.os.SystemClock.uptimeMillis()
-                for(action in listOf(MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP)) { val e=MotionEvent.obtain(now,now+30,action,x,h-24*density,0);panel.dispatchTouchEvent(e);e.recycle() }
+                for(action in listOf(MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP)) { val e=MotionEvent.obtain(now,now+30,action,x,h-12*density,0);panel.dispatchTouchEvent(e);e.recycle() }
                 assertEquals("底部远离箭头的两端也必须可点",before+1,closed)
             }
             }

@@ -44,7 +44,7 @@ class SessionTracker {
     private fun fingerprint(snapshot: ChatSnapshot): String {
         val digest = MessageDigest.getInstance("SHA-256")
         for (m in snapshot.messages) {
-            for (part in listOf(m.speaker.name, m.sender.orEmpty(), m.text)) {
+            for (part in listOf(m.speaker.name, m.sender.orEmpty(), m.text,m.quote?.author.orEmpty(),m.quote?.text.orEmpty())) {
                 val data = part.toByteArray(Charsets.UTF_8)
                 digest.update("${data.size}:".toByteArray(Charsets.UTF_8)); digest.update(data)
             }

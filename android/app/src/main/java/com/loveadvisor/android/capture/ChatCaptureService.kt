@@ -240,25 +240,24 @@ class ChatCaptureService:AccessibilityService() {
             when(image) {
                 is CaptureImageResult.Failure -> finishRead(ticket,"${image.message}，请点击读取信息重试")
                 is CaptureImageResult.Success -> worker.execute {
+                    var scaledToRecycle:Bitmap?=null
                     try {
                         val original=image.bitmap
                         val scaled=if(original.width>1200) Bitmap.createScaledBitmap(original,1200,(original.height*1200f/original.width).toInt(),true) else original
+                        if(scaled!==original)scaledToRecycle=scaled
                         val positionScale=original.height.toDouble()/scaled.height
                         val titleStamp=VisualFillReference.stamp(original)
                         val footerStamp=VisualFillReference.footerStamp(original)
                         val bytes=ByteArrayOutputStream(); scaled.compress(Bitmap.CompressFormat.JPEG,90,bytes)
                         if(scaled!==original) scaled.recycle(); original.recycle()
                         val readVisual=graph.vision.read(config.vision.copy(apiKey=key),"data:image/jpeg;base64,"+Base64.encodeToString(bytes.toByteArray(),Base64.NO_WRAP),cancel,w.packageName)
-                        val xScale=if(readVisual.normalizedCoordinates)w.viewport.width/1000.0 else positionScale
-                        val yScale=if(readVisual.normalizedCoordinates)w.viewport.height/1000.0 else positionScale
-                        val input=readVisual.composer?.let { r -> RectI(w.viewport.left+(r.left*xScale).toInt(),w.viewport.top+(r.top*yScale).toInt(),w.viewport.left+(r.right*xScale).toInt(),w.viewport.top+(r.bottom*yScale).toInt()) }?.takeIf { ImeFillPolicy.composerAllowed(it,w.viewport) }
-                        val keyboard=readVisual.keyboardButton?.let { r -> RectI(w.viewport.left+(r.left*xScale).toInt(),w.viewport.top+(r.top*yScale).toInt(),w.viewport.left+(r.right*xScale).toInt(),w.viewport.top+(r.bottom*yScale).toInt()) }?.takeIf { ImeFillPolicy.keyboardToggleAllowed(it,w.viewport) }
-                        val visual=readVisual.copy(positions=readVisual.positions.mapValues { (_,y)->w.viewport.top+y*yScale },normalizedCoordinates=false)
+                        val input=readVisual.composer?.let { r -> RectI(w.viewport.left+(r.left*positionScale).toInt(),w.viewport.top+(r.top*positionScale).toInt(),w.viewport.left+(r.right*positionScale).toInt(),w.viewport.top+(r.bottom*positionScale).toInt()) }?.takeIf { ImeFillPolicy.composerAllowed(it,w.viewport) }
+                        val visual=readVisual.copy(positions=readVisual.positions.mapValues { (_,y)->w.viewport.top+y*positionScale })
                         cancel.check()
                         main.post {
                             if(!cancel.cancelled && lease==navigation && manualRead.accepts(ticket) && overlayAllowed()) {
                                 graph.record("vision",SystemClock.elapsedRealtime()-started,null,null)
-                                pendingVision=VisionReply(visual,w.windowId,cancel,ticket,lease,titleStamp?.let { VisualFillReference(w.windowId,lease,it,input,footerStamp,w.viewport,keyboard) })
+                                pendingVision=VisionReply(visual,w.windowId,cancel,ticket,lease,titleStamp?.let { VisualFillReference(w.windowId,lease,it,input,footerStamp,w.viewport) })
                                 observe() // One local verification read; no second screenshot or automatic retry.
                             }
                         }
@@ -268,7 +267,7 @@ class ChatCaptureService:AccessibilityService() {
                         lastWechatDiagnosticStatus="视觉读取失败 · $reason"
                         finishRead(ticket,reason)
                     } } }
-                    finally { if(!image.bitmap.isRecycled) image.bitmap.recycle() }
+                    finally { scaledToRecycle?.let { if(!it.isRecycled)it.recycle() };if(!image.bitmap.isRecycled) image.bitmap.recycle() }
                 }
             }
         }

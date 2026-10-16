@@ -4,7 +4,8 @@
 android/.gradle/
 android/**/build/
 android/local.properties
-output/*.apk
+/output/
+/.codex-remote-attachments/
 private-signing/
 .release-prep/
 **/__pycache__/

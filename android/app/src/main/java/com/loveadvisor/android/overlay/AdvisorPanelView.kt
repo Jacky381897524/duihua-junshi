@@ -1,18 +1,20 @@
 package com.loveadvisor.android.overlay
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.view.Gravity
 import android.view.View
 import android.widget.*
 import com.loveadvisor.android.ui.ViewStyles
+import com.loveadvisor.android.R
 import com.loveadvisor.core.advisor.*
 import com.loveadvisor.core.model.SessionToken
 
 enum class PanelDragMode { TITLE, TOP_GRIP }
 data class CapsuleMenuControls(val locked:Boolean,val scale:Float,val toggleLock:()->Boolean,val resize:(Float,Boolean)->Unit,val finishResize:()->Unit)
-class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,private val onFill:(ReplyPlan,SessionToken)->Unit,private val onRefresh:()->Unit,onRead:()->Unit,onMenu:(View)->Unit,onClose:()->Unit,private val isCurrent:(SessionToken)->Boolean,private val reduced:()->Boolean,private val onDetails:((ReplyPlan,SessionToken,(String)->Unit)->Unit)?=null,dragMode:PanelDragMode=PanelDragMode.TITLE,private val onResize:()->Unit={}):FrameLayout(context) {
+class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,private val onFill:(ReplyPlan,SessionToken)->Unit,private val onRefresh:()->Unit,onRead:()->Unit,onMenu:(View)->Unit,onClose:()->Unit,private val isCurrent:(SessionToken)->Boolean,private val reduced:()->Boolean,private val onDetails:((ReplyPlan,SessionToken,(String)->Unit)->Unit)?=null,dragMode:PanelDragMode=PanelDragMode.TITLE,private val onResize:()->Unit={},private val frosted:Boolean=false):FrameLayout(context) {
     val dragHandle:View
-    private val palette=PanelPalette(context)
+    private val palette=PanelPalette(context,frosted)
     private val scoreLabel=if(com.loveadvisor.android.AppGraph.get(context).settings.load().judgeProvider=="CUSTOM")"评分" else "Jev"
     private val column=ViewStyles.column(context)
     private val summary:TextView; private val status:TextView; private val scroll:ScrollView
@@ -22,9 +24,11 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private var menuLayer:View?=null
     private var menuContent:LinearLayout?=null
     private var menuFinished:(()->Unit)?=null
+    private var cachedWidth=-1;private var cachedHeight=0;private var compacted=false
     val menuExpanded get()=menuLayer!=null
+    private val collapseHeight get()=dp(30)
     init {
-        background=ViewStyles.shape(context,palette.surface,24f,palette.border); clipToOutline=true; elevation=0f
+        useFrostedWindow(frosted); clipToOutline=true; elevation=0f
         val pad=dp(12); column.setPadding(pad,pad,pad,0); addView(column,LayoutParams(-1,-1))
         val header=ViewStyles.row(context)
         val title=palette.text("军师分析",17f,bold=true)
@@ -62,11 +66,25 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         val collapse=FrameLayout(context).apply {
             contentDescription="收起候选面板";isFocusable=true;setOnClickListener { onClose() }
         }
-        collapse.addView(palette.text("⌃",22f,palette.blue,bold=true).apply { gravity=Gravity.CENTER;importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },FrameLayout.LayoutParams(dp(180),dp(24),Gravity.CENTER))
-        column.addView(collapse,LinearLayout.LayoutParams(-1,dp(48)).apply { leftMargin=-pad;rightMargin=-pad })
+        collapse.addView(View(context).apply {
+            setBackgroundColor(palette.border);alpha=.45f
+            importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        },FrameLayout.LayoutParams(-1,dp(1),Gravity.TOP).apply { leftMargin=pad;rightMargin=pad;topMargin=dp(6) })
+        // Center inside the area below the divider; a margin on a centered icon
+        // shifts the icon itself and can leave it against the panel's bottom edge.
+        val collapseContent=FrameLayout(context)
+        collapse.addView(collapseContent,FrameLayout.LayoutParams(-1,-1).apply { topMargin=dp(7) })
+        collapseContent.addView(ImageView(context).apply {
+            setImageResource(R.drawable.ic_panel_collapse)
+            imageTintList=ColorStateList.valueOf(palette.blue)
+            importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        },FrameLayout.LayoutParams(dp(20),dp(14),Gravity.CENTER))
+        column.addView(collapse,LinearLayout.LayoutParams(-1,collapseHeight).apply { leftMargin=-pad;rightMargin=-pad })
         updateButtons()
     }
     private fun dp(value:Int)=ViewStyles.dp(context,value.toFloat())
+    fun useFrostedWindow(enabled:Boolean) { background=ViewStyles.shape(context,if(enabled)android.graphics.Color.TRANSPARENT else palette.opaqueSurface,24f,palette.border) }
+    private fun invalidateHeight() { cachedWidth=-1 }
     private fun rowParams(height:Int,bottom:Int)=LinearLayout.LayoutParams(-1,height).apply { bottomMargin=dp(bottom) }
     private fun updateButtons() {
         read.isEnabled=!reading && !loading && !filling; read.text=if(reading) "读取中…" else "读取信息"
@@ -79,7 +97,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     }
     fun setReading(value:Boolean) { reading=value; updateButtons() }
     fun setFilling(value:Boolean) { filling=value; updateButtons() }
-    fun fillResult(message:String) { status.text=message }
+    fun fillResult(message:String) { status.text=message;invalidateHeight() }
     fun release() { dismissMenu();stopAnimations() }
     /** An in-panel menu stays in the accessibility overlay and creates no application popup window. */
     fun toggleMenu(items:List<Pair<String,()->Unit>>,capsule:CapsuleMenuControls?=null) {
@@ -113,18 +131,19 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         items.drop(1).forEach { item(it) }
         val viewport=ScrollView(context).apply { isFillViewport=false;addView(menu) }
         layer.addView(viewport,LayoutParams(dp(200),-2,Gravity.TOP or Gravity.RIGHT).apply { topMargin=dp(44);rightMargin=dp(12);bottomMargin=dp(6) })
-        menuLayer=layer;menuContent=menu;addView(layer,LayoutParams(-1,-1).apply { bottomMargin=dp(48) })
-        onResize()
+        menuLayer=layer;menuContent=menu;addView(layer,LayoutParams(-1,-1).apply { bottomMargin=collapseHeight })
+        invalidateHeight();onResize()
     }
     fun dismissMenu() {
         val wasOpen=menuExpanded
         val finished=menuFinished;menuFinished=null
         menuLayer?.let { removeView(it) };menuLayer=null;menuContent=null
         finished?.invoke()
-        if(wasOpen)onResize()
+        if(wasOpen) { invalidateHeight();onResize() }
     }
     /** Measure real cards including font scaling; long replies remain fully scrollable. */
     fun preferredHeight(widthPx:Int):Int {
+        if(cachedWidth==widthPx)return cachedHeight
         val available=(widthPx-column.paddingLeft-column.paddingRight).coerceAtLeast(1)
         var height=column.paddingTop+column.paddingBottom
         for(i in 0 until column.childCount) {
@@ -143,8 +162,9 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         menuContent?.let { menu ->
             val menuWidth=minOf(dp(200),(widthPx-dp(24)).coerceAtLeast(1))
             menu.measure(MeasureSpec.makeMeasureSpec(menuWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
-            height=maxOf(height,dp(44)+menu.measuredHeight+dp(6)+dp(48))
+            height=maxOf(height,dp(44)+menu.measuredHeight+dp(6)+collapseHeight)
         }
+        cachedWidth=widthPx;cachedHeight=height
         return height
     }
     private fun updateCount() {
@@ -154,6 +174,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     }
     override fun onSizeChanged(w:Int,h:Int,oldw:Int,oldh:Int) { super.onSizeChanged(w,h,oldw,oldh); post { updateCount() } }
     fun render(state:BatchState) {
+        invalidateHeight()
         loading=state.loading
         val visible=state.current
         status.text=state.error ?: when {
@@ -166,13 +187,13 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             val a=visible.batch.analysis; summary.text="${a.risk?.let { "风险 $it/9 · " } ?: ""}${a.intent}\n${a.action}"
             if(displayed!=visible) {
                 displayed=visible; cards.removeAllViews()
-                visible.batch.replies.forEachIndexed { i,plan -> cards.addView(ReplyCardView(context,i,plan,{ onCopy(plan) },{ onFill(plan,visible.ticket.session) },{ callback -> onDetails?.invoke(plan,visible.ticket.session,callback) ?: callback("该方案采用${plan.strategy.label}策略。") },compact=true,scoreLabel=scoreLabel)) }
+                visible.batch.replies.forEachIndexed { i,plan -> cards.addView(ReplyCardView(context,i,plan,{ onCopy(plan) },{ onFill(plan,visible.ticket.session) },{ callback -> onDetails?.invoke(plan,visible.ticket.session,callback) ?: callback("该方案采用${plan.strategy.label}策略。") },compact=true,scoreLabel=scoreLabel,frosted=frosted,onContentChanged={ invalidateHeight();onResize() })) }
                 scroll.scrollTo(0,0)
                 cards.post { updateCount() }
             }
         } else { displayed=null; cards.removeAllViews(); summary.text="点击读取信息，分析当前单聊"; count.text="0 / 6" }
         updateButtons()
     }
-    fun compact(enabled:Boolean) { summary.maxLines=if(enabled) 1 else 3; status.maxLines=if(enabled) 1 else 2 }
+    fun compact(enabled:Boolean) { if(compacted==enabled)return;compacted=enabled;summary.maxLines=if(enabled) 1 else 3; status.maxLines=if(enabled) 1 else 2;invalidateHeight() }
     fun stopAnimations() { OverlayAnimator.stop(this); for(i in 0 until cards.childCount) OverlayAnimator.stop(cards.getChildAt(i)) }
 }

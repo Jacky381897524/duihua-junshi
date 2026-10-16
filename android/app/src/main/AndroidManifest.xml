@@ -25,6 +25,7 @@
         <activity android:name=".ui.PermissionsActivity" android:exported="false"/>
         <activity android:name=".ui.DiagnosticsActivity" android:exported="false"/>
         <activity android:name=".ui.AboutActivity" android:exported="false"/>
+        <activity android:name=".ui.ReleaseHistoryActivity" android:exported="false"/>
         <service android:name=".capture.ocr.ProjectionService" android:exported="false" android:foregroundServiceType="mediaProjection"/>
         <service android:name=".capture.ChatCaptureService" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>

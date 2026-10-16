@@ -5,11 +5,11 @@ import android.view.View
 import android.view.Gravity
 import com.loveadvisor.android.ui.ViewStyles
 import com.loveadvisor.core.advisor.ReplyPlan
-class ReplyCardView(context:Context,index:Int,plan:ReplyPlan,onCopy:()->Unit,onFill:(()->Unit)?,onDetails:(((String)->Unit)->Unit)?=null,compact:Boolean=false,scoreLabel:String="Jev"):LinearLayout(context) {
+class ReplyCardView(context:Context,index:Int,plan:ReplyPlan,onCopy:()->Unit,onFill:(()->Unit)?,onDetails:(((String)->Unit)->Unit)?=null,compact:Boolean=false,scoreLabel:String="Jev",frosted:Boolean=false,onContentChanged:()->Unit={}):LinearLayout(context) {
     val fillButton:Button?
     val copyButton:Button
     init {
-        val palette=PanelPalette(context)
+        val palette=PanelPalette(context,frosted)
         orientation=VERTICAL; val d=ViewStyles.dp(context,if(compact) 6f else 11f); val h=ViewStyles.dp(context,if(compact) 9f else 11f); setPadding(h,d,h,d)
         background=ViewStyles.shape(context,if(index==0) palette.selected else palette.card,15f)
         layoutParams=LayoutParams(-1,-2).apply { bottomMargin=ViewStyles.dp(context,if(compact) 6f else 10f) }
@@ -28,7 +28,8 @@ class ReplyCardView(context:Context,index:Int,plan:ReplyPlan,onCopy:()->Unit,onF
         var fetched=plan.reason.isNotBlank()
         actions.addView(actionButton("详情") {
             val opening=details.visibility==View.GONE; details.visibility=if(opening) View.VISIBLE else View.GONE
-            if(opening && !fetched) { fetched=true; details.text="正在解释这条方案…"; onDetails?.invoke { result -> details.text=result } ?: run { details.text="该方案采用${plan.strategy.label}策略。" } }
+            if(opening && !fetched) { fetched=true; details.text="正在解释这条方案…"; onDetails?.invoke { result -> details.text=result;onContentChanged() } ?: run { details.text="该方案采用${plan.strategy.label}策略。" } }
+            onContentChanged()
         }); addView(details)
     }
 }

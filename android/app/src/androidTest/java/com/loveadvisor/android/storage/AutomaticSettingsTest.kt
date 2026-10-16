@@ -4,6 +4,14 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun lightFrostDefaultsOnAndUserCanRestorePlainPanelPermanently() {
+        val defaults=Gson().toJsonTree(AppSettings.decode("{}")).asJsonObject
+        assertEquals(true,defaults["frostedPanelEnabled"]?.asBoolean)
+        val saved=AppSettings.decode("""{"frostedPanelEnabled":false,"globalReplyStyle":"简短","capsuleLocked":true,"profile":{"apiKey":"fake"}}""")
+        val reopened=Gson().toJsonTree(AppSettings.decode(Gson().toJson(saved))).asJsonObject
+        assertEquals(false,reopened["frostedPanelEnabled"]?.asBoolean)
+        assertEquals("简短",saved.globalReplyStyle);assertTrue(saved.capsuleLocked);assertEquals("fake",saved.profile.apiKey)
+    }
     @Test fun capsuleLockAndScalePersistWhileOlderUsersStartUnlocked() {
         val defaults=Gson().toJsonTree(AppSettings.decode("{}")).asJsonObject
         assertEquals(false,defaults["capsuleLocked"]?.asBoolean)
