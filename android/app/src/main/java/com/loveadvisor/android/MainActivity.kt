@@ -12,6 +12,9 @@ import com.loveadvisor.android.memory.ProfilesActivity
 import com.loveadvisor.android.advisor.*
 
 class MainActivity : BaseActivity() {
+    private var cacheBusy=false
+    private var cacheBytes:Long?=null
+    private var cacheButton:android.widget.Button?=null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         render()
@@ -34,7 +37,9 @@ class MainActivity : BaseActivity() {
         body.addView(ViewStyles.button(this,"逐轮模拟练习") { open(PracticeActivity::class.java) })
         body.addView(ViewStyles.button(this,"导入聊天 / 本地截图识别") { open(ImportActivity::class.java) })
         body.addView(ViewStyles.button(this,"多对象独立分析与比较") { open(ComparisonActivity::class.java) })
-        body.addView(ViewStyles.button(this,"连接诊断") { open(DiagnosticsActivity::class.java) }); body.addView(ViewStyles.button(this,"关于与许可") { open(AboutActivity::class.java) })
+        body.addView(ViewStyles.button(this,"连接诊断") { open(DiagnosticsActivity::class.java) })
+        addCacheButton()
+        body.addView(ViewStyles.button(this,"关于与许可") { open(AboutActivity::class.java) })
         body.addView(ViewStyles.button(this,"更新记录") { open(ReleaseHistoryActivity::class.java) })
         val author=ViewStyles.card(this);body.addView(author)
         val authorRow=ViewStyles.row(this);author.addView(authorRow)
@@ -49,6 +54,27 @@ class MainActivity : BaseActivity() {
         authorName.addView(ViewStyles.text(this,"作者",12f,ViewStyles.MUTED))
         authorName.addView(ViewStyles.text(this,"海街寺庙",17f,bold=true))
         authorRow.addView(authorName,android.widget.LinearLayout.LayoutParams(0,-2,1f))
-        authorRow.addView(ViewStyles.text(this,"V1.3.09",12f,ViewStyles.MUTED))
+        authorRow.addView(ViewStyles.text(this,"V1.3.10",12f,ViewStyles.MUTED))
+    }
+    private fun cacheLabel()=if(cacheBusy) "正在清理缓存…" else "清除缓存"+cacheBytes?.let { " · "+android.text.format.Formatter.formatFileSize(this,it) }.orEmpty()
+    private fun updateCacheButton() { cacheButton?.apply { text=cacheLabel();isEnabled=!cacheBusy } }
+    private fun addCacheButton() {
+        val button=ViewStyles.button(this,cacheLabel()) { clearCache() }
+        button.contentDescription="清除临时缓存，保留密钥、模型配置、回复风格、关系记忆和聊天历史"
+        cacheButton=button;body.addView(button);updateCacheButton()
+        if(!cacheBusy)work("cache_usage",{ cancel -> graph.cache.usage { cancel.check() } },{ usage ->
+            if(cacheButton===button && !cacheBusy) { cacheBytes=usage.bytes;updateCacheButton() }
+        },{ /* Cache statistics are optional; clearing remains available. */ })
+    }
+    private fun clearCache() {
+        if(cacheBusy)return
+        cacheBusy=true;updateCacheButton()
+        work("cache_clear",{ cancel -> graph.cache.clear { cancel.check() } },{ result ->
+            cacheBusy=false;cacheBytes=result.remainingBytes;updateCacheButton()
+            val freed=android.text.format.Formatter.formatFileSize(this,result.freedBytes)
+            val left=android.text.format.Formatter.formatFileSize(this,result.remainingBytes)
+            toast(if(result.failedEntries>0) "已释放 $freed，剩余可统计缓存 $left；部分文件暂时无法清理，配置和历史已保留"
+                else "缓存清理完成，已释放 $freed，剩余 $left；配置和历史已保留")
+        },{ message -> cacheBusy=false;updateCacheButton();toast("缓存清理未完成：$message") })
     }
 }

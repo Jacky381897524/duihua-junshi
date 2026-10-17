@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.3.09 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.3.10 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,12 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.3.10", "清除缓存与安卓兼容增强", listOf(
+                "主页新增“清除缓存”，显示缓存大小和清理结果，保留密钥、模型配置、回复风格、关系记忆与聊天历史。",
+                "页面和候选面板避让横屏侧边挖孔、刘海及系统导航区域，胶囊位置增加挖孔碰撞避让。",
+                "候选操作按钮随宽度分配空间，菜单与部分控件适应大字体及窄屏；保留较薄的底部收起区。",
+                "权限入口增加标准系统设置备用路径，保留 Android 11+、ARM64 范围及毛玻璃自动降级；具体机型仍需实测。"
+            )),
             Release("V1.3.09", "减轻毛玻璃模糊强度", listOf(
                 "降低背景模糊半径，让面板后方的聊天轮廓更清楚，保留轻毛玻璃的柔和质感。",
                 "继续使用系统原生模糊与布局缓存，可在悬浮窗设置中恢复普通面板。"

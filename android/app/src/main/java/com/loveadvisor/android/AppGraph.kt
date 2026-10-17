@@ -16,6 +16,7 @@ import com.loveadvisor.core.diagnostics.*
 import com.google.gson.Gson
 class AppGraph private constructor(val context:Context) {
     val documents=AndroidDocumentStore(context)
+    val cache=AppCache(context)
     val settings=AppSettings(documents)
     val profiles=ProfileStore(documents)
     val memory=MemoryRepository(EncryptedMemoryPersistence(documents))

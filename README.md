@@ -2,13 +2,13 @@
 
 <img src="docs/images/logo.png" alt="对话军师 Logo" width="96" />
 
-**一个对话，六种思路。** 海街寺庙整合开发的 Android 聊天助手，最新发布版本 **V1.3.09（轻毛玻璃与面板优化）**。
+**一个对话，六种思路。** 海街寺庙整合开发的 Android 聊天助手，最新发布版本 **V1.3.10（清除缓存与安卓兼容增强）**。
 
 ## 下载与使用
 
-[下载 V1.3.09 APK](https://github.com/Jacky381897524/duihua-junshi/releases/download/v1.3.09/duihua-junshi-V1.3.09.apk) · [发布说明、源码包与校验文件](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.3.09)
+[下载 V1.3.10 APK](https://github.com/Jacky381897524/duihua-junshi/releases/download/v1.3.10/duihua-junshi-V1.3.10.apk) · [发布说明、源码包与校验文件](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.3.10)
 
-[所有历史版本](https://github.com/Jacky381897524/duihua-junshi/releases) · [保留的 V1.2.12](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.2.12) · [完整更新记录](CHANGELOG.md)
+[所有历史版本](https://github.com/Jacky381897524/duihua-junshi/releases) · [V1.3.09](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.3.09) · [V1.2.12](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.2.12) · [完整更新记录](CHANGELOG.md)
 
 在本仓库的 **Releases** 下载 APK 和 SHA256 校验文件。Android 11+、ARM64。安装后开启悬浮窗及无障碍服务，在微信、QQ或抖音单聊中点击悬浮球，再点「读取信息」。
 
@@ -27,6 +27,8 @@
 - **自选接口与模型**：OpenRouter、DeepSeek、通义兼容、智谱及自定义兼容接口；刷新模型目录并测试实际连接。
 - **判断接口**：默认 OpenRouter `typesafe/jev-1.13`，也可接入自定义判断模型。
 - **少量上下文**：每段会话保留最近50条，按12小时周期清理超额数据。密钥和本机敏感资料加密存储。
+- **清除缓存**：主页显示缓存大小，后台清理内部与外部临时缓存；保留密钥、模型配置、风格、关系记忆、聊天历史及系统编译缓存。
+- **屏幕与权限适配**：避让横屏挖孔、刘海、导航栏和键盘；菜单与操作按钮适应窄屏及大字体，底部收起条保持可触达；权限入口提供标准系统备用页面。具体品牌和机型仍需实测。
 
 进入聊天或展开面板不会自动调用模型。「读取信息」收集当前内容；「刷新换一批」使用已读取上下文。判断、回复和必要的截图会发送到你配置的服务，服务用量由相应平台计费。
 
@@ -55,9 +57,9 @@ Windows使用 `gradlew.bat`。干净克隆默认生成本地调试签名；自�
 
 ## 验证状态
 
-核心测试255项、配置测试12项通过，构建及APK签名、知识资料完整性与ARM64原生库16KB对齐校验通过。此前微信填入与提速已获目标手机用户实测确认；本版毛玻璃裁切、真实编辑器焦点、拖动及滚动帧率尚未完成设备验收，不同手机、QQ和抖音版本仍需逐场景测试。
+核心测试270项、配置测试12项通过，应用和Android测试包构建通过，Lint为0错误、27个警告；APK签名、知识资料完整性与ARM64原生库16KB对齐校验通过。此前微信填入与提速已获目标手机用户实测确认；本版新增原生界面测试仅编译，未执行设备验收。真实挖孔/导航栏/键盘组合、毛玻璃裁切、编辑器焦点、拖动及滚动帧率仍需在不同手机、QQ和抖音版本逐场景测试。
 
-V1.3.09 的模糊半径为12dp、上限36物理像素。程序校验不能保证每次视觉识别和候选语义完全正确，发送前仍由你核对。
+当前模糊半径为12dp、上限36物理像素；不支持时使用清晰底色。程序校验不能保证每次视觉识别和候选语义完全正确，发送前仍由你核对。
 
 ## 来源与许可
 

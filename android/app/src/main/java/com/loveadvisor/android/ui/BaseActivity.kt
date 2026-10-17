@@ -15,7 +15,7 @@ open class BaseActivity:Activity() {
     override fun onCreate(savedInstanceState:Bundle?) { super.onCreate(savedInstanceState); window.decorView.setBackgroundColor(ViewStyles.themed(this,ViewStyles.BG)) }
     protected fun page(title:String,subtitle:String?=null) {
         val scroll=ScrollView(this); body=ViewStyles.column(this,22); scroll.addView(body); setContentView(scroll)
-        scroll.setOnApplyWindowInsetsListener { view,insets -> val bars=insets.getInsets(android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.ime()); view.setPadding(bars.left,bars.top,bars.right,bars.bottom); insets }
+        scroll.setOnApplyWindowInsetsListener { view,insets -> val bars=insets.getInsets(android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout() or android.view.WindowInsets.Type.ime()); view.setPadding(bars.left,bars.top,bars.right,bars.bottom); insets }
         body.addView(ViewStyles.text(this,title,30f,bold=true)); subtitle?.let { body.addView(ViewStyles.text(this,it,14f,ViewStyles.MUTED)) }
     }
     protected fun <T> work(stage:String,operation:(Cancellation)->T,success:(T)->Unit,failure:((String)->Unit)?=null) {

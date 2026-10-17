@@ -294,13 +294,13 @@ class OverlayController(private val service:ChatCaptureService) {
     }
     private fun available():RectI {
         val metrics=manager.maximumWindowMetrics; val r=metrics.bounds; val inset=metrics.windowInsets.getInsets(WindowInsets.Type.systemBars())
+        val cutout=metrics.windowInsets.getInsets(WindowInsets.Type.displayCutout())
         val windowIme=service.windows.firstOrNull { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }?.let { val b=Rect(); it.getBoundsInScreen(b); b.top }?.takeIf { it>r.top+r.height()*.25 && it<r.bottom }
         val insetIme=imeInsetBottom.takeIf { it>0 }?.let { r.bottom-it }
         val ime=listOfNotNull(windowIme,insetIme).minOrNull()
-        val top=r.top+if(entryMode==OverlayEntryMode.TOP_CAPSULE)maxOf(inset.top,metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars()).top) else inset.top
-        // Keep the composer and its toolbar visible above the keyboard even if no editable nodes are exposed.
-        val bottom=ime?.let { OverlayGeometry.composerSafeBottom(it,service.resources.displayMetrics.density) } ?: (r.bottom-inset.bottom)
-        return RectI(r.left+inset.left,top,maxOf(r.left+inset.left+1,r.right-inset.right),maxOf(top+1,minOf(r.bottom-inset.bottom,bottom)))
+        val top=if(entryMode==OverlayEntryMode.TOP_CAPSULE)maxOf(inset.top,metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars()).top) else inset.top
+        return OverlayViewport.available(RectI(r.left,r.top,r.right,r.bottom),InsetsI(inset.left,top,inset.right,inset.bottom),
+            InsetsI(cutout.left,cutout.top,cutout.right,cutout.bottom),ime,service.resources.displayMetrics.density)
     }
     private fun physicalDisplay():RectI=manager.maximumWindowMetrics.bounds.let { RectI(it.left,it.top,it.right,it.bottom) }
     private fun layout() {

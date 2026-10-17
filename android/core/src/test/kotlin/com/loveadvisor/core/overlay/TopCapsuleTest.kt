@@ -85,4 +85,28 @@ class TopCapsuleTest {
         assertEquals(100,large.widthPx);assertEquals(44,large.heightPx);assertTrue(large.topPx>=30)
         assertTrue(large.leftPx+large.widthPx<=390)
     }
+    @Test fun leftCornerAndLandscapeCutoutsCannotCoverTheCapsule() {
+        for((area,bar,cutout) in listOf(
+            Triple(display,30,RectI(0,0,100,70)),
+            Triple(RectI(0,0,844,390),0,RectI(0,0,100,180))
+        )) {
+            val b=TopCapsuleGeometry.place(area,bar,1f,listOf(cutout))
+            val overlap=b.leftPx<cutout.right && b.leftPx+b.widthPx>cutout.left && b.topPx<cutout.bottom && b.bottomPx>cutout.top
+            assertFalse("胶囊不能落在左侧挖孔内：$b / $cutout",overlap)
+            assertTrue(b.leftPx>=area.left && b.leftPx+b.widthPx<=area.right && b.bottomPx<=area.bottom)
+        }
+    }
+    @Test fun savedOffsetsRoundTripFromTheCutoutAvoidedDefaultAnchor() {
+        val cutouts=listOf(RectI(0,0,100,70))
+        val base=TopCapsuleGeometry.place(display,30,1f,cutouts)
+        val moved=TopCapsuleGeometry.place(display,30,1f,cutouts,offsetYdp=50f)
+        val saved=TopCapsuleGeometry.offsetOf(moved,base,1f)
+        assertEquals("松手保存后不能跳回避让前坐标",moved,TopCapsuleGeometry.place(display,30,1f,cutouts,saved.x,saved.y))
+    }
+    @Test fun draggingFromTheAvoidedDefaultMovesImmediately() {
+        val cutouts=listOf(RectI(0,0,100,70))
+        val base=TopCapsuleGeometry.place(display,30,1f,cutouts)
+        val moved=TopCapsuleGeometry.place(display,30,1f,cutouts,offsetYdp=12f)
+        assertEquals(base.topPx+12,moved.topPx)
+    }
 }

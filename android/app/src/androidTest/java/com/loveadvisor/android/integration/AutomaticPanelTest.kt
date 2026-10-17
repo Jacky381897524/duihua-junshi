@@ -96,10 +96,61 @@ class AutomaticPanelTest {
             assertEquals("展开和渲染候选不得自动触发读取",0,reads)
             val read=buttons.first { it.text=="读取信息" }; assertTrue(read.performClick()); assertEquals(1,reads)
             assertFalse(buttons.any { it.text in listOf("分析","重新读取","检查识别","确认身份") })
-            assertTrue(buttons.filter { it.text=="复制" || it.text=="填入" }.all { it.layoutParams.width>0 && it.layoutParams.width<=80*i.targetContext.resources.displayMetrics.density })
+            val width=(280*i.targetContext.resources.displayMetrics.density).toInt()
+            panel.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(panel.preferredHeight(width),View.MeasureSpec.EXACTLY))
+            panel.layout(0,0,width,panel.measuredHeight)
+            assertTrue(buttons.filter { it.text=="复制" || it.text=="填入" }.all { it.measuredWidth>0 && it.right<= (it.parent as View).width })
             panel.render(BatchState(error="首次请求超时")); assertEquals(0,all(panel).filterIsInstance<ReplyCardView>().size)
             assertFalse(all(panel).filterIsInstance<Button>().first { it.text.startsWith("刷新换一批") }.isEnabled)
             assertTrue(read.isEnabled)
+        }
+    }
+    @Test fun narrowPanelMenuKeepsLargeTextInsideItsViewport() {
+        val i=InstrumentationRegistry.getInstrumentation()
+        i.runOnMainSync {
+            val config=android.content.res.Configuration(i.targetContext.resources.configuration).apply { fontScale=2f }
+            val context=i.targetContext.createConfigurationContext(config)
+            val panel=AdvisorPanelView(context,{},{_,_->},{},{},{},{},{true},{true})
+            val w=(240*context.resources.displayMetrics.density).toInt()
+            panel.toggleMenu(listOf("回复风格设置","悬浮窗设置","模型设置","连接诊断").map { it to {} })
+            val h=panel.preferredHeight(w)
+            panel.measure(View.MeasureSpec.makeMeasureSpec(w,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(h,View.MeasureSpec.EXACTLY));panel.layout(0,0,w,h)
+            fun all(v:View):List<View> = listOf(v)+if(v is ViewGroup)(0 until v.childCount).flatMap { all(v.getChildAt(it)) } else emptyList()
+            val menu=all(panel).first { it.contentDescription=="悬浮窗设置菜单" } as ViewGroup
+            val viewport=menu.getChildAt(0) as ScrollView
+            assertTrue(viewport.left>=0);assertTrue(viewport.right<=w)
+            val button=all(menu).filterIsInstance<Button>().first { it.text=="回复风格设置" }
+            assertTrue(button.measuredHeight>=button.lineHeight+button.paddingTop+button.paddingBottom)
+            panel.release()
+        }
+    }
+    @Test fun shortLandscapeMenuScrollsToItsLastItemAndKeepsCollapseReachable() {
+        val i=InstrumentationRegistry.getInstrumentation()
+        i.runOnMainSync {
+            val config=android.content.res.Configuration(i.targetContext.resources.configuration).apply { fontScale=2f }
+            val context=i.targetContext.createConfigurationContext(config)
+            var closed=0
+            val panel=AdvisorPanelView(context,{},{_,_->},{},{},{},{closed++},{true},{true})
+            panel.compact(true)
+            panel.toggleMenu(listOf("回复风格设置","完整咨询","悬浮窗设置","模型设置","连接诊断").map { it to {} },CapsuleMenuControls(false,1f,{true},{_,_->},{ }))
+            val d=context.resources.displayMetrics.density
+            val w=(240*d).toInt();val h=(190*d).toInt()
+            panel.measure(View.MeasureSpec.makeMeasureSpec(w,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(h,View.MeasureSpec.EXACTLY));panel.layout(0,0,w,h)
+            fun all(v:View):List<View> = listOf(v)+if(v is ViewGroup)(0 until v.childCount).flatMap { all(v.getChildAt(it)) } else emptyList()
+            val menu=all(panel).first { it.contentDescription=="悬浮窗设置菜单" } as ViewGroup
+            val viewport=menu.getChildAt(0) as ScrollView
+            assertTrue(viewport.canScrollVertically(1))
+            viewport.scrollTo(0,viewport.getChildAt(0).height)
+            val last=all(menu).filterIsInstance<Button>().first { it.text=="连接诊断" }
+            val bounds=android.graphics.Rect();last.getDrawingRect(bounds);panel.offsetDescendantRectToMyCoords(last,bounds)
+            assertTrue(bounds.bottom<=h-30*d+1)
+            val now=android.os.SystemClock.uptimeMillis()
+            for(action in listOf(MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP)) {
+                val event=MotionEvent.obtain(now,now+30,action,w-3f,h-12*d,0)
+                panel.dispatchTouchEvent(event);event.recycle()
+            }
+            assertEquals("大字体、短视口和菜单打开时仍须可收起",1,closed)
+            panel.release()
         }
     }
 }
