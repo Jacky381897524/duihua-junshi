@@ -7,7 +7,8 @@ import com.loveadvisor.android.AppGraph
 import com.loveadvisor.android.ui.ViewStyles
 import com.loveadvisor.core.api.*
 
-class ModelSettingsView(context:Context,private val graph:AppGraph,private val host:SettingsFormHost):LinearLayout(context) {
+class ModelSettingsView(context:Context,private val graph:AppGraph,private val host:SettingsFormHost,compact:Boolean=false):LinearLayout(context) {
+    private val ui=ModelFormStyle(context,compact)
     private val body get()=this
     private val drafts=mutableMapOf<String,ApiProfile>()
     private var replyForm:Form?=null
@@ -16,12 +17,12 @@ class ModelSettingsView(context:Context,private val graph:AppGraph,private val h
     init {
         orientation=VERTICAL
         val original=graph.settings.load(); drafts.putAll(original.providerProfiles)
-        val judgeForm=JudgeSettingsForm(context,host,original,::refreshJudgeModels).also { judgeSettings=it };val judge=judgeForm.card;body.addView(judge)
+        val judgeForm=JudgeSettingsForm(context,host,original,::refreshJudgeModels,ui).also { judgeSettings=it };val judge=judgeForm.card;body.addView(judge)
         val reply=Form("回复 · 六条不同方案",false,original.replyProvider,original.profile,original.models).also { replyForm=it }
         val vision=Form("视觉 · 原文与左右归属",true,original.visionProvider,original.vision,original.visionModels).also { visionForm=it }
         val judgeStatus=judgeForm.status
         var judgeBusy=false
-        judge.addView(ViewStyles.button(context,"测试判断连接") {
+        judge.addView(ui.button("测试判断连接") {
             if(!judgeBusy) {
                 val submitted=judgeForm.selectedProfile(ProviderPresets.openRouterKey(reply.profile(),vision.profile()))
                 judgeBusy=true; judgeStatus.text="正在测试判断接口…"; val started=android.os.SystemClock.elapsedRealtime()
@@ -32,8 +33,8 @@ class ModelSettingsView(context:Context,private val graph:AppGraph,private val h
                 },{ error -> judgeBusy=false; judgeStatus.text="测试失败：$error" })
             }
         })
-        judge.addView(ViewStyles.text(context,"测试使用内置示例，会产生少量服务用量。",12f,ViewStyles.MUTED))
-        body.addView(ViewStyles.button(context,"保存并返回",true) {
+        judge.addView(ui.text("测试使用内置示例，会产生少量服务用量。",12f,ViewStyles.MUTED))
+        body.addView(ui.button("保存并返回",true) {
             try {
                 val p=reply.profile();val v=vision.profile();val judgeKey=judgeForm.defaultApiKey()
                 drafts["reply:${reply.provider.name}"]=p; drafts["vision:${vision.provider.name}"]=v
@@ -42,7 +43,7 @@ class ModelSettingsView(context:Context,private val graph:AppGraph,private val h
                 graph.controller.invalidate("配置变化"); toast("配置已加密保存"); host.close()
             } catch(e:Exception) { toast(redact(graph.safeError(e))) }
         })
-        body.addView(ViewStyles.button(context,"返回候选面板 / 取消") { host.close() })
+        body.addView(ui.button("返回候选面板 / 取消") { host.close() })
     }
     fun refreshJudgeModels(profile:ApiProfile,onModels:(List<ApiModel>)->Unit) {
         work("catalog-judge",{ cancel -> graph.catalog.list(profile,cancel).models },onModels)
@@ -60,10 +61,10 @@ class ModelSettingsView(context:Context,private val graph:AppGraph,private val h
         private var selected=initial.selectedModelId; private var resolved=initial.resolvedBaseUrl
         private var revision=initial.revision; private var allowHttp=initial.allowLanHttp; private var busy=false
         private var testing=false
-        private val url=ViewStyles.field(context,"服务地址",initial.baseUrl)
-        private val key=ViewStyles.field(context,"API Key",initial.apiKey).apply { inputType=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
-        private val label=ViewStyles.text(context,"",14f,ViewStyles.BLUE)
-        private val status=ViewStyles.text(context,"",12f,ViewStyles.MUTED)
+        private val url=ui.field("服务地址",initial.baseUrl)
+        private val key=ui.field("API Key",initial.apiKey).apply { inputType=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
+        private val label=ui.text("",14f,ViewStyles.BLUE)
+        private val status=ui.text("",12f,ViewStyles.MUTED)
         private val slot get()=if(visual) "vision" else "reply"
         fun profile()=ApiProfile(id="$slot:${provider.name}",baseUrl=url.text.toString().trim(),apiKey=key.text.toString().trim(),selectedModelId=selected,allowLanHttp=allowHttp,revision=revision,resolvedBaseUrl=resolved)
         private fun effectiveTestProfile():ApiProfile {
@@ -72,11 +73,11 @@ class ModelSettingsView(context:Context,private val graph:AppGraph,private val h
         }
         private fun showSelection() { label.text="已选：${selected ?: "刷新后选择模型"}" }
         init {
-            val card=ViewStyles.card(context); body.addView(card); card.addView(ViewStyles.text(context,title,20f,bold=true))
-            val providerButton=ViewStyles.button(context,"服务：${provider.label}") {}
+            val card=ui.card(); body.addView(card); card.addView(ui.text(title,20f,bold=true))
+            val providerButton=ui.button("服务：${provider.label}") {}
             card.addView(providerButton)
             card.addView(url); card.addView(key); card.addView(label); card.addView(status); showSelection()
-            if(visual) card.addView(ViewStyles.text(context,"点击读取时识别文字、图片和表情包；OpenRouter 密钥留空可复用回复接口。不会因聊天变化自动调用模型。",12f,ViewStyles.MUTED))
+            if(visual) card.addView(ui.text("点击读取时识别文字、图片和表情包；OpenRouter 密钥留空可复用回复接口。不会因聊天变化自动调用模型。",12f,ViewStyles.MUTED))
             val watcher=object:TextWatcher {
                 override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int) {}
                 override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int) { revision++; resolved=null; status.text="配置已修改" }
@@ -93,7 +94,7 @@ class ModelSettingsView(context:Context,private val graph:AppGraph,private val h
                     }
                 }
             }
-            card.addView(ViewStyles.button(context,"刷新模型") {
+            card.addView(ui.button("刷新模型") {
                 if(!busy) {
                     busy=true; val submitted=profile(); status.text="正在读取服务模型目录…"
                     work("catalog-$slot",{ cancel -> graph.catalog.list(submitted,cancel) },{ result ->
@@ -109,8 +110,8 @@ class ModelSettingsView(context:Context,private val graph:AppGraph,private val h
                     },{ error -> busy=false; status.text=error })
                 }
             })
-            card.addView(ViewStyles.button(context,"选择模型") { choose() })
-            card.addView(ViewStyles.button(context,if(visual) "测试图片识别" else "测试回复连接") {
+            card.addView(ui.button("选择模型") { choose() })
+            card.addView(ui.button(if(visual) "测试图片识别" else "测试回复连接") {
                 if(!testing) {
                     val submitted=effectiveTestProfile()
                     testing=true; status.text=if(visual) "正在识别内置测试图片…" else "正在请求所选回复模型…"
@@ -122,10 +123,10 @@ class ModelSettingsView(context:Context,private val graph:AppGraph,private val h
                     { error -> testing=false; status.text="测试失败：$error" })
                 }
             })
-            card.addView(ViewStyles.text(context,if(visual) "发送内置示例图片，验证原文与左右归属；测试会产生少量服务用量。" else "发送内置示例文字，验证模型实际可调用；测试会产生少量服务用量。",12f,ViewStyles.MUTED))
-            val manual=ViewStyles.field(context,"目录不可用时填写官方模型 ID"); card.addView(manual)
-            card.addView(ViewStyles.button(context,"采用此模型 ID") { val id=manual.text.toString().trim(); if(id.isBlank() || id.any { it.isISOControl() }) toast("模型 ID 无效") else { selected=id; revision++; showSelection() } })
-            card.addView(ViewStyles.switch(context,"允许局域网 HTTP",allowHttp) { allowHttp=it; revision++; resolved=null })
+            card.addView(ui.text(if(visual) "发送内置示例图片，验证原文与左右归属；测试会产生少量服务用量。" else "发送内置示例文字，验证模型实际可调用；测试会产生少量服务用量。",12f,ViewStyles.MUTED))
+            val manual=ui.field("目录不可用时填写官方模型 ID"); card.addView(manual)
+            card.addView(ui.button("采用此模型 ID") { val id=manual.text.toString().trim(); if(id.isBlank() || id.any { it.isISOControl() }) toast("模型 ID 无效") else { selected=id; revision++; showSelection() } })
+            card.addView(ui.toggle("允许局域网 HTTP",allowHttp) { allowHttp=it; revision++; resolved=null })
         }
         private fun choose() {
             if(models.isEmpty()) { toast("请先刷新模型目录");return }

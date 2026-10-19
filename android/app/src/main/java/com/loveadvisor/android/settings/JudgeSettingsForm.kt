@@ -7,25 +7,25 @@ import com.loveadvisor.android.ui.ViewStyles
 import com.loveadvisor.android.storage.SettingsData
 import com.loveadvisor.core.api.*
 
-class JudgeSettingsForm(private val context:Context,private val host:SettingsFormHost,original:SettingsData,private val refreshModels:(ApiProfile,(List<ApiModel>)->Unit)->Unit) {
-    val card=ViewStyles.card(context)
-    private val source=ViewStyles.button(context,"") {}
+class JudgeSettingsForm(private val context:Context,private val host:SettingsFormHost,original:SettingsData,private val refreshModels:(ApiProfile,(List<ApiModel>)->Unit)->Unit,private val ui:ModelFormStyle=ModelFormStyle(context)) {
+    val card=ui.card()
+    private val source=ui.button("") {}
     private val normal=ViewStyles.column(context)
     private val custom=ViewStyles.column(context)
-    private val defaultKey=ViewStyles.field(context,"OpenRouter API Key",original.jev.apiKey).apply { inputType=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
-    private val url=ViewStyles.field(context,"服务地址（兼容 OpenAI）",original.judgeCustom.baseUrl)
-    private val key=ViewStyles.field(context,"自定义判断 API Key",original.judgeCustom.apiKey).apply { inputType=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
-    private val model=ViewStyles.field(context,"判断模型 ID",original.judgeCustom.selectedModelId.orEmpty())
+    private val defaultKey=ui.field("OpenRouter API Key",original.jev.apiKey).apply { inputType=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
+    private val url=ui.field("服务地址（兼容 OpenAI）",original.judgeCustom.baseUrl)
+    private val key=ui.field("自定义判断 API Key",original.judgeCustom.apiKey).apply { inputType=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
+    private val model=ui.field("判断模型 ID",original.judgeCustom.selectedModelId.orEmpty())
     private var allowHttp=original.judgeCustom.allowLanHttp
     private var directoryRevision=0L
     var provider=if(original.judgeProvider=="CUSTOM")"CUSTOM" else "OPENROUTER";private set
-    val status=ViewStyles.text(context,"",12f,ViewStyles.MUTED)
+    val status=ui.text("",12f,ViewStyles.MUTED)
     init {
-        card.addView(ViewStyles.text(context,"判断接口",20f,bold=true));card.addView(source)
-        normal.addView(ViewStyles.text(context,"默认模型：typesafe/jev-1.13\n判断意图、等级与候选适合程度。",14f,ViewStyles.MUTED));normal.addView(defaultKey)
-        normal.addView(ViewStyles.text(context,"留空时复用 OpenRouter 回复或视觉接口的密钥。",12f,ViewStyles.MUTED))
+        card.addView(ui.text("判断接口",20f,bold=true));card.addView(source)
+        normal.addView(ui.text("默认模型：typesafe/jev-1.13\n判断意图、等级与候选适合程度。",14f,ViewStyles.MUTED));normal.addView(defaultKey)
+        normal.addView(ui.text("留空时复用 OpenRouter 回复或视觉接口的密钥。",12f,ViewStyles.MUTED))
         custom.addView(url);custom.addView(key);custom.addView(model)
-        custom.addView(ViewStyles.button(context,"刷新并选择判断模型") {
+        custom.addView(ui.button("刷新并选择判断模型") {
             val submitted=customProfile();val revision=++directoryRevision
             refreshModels(submitted) { models ->
                 if(provider!="CUSTOM" || submitted!=customProfile() || revision!=directoryRevision)status.text="配置已改变，请重新刷新"
@@ -35,8 +35,8 @@ class JudgeSettingsForm(private val context:Context,private val host:SettingsFor
                 }
             }
         })
-        custom.addView(ViewStyles.switch(context,"允许局域网 HTTP",allowHttp) { allowHttp=it })
-        custom.addView(ViewStyles.text(context,"使用兼容 /chat/completions 的接口；先测试再保存。",12f,ViewStyles.MUTED))
+        custom.addView(ui.toggle("允许局域网 HTTP",allowHttp) { allowHttp=it })
+        custom.addView(ui.text("使用兼容 /chat/completions 的接口；先测试再保存。",12f,ViewStyles.MUTED))
         card.addView(normal);card.addView(custom);card.addView(status)
         source.setOnClickListener {
             host.choose("判断服务",listOf("OpenRouter · 默认","自定义"),if(provider=="CUSTOM")1 else 0) { index ->

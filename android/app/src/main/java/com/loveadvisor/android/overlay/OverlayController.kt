@@ -232,7 +232,7 @@ class OverlayController(private val service:ChatCaptureService) {
                 { value -> graph.settings.update { if(kind==com.loveadvisor.core.model.ChatKind.GROUP)it.copy(globalGroupReplyStyle=value) else it.copy(globalReplyStyle=value) };service.notifyUser("全对象风格已保存，下次生成或刷新时生效") },
                 { panel?.closeStyleEditor() },onChooseObject={ entries,selected ->
                     view.showPage("style-objects",SavedStylePickerView(service,entries,{ entry -> selected(entry);view.popPage() },{ view.popPage() },{ selected(null);view.popPage() }),editable=true)
-                },kind=kind)
+                },kind=kind,nicknameFromOcr=service.lastStyleNicknameFromOcr)
             view.fillResult("风格设置已打开；保存后在下一次生成或刷新时生效")
             view.showStyleEditor(editor) {}
             }
@@ -265,7 +265,7 @@ class OverlayController(private val service:ChatCaptureService) {
             override fun message(text:String)=service.notifyUser(text)
             override fun close() { view.popPage() }
         }
-        view.showPage("models",ModelSettingsView(service,graph,host),editable=true,closed={ scope.close() })
+        view.showPage("models",ModelSettingsView(service,graph,host,compact=true),editable=true,closed={ scope.close() })
     }
     private fun editOverlaySettings() {
         val view=panel ?: return
@@ -415,7 +415,7 @@ class OverlayController(private val service:ChatCaptureService) {
             val initial=OverlayGeometry.measure(a,InsetsI(),null,service.resources.displayMetrics.density)
             // A complete settings menu may be taller than the normal three-candidate panel.
             // Still respect the current keyboard/composer-safe viewport; small screens scroll.
-            val maxHeight=if(panel!!.menuExpanded)a.height else initial.heightPx
+            val maxHeight=if(panel!!.currentPageId in setOf("models","model-picker"))minOf(initial.heightPx,(a.height*.78f).toInt()) else if(panel!!.menuExpanded)a.height else initial.heightPx
             val measured=initial.copy(heightPx=panel!!.preferredHeight(initial.widthPx).coerceIn(1,maxHeight.coerceAtLeast(1)))
             if(islandPanel) {
                 val opened=IslandPanelGeometry.open(measured,a,ViewStyles.dp(service,12f))

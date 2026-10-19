@@ -20,6 +20,8 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private val column=ViewStyles.column(context)
     private val summary:TextView; private val status:TextView; private val scroll:ScrollView
     private val advice:TextView;private val level:TextView
+    private val analysisRow:LinearLayout
+    private var shortActionLabels=false
     private val analyze:Button
     private var analysisAvailable=false
     val currentPageId get()=pages.currentId
@@ -54,13 +56,14 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         val close=palette.button("×") { onClose() }; close.contentDescription="收起候选窗"
         header.addView(close,LinearLayout.LayoutParams(textRowHeight(28),textRowHeight(28)).apply { leftMargin=dp(6) })
         column.addView(header,rowParams(textRowHeight(28),9))
-        val analysisRow=ViewStyles.row(context).apply { gravity=Gravity.CENTER_VERTICAL }
+        analysisRow=ViewStyles.row(context).apply { gravity=Gravity.CENTER_VERTICAL }
         summary=palette.text("对方真实意图：读取后判断",12f,bold=true).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
-        column.addView(summary,rowParams(-2,6))
+        analysisRow.addView(summary,LinearLayout.LayoutParams(0,-2,1f))
         analyze=palette.button("判断分析") { onAnalyze() }.apply { contentDescription="判断分析" }
-        analysisRow.addView(analyze,LinearLayout.LayoutParams(0,textRowHeight(32),1f).apply { rightMargin=dp(8) })
+        analysisRow.addView(analyze,LinearLayout.LayoutParams(dp(52),textRowHeight(28)).apply { leftMargin=dp(4) })
         read=palette.button("读取信息") { onRead() }.apply { contentDescription="读取信息";maxLines=2 }
-        analysisRow.addView(read,LinearLayout.LayoutParams(0,textRowHeight(32),1f))
+        analysisRow.addView(read,LinearLayout.LayoutParams(dp(52),textRowHeight(28)).apply { leftMargin=dp(4) })
+        listOf(analyze,read).forEach { it.textSize=10.5f;it.setPadding(dp(4),0,dp(4),0) }
         column.addView(analysisRow,rowParams(-2,5))
         status=palette.text("等待点击读取；聊天变化不会自动请求模型",11f,palette.muted).apply { maxLines=2 }
         column.addView(status,rowParams(-2,10))
@@ -103,7 +106,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private fun rowParams(height:Int,bottom:Int)=LinearLayout.LayoutParams(-1,height).apply { bottomMargin=dp(bottom) }
     private fun updateButtons() {
         analyze.alpha=if(analysisAvailable && !reading && !loading && !filling)1f else .45f
-        read.isEnabled=!reading && !loading && !filling; read.text=if(reading) "读取中…" else "读取信息"
+        read.isEnabled=!reading && !loading && !filling; read.text=if(reading) "读取中…" else if(shortActionLabels)"读取" else "读取信息"
         refresh.isEnabled=!reading && !loading && !filling && displayed?.let { isCurrent(it.ticket.session) }==true
         refresh.text=if(loading) "正在生成六条…" else "刷新换一批 · 6 条"
         for(i in 0 until cards.childCount) (cards.getChildAt(i) as? ReplyCardView)?.let { card ->
@@ -223,6 +226,15 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     }
     private fun menuWidth(panelWidth:Int)=minOf(textRowHeight(200),(panelWidth-dp(24)).coerceAtLeast(1))
     override fun onMeasure(widthMeasureSpec:Int,heightMeasureSpec:Int) {
+        val available=(MeasureSpec.getSize(widthMeasureSpec)-column.paddingLeft-column.paddingRight).coerceAtLeast(1)
+        val sizing=com.loveadvisor.core.overlay.PanelHeaderLayout.measure(available,resources.displayMetrics.density,resources.configuration.fontScale)
+        shortActionLabels=sizing.shortLabels
+        analyze.text=if(shortActionLabels)"判断" else "判断分析"
+        read.text=if(reading)"读取中…" else if(shortActionLabels)"读取" else "读取信息"
+        for(action in listOf(analyze,read)) {
+            val lp=action.layoutParams as LinearLayout.LayoutParams
+            lp.width=sizing.actionWidth;lp.height=sizing.actionHeight;lp.leftMargin=sizing.gap
+        }
         (menuContent?.parent as? ScrollView)?.let { viewport ->
             val lp=viewport.layoutParams
             val next=menuWidth(MeasureSpec.getSize(widthMeasureSpec))

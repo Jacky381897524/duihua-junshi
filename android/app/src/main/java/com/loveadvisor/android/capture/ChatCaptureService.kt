@@ -71,6 +71,7 @@ class ChatCaptureService:AccessibilityService() {
     val glassWindow get()=lastForegroundWindow?.takeIf { overlayAllowed() }
     private var lastForegroundWindow:WindowSnapshot?=null
     private var projecting=false
+    private var stopping=false
     private var overlaySuspensions=0
     private var lastReservedCaptureStart=0L
     private var lastActualCaptureStart=0L
@@ -85,6 +86,8 @@ class ChatCaptureService:AccessibilityService() {
     private var visualSignature:String?=null
     private var visualFill:VisualFillReference?=null
     var lastFillDiagnosticStatus="尚未点击填入"; private set
+    var lastScreenshotDiagnosticStatus="本次服务尚未请求截图"; private set
+    var lastStyleNicknameFromOcr=false; private set
     private data class VisionReply(val result:VisionConversation,val windowId:Int,val cancel:Cancellation,val ticket:ManualReadGate.Ticket,val navigation:Long,val fillReference:VisualFillReference?)
     private var pendingVision:VisionReply?=null
     var diagnosticStatus="按需读取：尚未检查前台窗口"; private set
@@ -96,6 +99,7 @@ class ChatCaptureService:AccessibilityService() {
         when(intent?.action) { Intent.ACTION_SCREEN_OFF -> leaveForeground(); Intent.ACTION_USER_PRESENT -> checkForeground() }
     } }
     override fun onServiceConnected() {
+        stopping=false
         instance=this; reader=NodeSnapshotReader(this); overlay=OverlayController(this);island=com.loveadvisor.android.island.NativeIslandCoordinator(this,overlay)
         imePackages=runCatching { getSystemService(android.view.inputmethod.InputMethodManager::class.java).inputMethodList.map { it.packageName }.toSet() }.getOrDefault(emptySet())
         val screenEvents=IntentFilter(Intent.ACTION_SCREEN_OFF).apply { addAction(Intent.ACTION_USER_PRESENT) }
@@ -128,7 +132,7 @@ class ChatCaptureService:AccessibilityService() {
         if(!main.hasCallbacks(debounced)) main.postDelayed(debounced,120)
     }
     private fun locked()=getSystemService(KeyguardManager::class.java).isKeyguardLocked || !getSystemService(PowerManager::class.java).isInteractive
-    private fun canObserve()=CapturePolicy.overlayVisible(graph.settings.load().overlayEnabled,locked(),projecting)
+    private fun canObserve()=!stopping && CapturePolicy.overlayVisible(graph.settings.load().overlayEnabled,locked(),projecting)
     private fun checkForeground() {
         if(!canObserve()) { leaveForeground(); return }
         val lease=readGate.begin() ?: return
@@ -286,6 +290,10 @@ class ChatCaptureService:AccessibilityService() {
         fun finish(image:CaptureImageResult) {
             if(completed) { if(image is CaptureImageResult.Success)image.bitmap.recycle();return }
             completed=true
+            lastScreenshotDiagnosticStatus=when(image) {
+                is CaptureImageResult.Success -> "无障碍截图成功 · API ${Build.VERSION.SDK_INT}"
+                is CaptureImageResult.Failure -> "无障碍截图失败 · code=${image.code} · 受保护=${image.protected} · API ${Build.VERSION.SDK_INT}"
+            }
             if(detach) { overlaySuspensions--;ensureOverlay() }
             if(cancel.cancelled) { if(image is CaptureImageResult.Success)image.bitmap.recycle() }
             else if(image is CaptureImageResult.Success && SystemClock.elapsedRealtime()>=deadline) { image.bitmap.recycle();callback(CaptureImageResult.Failure(-1,"窗口截图超时，请重试")) }
@@ -343,15 +351,15 @@ class ChatCaptureService:AccessibilityService() {
         val previous=conversation.current;val previousImage=visualFill
         var completed=false
         fun current()=!cancel.cancelled && instance===this && overlayAllowed() && generation==navigation && pkg==foregroundPackage && windowId==foregroundWindowId
-        fun complete(resultPackage:String?,title:String?) {
+        fun complete(resultPackage:String?,title:String?,localOcr:Boolean=false) {
             if(completed || cancel.cancelled)return
-            completed=true;cancel.cancel();callback(resultPackage,title)
+            completed=true;cancel.cancel();lastStyleNicknameFromOcr=localOcr;callback(resultPackage,title)
         }
-        fun finish(title:String?) {
+        fun finish(title:String?,localOcr:Boolean=false) {
             if(!current()) { complete(null,null);return }
             nativeWorker.execute {
                 val fresh=runCatching { reader.foreground() }.getOrNull()
-                main.post { complete(if(current() && fresh!=null && fresh.packageName==pkg && fresh.windowId==windowId)pkg else null,title) }
+                main.post { complete(if(current() && fresh!=null && fresh.packageName==pkg && fresh.windowId==windowId)pkg else null,title,localOcr) }
             }
         }
         if(pkg==null || windowId==null || !current()) { main.post { complete(null,null) };return { cancel.cancel() } }
@@ -390,7 +398,7 @@ class ChatCaptureService:AccessibilityService() {
                         val header=Bitmap.createBitmap(original,x,y,right-x,bottom-y);cropped=header
                         if(header!==original)original.recycle()
                         val recognizer=MlKitOcr();ocr=recognizer
-                        recognizer.recognize(header,cancel,{ boxes,_ -> finish(boxes?.let { ReplyStyleHeader.title(it) }) },{
+                        recognizer.recognize(header,cancel,{ boxes,_ -> finish(boxes?.let { ReplyStyleHeader.title(it) },localOcr=true) },{
                             if(!header.isRecycled)header.recycle();recognizer.close()
                         })
                     } catch(_:Exception) {
@@ -461,7 +469,7 @@ class ChatCaptureService:AccessibilityService() {
         if(!submitted)finish(false)
         }
     }
-    fun canCapture()=graph.settings.load().overlayEnabled && !locked()
+    fun canCapture()=!stopping && graph.settings.load().overlayEnabled && !locked()
     fun overlayAllowed()=CapturePolicy.overlayVisible(graph.settings.load().overlayEnabled,locked(),projecting,wechatForeground)
     fun ensureOverlay() { if(::overlay.isInitialized) {
         if(overlayAllowed() && overlaySuspensions==0) {
@@ -478,6 +486,14 @@ class ChatCaptureService:AccessibilityService() {
     fun islandReading(value:Boolean) { if(::island.isInitialized)island.updateStatus(value,graph.coordinator.state,graph.coordinator.state.current?.let { graph.tracker.sameConversation(it.ticket.session) }==true) }
     fun showFloating() { graph.settings.update { it.copy(overlayEnabled=true) }; checkForeground() }
     fun settingsChanged() { if(::island.isInitialized && !graph.settings.load().nativeIslandEnabled) { if(graph.settings.load().topCapsuleEnabled)island.suspend() else island.stop() };if(!canObserve()) leaveForeground() else checkForeground() }
+    fun stopAssistance() {
+        stopping=true
+        stopService(Intent(this,ProjectionService::class.java))
+        if(::island.isInitialized)island.stop()
+        readGate.invalidate();reset("辅助服务已停止")
+        if(::overlay.isInitialized) { overlay.hide();overlay.suppress() }
+        disableSelf()
+    }
     fun beginProjectionCapture() { projecting=true; leaveForeground() }
     fun endProjectionCapture() { projecting=false; checkForeground() }
     fun previewOcr(draft:ConversationDraft) { graph.controller.status("请返回微信，点击读取信息获取当前聊天") }
@@ -504,8 +520,8 @@ class ChatCaptureService:AccessibilityService() {
         WeChatPageKind.INVALID -> "窗口范围暂不可用，请稍后点击读取信息"
         else -> "未识别为可读取的聊天，请重新读取"
     }
-    override fun onInterrupt() { if(::island.isInitialized)island.stop();readGate.invalidate(); reset(); if(::overlay.isInitialized) { overlay.hide();overlay.suppress() } }
+    override fun onInterrupt() { stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.stop();readGate.invalidate(); reset(); if(::overlay.isInitialized) { overlay.hide();overlay.suppress() } }
     override fun onConfigurationChanged(newConfig:android.content.res.Configuration) { super.onConfigurationChanged(newConfig);if(::overlay.isInitialized)overlay.themeChanged();if(::reader.isInitialized)checkForeground() }
-    override fun onDestroy() { if(::island.isInitialized)island.destroy(); main.removeCallbacksAndMessages(null); readGate.invalidate(); reset(); if(::overlay.isInitialized) overlay.destroy(); worker.shutdownNow(); nativeWorker.shutdownNow(); runCatching { unregisterReceiver(receiver) }; instance=null; super.onDestroy() }
+    override fun onDestroy() { stopping=true;stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.destroy(); main.removeCallbacksAndMessages(null); readGate.invalidate(); reset(); if(::overlay.isInitialized) overlay.destroy(); worker.shutdownNow(); nativeWorker.shutdownNow(); runCatching { unregisterReceiver(receiver) }; instance=null; super.onDestroy() }
     companion object { @Volatile var instance:ChatCaptureService?=null; private set }
 }

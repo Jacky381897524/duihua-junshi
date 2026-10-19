@@ -19,7 +19,8 @@ class ReplyStyleEditorView(
     private val saveCatalog:(ReplyStyleCatalog)->Unit,private val saveGlobal:(String)->Unit,
     private val onClose:()->Unit,
     private val onChooseObject:((List<ReplyStyleEntry>,(ReplyStyleEntry?)->Unit)->Unit)?=null,
-    private val kind:ChatKind=ChatKind.DIRECT
+    private val kind:ChatKind=ChatKind.DIRECT,
+    private val nicknameFromOcr:Boolean=false
 ):LinearLayout(context) {
     private val palette=PanelPalette(context)
     val nicknameInput=field(if(kind==ChatKind.GROUP)"当前群名，可粘贴校正" else "自动带入当前昵称，可粘贴校正",observedTitle,false)
@@ -89,7 +90,7 @@ class ReplyStyleEditorView(
             button.background=ViewStyles.shape(context,if(selected)0xFF3478F4.toInt() else palette.card,12f)
             button.buttonTintList=ColorStateList.valueOf(palette.blue)
         }
-        matchStatus.text=when { observedTitle.isBlank() -> "未取得完整昵称，请填写后保存";editingKey!=null -> "已匹配专属风格 · 可直接修改";else -> "当前对象已带入 · 保存后建立专属风格" }
+        matchStatus.text=when { observedTitle.isBlank() -> "未取得完整昵称，请填写后保存";editingKey!=null -> "已匹配专属风格 · 可直接修改";nicknameFromOcr -> "本地识别昵称 · 请核对后保存";else -> "当前对象已带入 · 保存后建立专属风格" }
         objectButton.text=if(editingKey==null)"关联已有对象" else "更换关联对象"
         notice.text=when {
             globalMode -> if(kind==ChatKind.GROUP)"没有此群专属风格时使用此设置。" else "未匹配专属风格时使用此设置。"

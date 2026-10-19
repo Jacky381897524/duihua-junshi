@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.4.0 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.4.1 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,13 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.4.1", "紧凑面板与昵称原文优先", listOf(
+                "仅缩小面板内模型设置的字号、按钮、输入框和边距，限制展开高度，完整配置仍可滚动；主页表单保留原尺寸。",
+                "判断分析、读取信息改为真实意图右侧的短按钮，意图保留至少约六成横向空间；窄屏或大字体使用短标签。",
+                "微信顶部昵称可独立于正文直接读取，避免正文缺失时不必要地改用OCR；仅OCR结果明确提示核对，校正后保存别名。",
+                "连接聊天应用页新增停止辅助服务与悬浮窗入口，停止时也结束本软件的旧录屏服务；连接诊断增加实际截图错误码。",
+                "ColorOS与OriginOS截图限制的触发原因尚未在设备复现，本版提供对照排查入口，不宣称已解决系统截图限制或所有昵称错字。"
+            )),
             Release("V1.4.0", "群聊接话、逐句判断与面板设置", listOf(
                 "回复风格、悬浮窗与模型设置全部可在面板内完成；移除面板中的完整咨询与连接诊断，保留主页入口。",
                 "用同一窗口的对象选择页替代弹出下拉框，自动带入已读昵称，扩大保存与返回按钮；专属风格保存在本机，清缓存不会删除。",

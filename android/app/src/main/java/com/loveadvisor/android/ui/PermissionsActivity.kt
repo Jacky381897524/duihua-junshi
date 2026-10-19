@@ -16,6 +16,12 @@ class PermissionsActivity:BaseActivity() {
         val settings=SystemSettingsNavigator(this)
         body.addView(ViewStyles.button(this,"允许悬浮窗",true) { if(!settings.overlay())toast("无法打开系统设置，请在手机设置中查找“悬浮窗”或“显示在其他应用上层”") })
         body.addView(ViewStyles.button(this,"打开无障碍设置") { if(!settings.accessibility())toast("无法打开系统设置，请在手机设置中查找“无障碍”并启用对话军师") })
+        ChatCaptureService.instance?.let { service ->
+            body.addView(ViewStyles.button(this,"停止辅助服务与悬浮窗") {
+                service.stopAssistance();toast("已请求停止辅助服务；再次使用请重新开启无障碍服务");finish()
+            })
+            body.addView(ViewStyles.text(this,"遇到系统截图限制时，可停止本软件的辅助服务进行对照；是否恢复仍需在手机上验证。",12f,ViewStyles.MUTED))
+        }
         body.addView(ViewStyles.button(this,"打开应用系统设置") { if(!settings.appDetails())toast("无法打开应用设置，请长按对话军师图标进入应用信息") })
         body.addView(ViewStyles.text(this,"不同手机可能称为“悬浮窗”“显示在其他应用上层”或“在其他应用上层显示”。如服务经常断开，可在应用系统设置中允许后台运行；具体选项由手机系统提供。",13f,ViewStyles.MUTED))
         body.addView(ViewStyles.text(this,"图标在微信、QQ和抖音前台显示；切到其他 App 自动隐藏。读取只在点击读取信息时发生。",13f,ViewStyles.MUTED))
