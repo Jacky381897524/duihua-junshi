@@ -22,7 +22,7 @@ class OverlaySettingsView(context:Context,private val graph:AppGraph,private val
         fun toggle(title:String,checked:Boolean,changed:(Boolean)->Unit) { addView(ViewStyles.switch(context,title,checked,changed).apply {
             if(compact) { textSize=12.5f;setPadding(0,dp(3),0,dp(3));minimumHeight=dp(36) }
         },row()) }
-        fun button(title:String,primary:Boolean=false,action:()->Unit)=palette.actionButton(title,primary,heightDp=if(compact)38 else 48,action=action).apply {
+        fun button(title:String,primary:Boolean=false,heightDp:Int=48,action:()->Unit)=palette.actionButton(title,primary,heightDp=if(compact)38 else heightDp,action=action).apply {
             if(compact) { textSize=12.5f;setPadding(dp(10),dp(5),dp(10),dp(5)) }
         }
         addView(palette.text("悬浮窗设置",if(compact)17f else 19f,bold=true),row())
@@ -38,7 +38,7 @@ class OverlaySettingsView(context:Context,private val graph:AppGraph,private val
             override fun onStartTrackingTouch(view:SeekBar) {}
             override fun onStopTrackingTouch(view:SeekBar) {}
         });addView(slider,row())
-        val position=button("重置胶囊位置") { resetPosition=true;scaleLabel.text="保存后恢复默认胶囊位置 · ${(scale*100).toInt()}%" };addView(position,row())
+        val position=button("重置胶囊位置",heightDp=44) { resetPosition=true;scaleLabel.text="保存后恢复默认胶囊位置 · ${(scale*100).toInt()}%" };addView(position,row())
         heading("普通悬浮球")
         addView(palette.text("无操作后贴边，露出约三分之一；胶囊不使用此计时。",12f,palette.muted),row())
         val seconds=EditText(context).apply {
@@ -64,7 +64,7 @@ class OverlaySettingsView(context:Context,private val graph:AppGraph,private val
                 onSaved()
             } catch(_:Exception) { status.text="保存失败，请重试";status.visibility=VISIBLE }
         }
-        val back=button("返回",action=onCancel)
+        val back=button("返回",heightDp=44,action=onCancel)
         if(compact) {
             val actions=ViewStyles.row(context)
             actions.addView(back,LayoutParams(0,-2,1f).apply { marginEnd=dp(8) })

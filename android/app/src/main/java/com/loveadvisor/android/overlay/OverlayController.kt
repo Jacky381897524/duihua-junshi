@@ -19,6 +19,7 @@ import com.loveadvisor.android.input.*
 import com.loveadvisor.core.model.RectI
 import com.loveadvisor.core.overlay.*
 import com.loveadvisor.core.advisor.BatchState
+import com.loveadvisor.core.advisor.ReplyStyleEditorContext
 import com.loveadvisor.core.capture.ChatApps
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -224,8 +225,9 @@ class OverlayController(private val service:ChatCaptureService) {
             view.setReading(false)
             if(pkg==null) { service.notifyUser("聊天页面已变化，请重新打开回复风格设置");return@readStyleNickname }
             val snapshot=readSnapshot()
+            val context=ReplyStyleEditorContext.resolve(snapshot,pkg,title)
             fun openEditor(kind:com.loveadvisor.core.model.ChatKind) {
-            val name=if(snapshot?.packageName==pkg && title==snapshot.identity?.displayTitle)snapshot.replyStyleTitle ?: title.orEmpty() else title.orEmpty()
+            val name=context.title
             val global=graph.settings.load().let { if(kind==com.loveadvisor.core.model.ChatKind.GROUP)it.globalGroupReplyStyle else it.globalReplyStyle }
             val editor=ReplyStyleEditorView(service,pkg,name,graph.settings.replyStyleCatalog(kind),global,
                 { graph.settings.saveReplyStyleCatalog(it,kind);service.notifyUser("专属风格已保存，下次生成或刷新时生效") },
@@ -236,7 +238,8 @@ class OverlayController(private val service:ChatCaptureService) {
             view.fillResult("风格设置已打开；保存后在下一次生成或刷新时生效")
             view.showStyleEditor(editor) {}
             }
-            if(snapshot?.identity?.kind!=null)openEditor(snapshot.identity!!.kind)
+            val knownKind=context.kind
+            if(knownKind!=null)openEditor(knownKind)
             else view.showPage("style-chat-kind",ModelPickerView(service,"当前对话类型（读取后可自动确认）",listOf("单聊专属 / 全对象风格","群聊专属 / 全部群聊风格"),-1,{ index -> view.popPage();openEditor(if(index==1)com.loveadvisor.core.model.ChatKind.GROUP else com.loveadvisor.core.model.ChatKind.DIRECT) },{ view.popPage() }),editable=true)
         }
     }

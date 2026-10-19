@@ -2,7 +2,7 @@ package com.loveadvisor.core.capture
 
 import com.loveadvisor.core.advisor.NicknameText
 
-/** Optional raw nickname for style lookup only; never changes the fill/session identity. */
+/** Conservative raw chat-header text; missing or ambiguous titles are never guessed. */
 object NativeReplyStyleTitle {
     fun read(window:WindowSnapshot?):String? {
         if(window==null || window.packageName !in setOf(ChatApps.QQ,ChatApps.WECHAT))return null

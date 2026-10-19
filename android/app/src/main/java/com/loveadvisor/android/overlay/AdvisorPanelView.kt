@@ -25,6 +25,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private val analyze:Button
     private var analysisAvailable=false
     private var readContextTitle:String?=null
+    private var statusMessage="等待点击读取；聊天变化不会自动请求模型"
     val currentPageId get()=pages.currentId
     private val cards:LinearLayout; private val refresh:Button; private val read:Button; private val count:TextView
     private var displayed:VisibleBatch?=null
@@ -66,7 +67,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         analysisRow.addView(read,LinearLayout.LayoutParams(dp(52),textRowHeight(28)).apply { leftMargin=dp(4) })
         listOf(analyze,read).forEach { it.textSize=10.5f;it.setPadding(dp(4),0,dp(4),0) }
         column.addView(analysisRow,rowParams(-2,5))
-        status=palette.text("等待点击读取；聊天变化不会自动请求模型",11f,palette.muted).apply { maxLines=2 }
+        status=palette.text(statusMessage,11f,palette.muted).apply { maxLines=2 }
         column.addView(status,rowParams(-2,10))
         val label=ViewStyles.row(context)
         advice=palette.text("建议：先读取当前对话",12f).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
@@ -117,9 +118,10 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     }
     fun setReading(value:Boolean) { reading=value; updateButtons() }
     fun setAnalysisAvailable(value:Boolean) { analysisAvailable=value;updateButtons() }
-    fun setReadContext(title:String?) { readContextTitle=title }
+    fun setReadContext(title:String?) { readContextTitle=title;renderStatus() }
     fun setFilling(value:Boolean) { filling=value; updateButtons() }
-    fun fillResult(message:String) { status.text=message;invalidateHeight() }
+    private fun renderStatus() { status.text=readContextTitle?.let { "已读：$it\n$statusMessage" } ?: statusMessage;invalidateHeight() }
+    fun fillResult(message:String) { statusMessage=message;renderStatus() }
     fun release() { dismissMenu();closeStyleEditor();stopAnimations() }
     fun showStyleEditor(editor:View,closed:()->Unit) {
         dismissMenu();pages.clear();pages.push("reply-style",editor,true,closed)
@@ -254,14 +256,14 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         invalidateHeight()
         loading=state.loading
         val visible=state.current
-        val statusMessage=state.error ?: when {
+        statusMessage=state.error ?: when {
             state.loading && visible!=null -> "保留上一轮 · 正在生成新候选"
             state.loading -> "正在生成并由判断模型排序六条…"
             visible!=null -> if(visible.batch.kind==com.loveadvisor.core.model.ChatKind.DIRECT && visible.batch.replies.firstOrNull()?.targetMessageId!=null)
                 "回复原话：${visible.batch.replies.first().targetLabel.orEmpty()}" else "判断仅供参考 · $scoreLabel 为候选适合程度"
             else -> "点击读取信息后生成候选；聊天变化不会自动刷新"
         }
-        status.text=readContextTitle?.let { "已读：$it\n$statusMessage" } ?: statusMessage
+        renderStatus()
         if(visible!=null) {
             val a=visible.batch.analysis
             val current=isCurrent(visible.ticket.session)
