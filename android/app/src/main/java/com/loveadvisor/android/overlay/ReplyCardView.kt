@@ -16,8 +16,11 @@ class ReplyCardView(context:Context,index:Int,plan:ReplyPlan,onCopy:()->Unit,onF
         fun actionButton(label:String,primary:Boolean=false,action:()->Unit)=palette.button(label,primary,action).apply {
             if(compact)textSize=11f
             minimumHeight=ViewStyles.dp(context,if(compact)25f else 32f)
-            setPadding(ViewStyles.dp(context,6f),ViewStyles.dp(context,3f),ViewStyles.dp(context,6f),ViewStyles.dp(context,3f))
-            layoutParams=LayoutParams(0,-2,1f).apply { rightMargin=ViewStyles.dp(context,6f) }
+            minimumWidth=ViewStyles.dp(context,if(compact)56f else 0f);minWidth=minimumWidth
+            val horizontal=ViewStyles.dp(context,if(compact)12f else 6f)
+            setPadding(horizontal,ViewStyles.dp(context,3f),horizontal,ViewStyles.dp(context,3f))
+            // Panel actions keep their natural width instead of stretching across the card.
+            layoutParams=(if(compact)LayoutParams(-2,-2) else LayoutParams(0,-2,1f)).apply { rightMargin=ViewStyles.dp(context,6f) }
         }
         val romance=plan.strategy in setOf(com.loveadvisor.core.advisor.Strategy.APPRECIATION,com.loveadvisor.core.advisor.Strategy.TEASING,com.loveadvisor.core.advisor.Strategy.INVITATION)
         addView(palette.text("${index+1} · ${plan.strategy.label}${if(romance) " · 恋爱大师" else ""}${plan.score?.let { " · $scoreLabel ${(it*100).toInt()}" } ?: ""}",if(compact) 11f else 12f,palette.blue,true).apply { layoutParams=LayoutParams(-1,-2).apply { bottomMargin=ViewStyles.dp(context,3f) } })

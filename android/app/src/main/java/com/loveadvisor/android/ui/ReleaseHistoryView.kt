@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.4.1 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.4.2 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,9 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.4.2", "候选操作按钮恢复紧凑比例", listOf(
+                "面板中的复制、填入、详情改为按文字宽度排列的短按钮，保留最小宽度与间距，取消等分铺满整行。"
+            )),
             Release("V1.4.1", "紧凑面板与昵称原文优先", listOf(
                 "仅缩小面板内模型设置的字号、按钮、输入框和边距，限制展开高度，完整配置仍可滚动；主页表单保留原尺寸。",
                 "判断分析、读取信息改为真实意图右侧的短按钮，意图保留至少约六成横向空间；窄屏或大字体使用短标签。",
