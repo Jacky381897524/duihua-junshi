@@ -193,11 +193,13 @@ class ChatCaptureService:AccessibilityService() {
             visualCancel=null
             visualSignature=signature(w)
             visualFill=verifying.fillReference
-            if(result is CaptureResult.Readable) {
+            if(result is CaptureResult.Readable && verifying.result.kind==ChatKind.DIRECT) {
                 accept(VisualMediaMerge.merge(result.snapshot,verifying.result,w),ticket);return
             }
-            val id=identity?.takeIf { it.displayTitle==verifying.result.title } ?: ConversationIdentity("chat-${UUID.randomUUID()}",verifying.result.title,ChatKind.DIRECT,true)
-            accept(ChatSnapshot(w.packageName,w.windowId,id,verifying.result.messages,source=CaptureSource.OCR),ticket)
+            val visual=verifying.result
+            val id=identity?.takeIf { it.displayTitle==visual.title && it.kind==visual.kind } ?: ConversationIdentity("chat-${UUID.randomUUID()}",visual.title,visual.kind,true)
+            val styleTitle=if(visual.kind==ChatKind.GROUP)GroupTitle.matchingName(visual.title,visual.memberCount) else null
+            accept(ChatSnapshot(w.packageName,w.windowId,id,visual.messages,source=CaptureSource.OCR,replyStyleTitle=styleTitle,contextLimit=ConversationContextPolicy.limit(visual.kind,graph.settings.load().groupContextLimit)),ticket)
             return
         }
         when(result) {
@@ -215,7 +217,8 @@ class ChatCaptureService:AccessibilityService() {
             conversation.clear(); identity=null
             graph.controller.invalidate("已读取另一段聊天")
         }
-        var snapshot=observed.copy(replyStyleTitle=NativeReplyStyleTitle.read(lastWindow?.takeIf { it.windowId==observed.windowId && it.packageName==observed.packageName }))
+        val nativeStyleTitle=if(observed.identity?.kind==ChatKind.GROUP)null else NativeReplyStyleTitle.read(lastWindow?.takeIf { it.windowId==observed.windowId && it.packageName==observed.packageName })
+        var snapshot=observed.copy(replyStyleTitle=nativeStyleTitle ?: observed.replyStyleTitle)
         val entered=identity==null
         if(entered) graph.recent.match(observed)?.let { stored -> conversation.restore(stored.copy(windowId=observed.windowId)); snapshot=snapshot.copy(identity=stored.identity) }
         identity=snapshot.identity
@@ -250,7 +253,7 @@ class ChatCaptureService:AccessibilityService() {
                         val footerStamp=VisualFillReference.footerStamp(original)
                         val bytes=ByteArrayOutputStream(); scaled.compress(Bitmap.CompressFormat.JPEG,90,bytes)
                         if(scaled!==original) scaled.recycle(); original.recycle()
-                        val readVisual=graph.vision.read(config.vision.copy(apiKey=key),"data:image/jpeg;base64,"+Base64.encodeToString(bytes.toByteArray(),Base64.NO_WRAP),cancel,w.packageName)
+                        val readVisual=graph.vision.read(config.vision.copy(apiKey=key),"data:image/jpeg;base64,"+Base64.encodeToString(bytes.toByteArray(),Base64.NO_WRAP),cancel,w.packageName,config.groupContextLimit)
                         val input=readVisual.composer?.let { r -> RectI(w.viewport.left+(r.left*positionScale).toInt(),w.viewport.top+(r.top*positionScale).toInt(),w.viewport.left+(r.right*positionScale).toInt(),w.viewport.top+(r.bottom*positionScale).toInt()) }?.takeIf { ImeFillPolicy.composerAllowed(it,w.viewport) }
                         val visual=readVisual.copy(positions=readVisual.positions.mapValues { (_,y)->w.viewport.top+y*positionScale })
                         cancel.check()
@@ -325,7 +328,7 @@ class ChatCaptureService:AccessibilityService() {
             // Keep the manually read/media-enriched snapshot; verification must not erase media or mutate its token.
             return current
         }
-        return if(current.source==CaptureSource.OCR && overlayAllowed() && (window.packageName!=ChatApps.WECHAT || WeChatPageClassifier.classify(window)==WeChatPageKind.CHAT_OR_UNKNOWN) && (nativeTitle==current.identity?.displayTitle || signature(window)==visualSignature)) current else null
+        return if(current.source==CaptureSource.OCR && overlayAllowed() && (window.packageName!=ChatApps.WECHAT || WeChatPageClassifier.classify(window) in setOf(WeChatPageKind.CHAT_OR_UNKNOWN,WeChatPageKind.GROUP)) && (nativeTitle==current.identity?.displayTitle || signature(window)==visualSignature)) current else null
     }
     fun captureNow() {
         if(!overlayAllowed()) { notifyUser("请打开微信、QQ或抖音单聊后点击读取信息"); return }
@@ -489,7 +492,7 @@ class ChatCaptureService:AccessibilityService() {
         WeChatPageKind.WEB_PAGE -> "网页页面，请进入微信单聊再读取"
         WeChatPageKind.HOME -> "微信导航页面，请进入单聊再读取"
         WeChatPageKind.CONTACT_PROFILE -> "联系人资料页面，请进入单聊再读取"
-        WeChatPageKind.GROUP -> "群聊页面，当前仅支持一对一单聊"
+        WeChatPageKind.GROUP -> "请重新读取当前群聊，核对消息与成员"
         WeChatPageKind.INVALID -> "窗口范围暂不可用，请稍后点击读取信息"
         else -> "未识别为可读取的单聊，请重新读取"
     }

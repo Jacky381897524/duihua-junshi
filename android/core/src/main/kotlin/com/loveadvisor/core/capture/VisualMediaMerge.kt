@@ -23,7 +23,7 @@ object VisualMediaMerge {
             }
             if(nativeRows.all { it.first!=null }) {
                 val rows=nativeRows.map { it.first!! to it.second }+visual.messages.filter { it.id in visual.mediaIds }.map { visual.positions.getValue(it.id) to it }
-                return native.copy(messages=rows.sortedBy { it.first }.map { it.second }.takeLast(50))
+                return native.copy(messages=rows.sortedBy { it.first }.map { it.second }.takeLast(ConversationContextPolicy.forSnapshot(native)))
             }
         }
         val ordered=native.messages.mapIndexed { index,msg->index.toDouble() to msg }.toMutableList()
@@ -36,6 +36,6 @@ object VisualMediaMerge {
             val position=when { before!=null && after!=null && before<after -> before+(after-before)*fraction;before!=null->before+.01+fraction*.8;after!=null->after-1+fraction*.8;else->native.messages.size+fraction }
             ordered.add(position to message)
         }
-        return native.copy(messages=ordered.sortedBy { it.first }.map { it.second }.takeLast(50))
+        return native.copy(messages=ordered.sortedBy { it.first }.map { it.second }.takeLast(ConversationContextPolicy.forSnapshot(native)))
     }
 }

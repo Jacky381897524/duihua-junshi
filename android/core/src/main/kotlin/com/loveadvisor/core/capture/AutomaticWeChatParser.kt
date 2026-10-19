@@ -8,10 +8,12 @@ import kotlin.math.abs
 class AutomaticWeChatParser {
     fun extract(window:WindowSnapshot):CaptureResult {
         val v=window.viewport
-        if(WeChatPageClassifier.classify(window)!=WeChatPageKind.CHAT_OR_UNKNOWN) return CaptureResult.NotChat
+        val page=WeChatPageClassifier.classify(window)
+        if(page==WeChatPageKind.GROUP)return CaptureResult.NeedsImage("核对当前聊天类型与群成员归属")
+        if(page!=WeChatPageKind.CHAT_OR_UNKNOWN) return CaptureResult.NotChat
         val nodes=WeChatPageClassifier.visibleNodes(window).take(5000)
         val title=TextSceneParser.title(nodes,v)?.trim()
-        if(TextSceneParser.kind(title)==ChatKind.GROUP) return CaptureResult.NotChat
+        if(TextSceneParser.kind(title)==ChatKind.GROUP) return CaptureResult.NeedsImage("核对群成员与聊天标题")
         val input=nodes.filter { (it.editable || it.className.contains("EditText") || it.text.orEmpty().replace(" ","").trim()=="按住说话") && it.bounds.top>=v.top+v.height*.55 && !it.text.orEmpty().contains("搜索") }.maxByOrNull { it.bounds.top }
         if(input==null) {
             return CaptureResult.NeedsImage("输入区未完整暴露，自动用视觉判断单聊和双方")

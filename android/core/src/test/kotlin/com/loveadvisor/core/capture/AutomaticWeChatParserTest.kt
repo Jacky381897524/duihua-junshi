@@ -21,9 +21,9 @@ class AutomaticWeChatParserTest {
     @Test fun emptyWechatTreeStillUsesAutomaticVisionForClassification() {
         assertTrue(AutomaticWeChatParser().extract(WindowSnapshot("com.tencent.mm",42,screen,emptyList())) is CaptureResult.NeedsImage)
     }
-    @Test fun groupWithoutEditableComposerIsStillExcluded() {
+    @Test fun groupWithoutEditableComposerReachesVisualVerification() {
         val w=WindowSnapshot("com.tencent.mm",42,screen,listOf(text("测试群(3)",RectI(350,80,650,145))))
-        assertEquals(CaptureResult.NotChat,AutomaticWeChatParser().extract(w))
+        assertTrue(AutomaticWeChatParser().extract(w) is CaptureResult.NeedsImage)
     }
     @Test fun wechatTabBarIsNotAnUnknownChat() {
         val w=WindowSnapshot("com.tencent.mm",42,screen,listOf(
@@ -74,9 +74,9 @@ class AutomaticWeChatParserTest {
         assertEquals(listOf("好的"),result.snapshot.messages.map { it.text })
     }
 
-    @Test fun groupsAndContactPagesAreExcluded() {
+    @Test fun groupsReachVisionWhileContactPagesAreExcluded() {
         val parser=AutomaticWeChatParser()
-        assertEquals(CaptureResult.NotChat,parser.extract(WindowSnapshot("com.tencent.mm",42,screen,listOf(text("测试群(3)",RectI(350,80,650,145)),input,text("你好",RectI(130,400,500,500))))))
+        assertTrue(parser.extract(WindowSnapshot("com.tencent.mm",42,screen,listOf(text("测试群(3)",RectI(350,80,650,145)),input,text("你好",RectI(130,400,500,500))))) is CaptureResult.NeedsImage)
         val profileButton=text("发消息",RectI(150,1300,850,1400)).copy(className="android.widget.Button")
         assertEquals(CaptureResult.NotChat,parser.extract(WindowSnapshot("com.tencent.mm",42,screen,listOf(title,text("微信号",RectI(130,400,500,500)),profileButton))))
     }
