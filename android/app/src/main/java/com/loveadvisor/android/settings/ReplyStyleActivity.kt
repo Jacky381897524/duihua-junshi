@@ -13,7 +13,7 @@ class ReplyStyleActivity:BaseActivity() {
         page("回复风格设置","统一设置或按对象保存；六条候选和刷新都应用表达偏好。")
         val globalCard=ViewStyles.card(this);body.addView(globalCard)
         globalCard.addView(ViewStyles.text(this,"全对象回复风格",20f,bold=true))
-        globalCard.addView(ViewStyles.text(this,"无需填写联系人名称，适合昵称带符号、无法匹配备注名的情况。",13f,ViewStyles.MUTED))
+        globalCard.addView(ViewStyles.text(this,"无需填写联系人名称；没有匹配到专属风格时使用此设置。",13f,ViewStyles.MUTED))
         globalCard.addView(ViewStyles.text(this,"有对象专属风格时优先使用专属风格；没有时应用全对象风格。",13f,ViewStyles.MUTED))
         val globalStyle=ViewStyles.field(this,"例如：没有标点符号、简短一点、浪漫一点",graph.settings.load().globalReplyStyle,multiline=true)
         globalCard.addView(globalStyle)
@@ -30,13 +30,13 @@ class ReplyStyleActivity:BaseActivity() {
         platform.setSelection(platforms.indexOf(intent.getStringExtra("targetPackage") ?: ChatCaptureService.instance?.currentChatSnapshot?.packageName).coerceAtLeast(0))
         var previousPlatform=platforms[platform.selectedItemPosition]
         editor.addView(platform)
-        val contact=ViewStyles.field(this,"聊天顶部显示的对象备注名",intent.getStringExtra("contactTitle") ?: ChatCaptureService.instance?.currentChatSnapshot?.identity?.displayTitle.orEmpty())
+        val contact=ViewStyles.field(this,"聊天顶部显示的对象备注名",intent.getStringExtra("contactTitle") ?: ChatCaptureService.instance?.currentChatSnapshot?.let { it.replyStyleTitle ?: it.identity?.displayTitle }.orEmpty())
         val style=ViewStyles.field(this,"例如：没有标点符号、简短一点、浪漫一点",multiline=true)
         editor.addView(contact); editor.addView(style)
         editor.addView(ViewStyles.text(this,"对象名需与聊天顶部一致。同一平台同名对象请设置不同备注。",12f,ViewStyles.MUTED))
         var editingKey:String?=null
-        fun catalog():ReplyStyleCatalog { val s=graph.settings.load(); return ReplyStyleCatalog(s.replyStyles,s.replyStyleTitles,s.replyStyleApps) }
-        fun saveCatalog(c:ReplyStyleCatalog) { graph.settings.update { it.copy(replyStyles=c.styles,replyStyleTitles=c.titles,replyStyleApps=c.apps) } }
+        fun catalog():ReplyStyleCatalog = graph.settings.replyStyleCatalog()
+        fun saveCatalog(c:ReplyStyleCatalog) { graph.settings.saveReplyStyleCatalog(c) }
         val saved=ViewStyles.column(this)
         fun renderList() {
             saved.removeAllViews()
@@ -67,20 +67,22 @@ class ReplyStyleActivity:BaseActivity() {
             val name=contact.text.toString().trim()
             if(name.isEmpty())toast("请填写聊天对象的备注名")
             else {
-                saveCatalog(catalog().save(name,style.text.toString(),editingKey,platforms[platform.selectedItemPosition]));editingKey=null
-                renderList();toast(if(style.text.toString().isBlank())if(graph.settings.load().globalReplyStyle.isNotBlank())"已删除专属风格，改用全对象风格" else "该对象已恢复正常回复" else "已保存，下次读取或刷新时生效")
+                try {
+                    saveCatalog(catalog().save(name,style.text.toString(),editingKey,platforms[platform.selectedItemPosition]));editingKey=null
+                    renderList();toast(if(style.text.toString().isBlank())if(graph.settings.load().globalReplyStyle.isNotBlank())"已删除专属风格，改用全对象风格" else "该对象已恢复正常回复" else "已保存，下次读取或刷新时生效")
+                } catch(error:IllegalArgumentException) { toast(error.message ?: "请检查昵称") }
             }
         })
         val selectedPlatform=platforms[platform.selectedItemPosition]
         val initial=catalog().rememberTitle(contact.text.toString(),selectedPlatform);saveCatalog(initial)
-        initial.entries().firstOrNull { it.title==contact.text.toString().trim() && it.packageName==selectedPlatform }?.let { editingKey=it.key;style.setText(it.style) }
+        initial.match(contact.text.toString(),selectedPlatform)?.let { editingKey=it.key;style.setText(it.style) }
         platform.onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent:android.widget.AdapterView<*>?){}
             override fun onItemSelected(parent:android.widget.AdapterView<*>?,view:android.view.View?,position:Int,id:Long) {
                 val selected=platforms[position]
                 if(selected==previousPlatform)return
                 previousPlatform=selected
-                val entry=catalog().entries().firstOrNull { it.packageName==selected && it.title==contact.text.toString().trim() }
+                val entry=catalog().match(contact.text.toString(),selected)
                 editingKey=entry?.key;style.setText(entry?.style.orEmpty())
             }
         }

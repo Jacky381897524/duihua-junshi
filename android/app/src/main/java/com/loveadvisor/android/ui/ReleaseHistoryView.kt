@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.3.10 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.3.11 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,12 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.3.11", "特殊昵称与面板内风格设置", listOf(
+                "昵称匹配保留外文、花体、符号和组合表情，兼容等价字符编码，不再排除含标点或较长表情的标题。",
+                "面板菜单可直接设置当前对象专属风格或全对象风格，无需跳转主页；昵称可粘贴校正，也可选择已保存对象关联。",
+                "确认后的识别别名随专属风格保存在本机，清除缓存不会删除；相似昵称只提供选择，不自动合并。",
+                "只按昵称匹配，不读取头像或账号，不打开对方资料页。识别仍可能漏字，未匹配时继续使用全对象风格。"
+            )),
             Release("V1.3.10", "清除缓存与安卓兼容增强", listOf(
                 "主页新增“清除缓存”，显示缓存大小和清理结果，保留密钥、模型配置、回复风格、关系记忆与聊天历史。",
                 "页面和候选面板避让横屏侧边挖孔、刘海及系统导航区域，胶囊位置增加挖孔碰撞避让。",

@@ -17,7 +17,6 @@ import com.loveadvisor.android.capture.ChatCaptureService
 import com.loveadvisor.android.ui.ViewStyles
 import com.loveadvisor.android.ui.DiagnosticsActivity
 import com.loveadvisor.android.settings.SettingsActivity
-import com.loveadvisor.android.settings.ReplyStyleActivity
 import com.loveadvisor.android.advisor.ConsultationActivity
 import com.loveadvisor.android.input.*
 import com.loveadvisor.core.model.RectI
@@ -41,6 +40,7 @@ class OverlayController(private val service:ChatCaptureService) {
     private var state=BatchState(); private var keyboardVisible=false
     private var reading=false
     private var filling=false
+    private var cancelStyleRead:(()->Unit)?=null
     private var confirmation:DraftConfirmWindow?=null
     private var cancelFill:(()->Unit)?=null
     private var imeInsetBottom=0
@@ -186,12 +186,18 @@ class OverlayController(private val service:ChatCaptureService) {
                 })
             }
         },{ service.refresh() },{ service.captureNow() },{ anchor ->
-            panel?.toggleMenu(listOf("回复风格设置" to ReplyStyleActivity::class.java,"完整咨询" to ConsultationActivity::class.java,"悬浮窗设置" to com.loveadvisor.android.settings.OverlaySettingsActivity::class.java,"模型设置" to SettingsActivity::class.java,"连接诊断" to DiagnosticsActivity::class.java).map { (label,activity) -> label to {
+            val links=listOf("完整咨询" to ConsultationActivity::class.java,"悬浮窗设置" to com.loveadvisor.android.settings.OverlaySettingsActivity::class.java,"模型设置" to SettingsActivity::class.java,"连接诊断" to DiagnosticsActivity::class.java).map { (label,activity) -> label to {
                 service.startActivity(Intent(service,activity).putExtra("contactTitle",service.currentChatSnapshot?.identity?.displayTitle).putExtra("targetPackage",service.currentChatSnapshot?.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            } },capsuleMenuControls())
+            } }
+            panel?.toggleMenu(listOf("回复风格设置" to { editReplyStyle() })+links,capsuleMenuControls())
         },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() },frosted=useFrostedWindow)
         view.contentDescription="聊天候选面板"
         panel=view; panelParams=params(1,1,"LoveAdvisorPanel"); panelOnLeft=null
+        view.setOnApplyWindowInsetsListener { _,insets ->
+            val bottom=if(insets.isVisible(WindowInsets.Type.ime()))insets.getInsets(WindowInsets.Type.ime()).bottom else 0
+            if(bottom!=imeInsetBottom) { imeInsetBottom=bottom;view.post { resize() } }
+            insets
+        }
         if(native) dragIsland(view.dragHandle) else drag(view.dragHandle); view.setReading(reading); view.setFilling(filling); view.render(state); layout(); attachPanel(view)
         OverlayAnimator.enter(view,graph.settings.load().reducedMotion,panel=true)
     }
@@ -210,6 +216,39 @@ class OverlayController(private val service:ChatCaptureService) {
                 }
             } else manager.addView(view,p)
         }
+    }
+    private fun editReplyStyle() {
+        if(filling || reading) { service.notifyUser("请等待当前读取或填入完成");return }
+        if(cancelStyleRead!=null)return
+        val view=panel ?: return
+        view.fillResult("正在读取当前昵称…");view.setReading(true)
+        cancelStyleRead=service.readStyleNickname { pkg,title ->
+            cancelStyleRead=null
+            if(panel!==view)return@readStyleNickname
+            view.setReading(false)
+            if(pkg==null) { service.notifyUser("聊天页面已变化，请重新打开回复风格设置");return@readStyleNickname }
+            val editor=ReplyStyleEditorView(service,pkg,title.orEmpty(),graph.settings.replyStyleCatalog(),graph.settings.load().globalReplyStyle,
+                { graph.settings.saveReplyStyleCatalog(it);service.notifyUser("专属风格已保存，下次生成或刷新时生效") },
+                { value -> graph.settings.update { it.copy(globalReplyStyle=value) };service.notifyUser("全对象风格已保存，下次生成或刷新时生效") },
+                { panel?.closeStyleEditor() })
+            view.fillResult("风格设置已打开；保存后在下一次生成或刷新时生效")
+            view.showStyleEditor(editor) { panelEditingFocus(false) }
+            panelEditingFocus(true)
+        }
+    }
+    private fun panelEditingFocus(editing:Boolean) {
+        val view=panel ?: return
+        val p=panelParams ?: return
+        if(!editing) {
+            view.clearFocus()
+            service.getSystemService(android.view.inputmethod.InputMethodManager::class.java)?.hideSoftInputFromWindow(view.windowToken,0)
+        }
+        p.flags=if(editing)p.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv() else p.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        p.softInputMode=WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+        if(panelWindow.registered) {
+            if(android.os.Build.VERSION.SDK_INT>=31 && frostedWindow!=null)frostedWindow?.update(p) else manager.updateViewLayout(view,p)
+        }
+        layout()
     }
     private fun detachPanel(view:AdvisorPanelView) {
         panelWindow.detach {
@@ -230,6 +269,7 @@ class OverlayController(private val service:ChatCaptureService) {
     fun themeChanged() { val expanded=panel!=null;val native=islandPanel;hide();if(expanded && service.overlayAllowed())showPanel(native) }
     fun hide() {
         val expanded=panel!=null
+        cancelStyleRead?.invoke();cancelStyleRead=null
         cancelFill?.invoke();cancelFill=null;filling=false;confirmation?.close();confirmation=null
         panel?.let { it.release();detachPanel(it) }
         if(android.os.Build.VERSION.SDK_INT>=31)frostedWindow?.release()
@@ -240,7 +280,7 @@ class OverlayController(private val service:ChatCaptureService) {
     fun suppress() {
         main.removeCallbacks(autoHide);idle.pause();stopEdgeMotion();dragging=false
         if(confirmation!=null)filling=false;confirmation?.close();confirmation=null
-        panel?.let { it.dismissMenu();it.stopAnimations();detachPanel(it) }
+        panel?.let { it.dismissMenu();it.closeStyleEditor();it.stopAnimations();detachPanel(it) }
         bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } }
         capsule?.let { OverlayAnimator.stop(it);capsuleWindow.detach { manager.removeViewImmediate(it) } }
     }

@@ -4,6 +4,14 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun confirmedNicknameAliasesAndOriginalUnicodeSurviveReopening() {
+        val saved=AppSettings.decode("""{"replyStyles":{"target":"浪漫"},"replyStyleTitles":{"target":"🍃    L 。👩🏽‍💻"},"replyStyleApps":{"target":"com.tencent.mm"},"replyStyleAliases":{"alias":"target"},"globalReplyStyle":"简短"}""")
+        val reopened=Gson().toJsonTree(AppSettings.decode(Gson().toJson(saved))).asJsonObject
+        assertEquals("target",reopened["replyStyleAliases"]?.asJsonObject?.get("alias")?.asString)
+        assertEquals("🍃    L 。👩🏽‍💻",reopened["replyStyleTitles"]?.asJsonObject?.get("target")?.asString)
+        assertEquals("简短",reopened["globalReplyStyle"]?.asString)
+        assertEquals(0,Gson().toJsonTree(AppSettings.decode("{}")).asJsonObject["replyStyleAliases"]?.asJsonObject?.size())
+    }
     @Test fun lightFrostDefaultsOnAndUserCanRestorePlainPanelPermanently() {
         val defaults=Gson().toJsonTree(AppSettings.decode("{}")).asJsonObject
         assertEquals(true,defaults["frostedPanelEnabled"]?.asBoolean)

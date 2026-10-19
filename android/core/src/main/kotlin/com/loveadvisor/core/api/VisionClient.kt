@@ -16,7 +16,8 @@ class VisionClient(private val transport:HttpTransport) {
         val label=ChatApps.label(packageName)
         val platformPrompt=prompt.replace("微信",label).replace("微信小程序", "小程序")+
             "当前来源固定为$label（$packageName），只接受此应用原生一对一私信。抖音视频流、评论区、直播、QQ频道、群聊、联系人列表都返回UNKNOWN。不能把嵌在消息里的聊天截图或网页当作当前聊天界面。"
-        val content=listOf(mapOf("type" to "text","text" to platformPrompt+extra.replace("微信",label)),mapOf("type" to "image_url","image_url" to mapOf("url" to imageDataUrl)))
+        val nicknamePrompt="标题只取聊天顶部的昵称或备注，保留外文、花体字母、特殊符号、标点、空格和完整组合表情；不翻译、不改写、不把花体改成普通字母。不把性别图标、在线状态、火花、连续聊天天数或平台图标拼进昵称。无法辨认的部分不要猜测补字。"
+        val content=listOf(mapOf("type" to "text","text" to platformPrompt+extra.replace("微信",label)+nicknamePrompt),mapOf("type" to "image_url","image_url" to mapOf("url" to imageDataUrl)))
         val payload=mutableMapOf<String,Any?>("model" to profile.selectedModelId,"messages" to listOf(mapOf("role" to "user","content" to content)),"temperature" to 0,"max_tokens" to 2400,"stream" to false)
         if(ProviderPresets.detect(profile)==ProviderPresets.DEEPSEEK) payload["thinking"]=mapOf("type" to "disabled")
         val body=Gson().toJson(payload)
@@ -25,7 +26,7 @@ class VisionClient(private val transport:HttpTransport) {
         return try {
             val raw=JsonParser.parseString(response.body).asJsonObject["choices"].asJsonArray[0].asJsonObject["message"].asJsonObject["content"].asString.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
             val o=JsonParser.parseString(raw).asJsonObject
-            require(o["kind"].asString=="DIRECT"); val title=o["title"].asString.trim(); require(title.isNotBlank() && title.length<=100)
+            require(o["kind"].asString=="DIRECT"); val title=o["title"].asString.trim(); require(com.loveadvisor.core.advisor.NicknameText.valid(title))
             val rows=o["messages"].asJsonArray; require(rows.size() in 1..50)
             val media=mutableSetOf<String>(); val positions=mutableMapOf<String,Double>()
             val messages=rows.mapIndexed { i,row ->

@@ -215,9 +215,9 @@ class ChatCaptureService:AccessibilityService() {
             conversation.clear(); identity=null
             graph.controller.invalidate("已读取另一段聊天")
         }
-        var snapshot=observed
+        var snapshot=observed.copy(replyStyleTitle=NativeReplyStyleTitle.read(lastWindow?.takeIf { it.windowId==observed.windowId && it.packageName==observed.packageName }))
         val entered=identity==null
-        if(entered) graph.recent.match(observed)?.let { stored -> conversation.restore(stored.copy(windowId=observed.windowId)); snapshot=observed.copy(identity=stored.identity) }
+        if(entered) graph.recent.match(observed)?.let { stored -> conversation.restore(stored.copy(windowId=observed.windowId)); snapshot=snapshot.copy(identity=stored.identity) }
         identity=snapshot.identity
         conversation.observe(snapshot,System.currentTimeMillis(),entered)
         val merged=conversation.current ?: run { finishRead(ticket,"未取得可分析的对话，请重新读取"); return }
@@ -333,6 +333,71 @@ class ChatCaptureService:AccessibilityService() {
         manualRead.begin(); overlay.setReading(true); graph.controller.status("正在读取当前聊天屏幕…"); observe()
     }
     fun captureImage() { captureNow() }
+    /** Explicit style-menu gesture only: native nickname or cropped local OCR, no analysis/network/navigation. */
+    fun readStyleNickname(callback:(String?,String?)->Unit):()->Unit {
+        val cancel=Cancellation()
+        val pkg=foregroundPackage;val windowId=foregroundWindowId;val generation=navigation
+        val previous=conversation.current;val previousImage=visualFill
+        var completed=false
+        fun current()=!cancel.cancelled && instance===this && overlayAllowed() && generation==navigation && pkg==foregroundPackage && windowId==foregroundWindowId
+        fun complete(resultPackage:String?,title:String?) {
+            if(completed || cancel.cancelled)return
+            completed=true;cancel.cancel();callback(resultPackage,title)
+        }
+        fun finish(title:String?) {
+            if(!current()) { complete(null,null);return }
+            nativeWorker.execute {
+                val fresh=runCatching { reader.foreground() }.getOrNull()
+                main.post { complete(if(current() && fresh!=null && fresh.packageName==pkg && fresh.windowId==windowId)pkg else null,title) }
+            }
+        }
+        if(pkg==null || windowId==null || !current()) { main.post { complete(null,null) };return { cancel.cancel() } }
+        main.postDelayed({ if(!completed && !cancel.cancelled)complete(if(current())pkg else null,null) },6500)
+        nativeWorker.execute {
+            val window=runCatching { reader.read(expectedPackage=pkg) }.getOrNull()
+            val native=NativeReplyStyleTitle.read(window) ?: if(pkg==ChatApps.WECHAT) {
+                (window?.let { parser.extract(it) } as? CaptureResult.Readable)?.snapshot?.identity?.displayTitle
+            } else null
+            main.post {
+                if(!current() || window==null || window.windowId!=windowId || window.packageName!=pkg) { complete(null,null);return@post }
+                if(native!=null) { finish(native);return@post }
+                val bars=getSystemService(android.view.WindowManager::class.java).maximumWindowMetrics.windowInsets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.statusBars()).top
+                val crop=ReplyStyleHeader.crop(pkg,window.viewport,bars,resources.displayMetrics.density)
+                if(crop==null) { finish(null);return@post }
+                captureWindow(windowId,cancel) { image ->
+                    if(image !is CaptureImageResult.Success) { finish(null);return@captureWindow }
+                    val original=image.bitmap
+                    if(!current()) { original.recycle();complete(null,null);return@captureWindow }
+                    var cropped:Bitmap?=null
+                    var ocr:MlKitOcr?=null
+                    try {
+                        // Reuse the already-read nickname only after a fresh title-strip match.
+                        // This keeps the confirmed correction usable on Refresh without a second OCR spelling.
+                        val known=previous?.replyStyleTitle ?: previous?.identity?.displayTitle
+                        if(known!=null && previous!=null && previous===conversation.current && previous.packageName==pkg && previous.windowId==windowId &&
+                            previousImage!=null && previousImage===visualFill && previousImage.windowId==windowId && previousImage.generation==generation &&
+                            VisualFillReference.stamp(original)==previousImage.stamp) {
+                            original.recycle();finish(known);return@captureWindow
+                        }
+                        val v=window.viewport
+                        val x=((crop.left-v.left)*original.width.toDouble()/v.width).toInt().coerceIn(0,original.width-1)
+                        val y=((crop.top-v.top)*original.height.toDouble()/v.height).toInt().coerceIn(0,original.height-1)
+                        val right=((crop.right-v.left)*original.width.toDouble()/v.width).toInt().coerceIn(x+1,original.width)
+                        val bottom=((crop.bottom-v.top)*original.height.toDouble()/v.height).toInt().coerceIn(y+1,original.height)
+                        val header=Bitmap.createBitmap(original,x,y,right-x,bottom-y);cropped=header
+                        if(header!==original)original.recycle()
+                        val recognizer=MlKitOcr();ocr=recognizer
+                        recognizer.recognize(header,cancel,{ boxes,_ -> finish(boxes?.let { ReplyStyleHeader.title(it) }) },{
+                            if(!header.isRecycled)header.recycle();recognizer.close()
+                        })
+                    } catch(_:Exception) {
+                        cropped?.let { if(!it.isRecycled)it.recycle() };if(!original.isRecycled)original.recycle();ocr?.close();finish(null)
+                    }
+                }
+            }
+        }
+        return { cancel.cancel() }
+    }
     fun refresh() {
         val snapshot=conversation.current
         val token=graph.tracker.currentToken

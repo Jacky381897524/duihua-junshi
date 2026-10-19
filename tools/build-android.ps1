@@ -38,6 +38,10 @@ try {
 $taskOutput = Join-Path $taskRoot 'output'
 New-Item -ItemType Directory -Force -Path $taskOutput | Out-Null
 $taskApk = Join-Path $taskMirror 'app/build/outputs/apk/debug/app-debug.apk'
-if ($taskExitCode -eq 0 -and $Tasks -contains ':app:assembleDebug' -and (Test-Path -LiteralPath $taskApk)) { Copy-Item -LiteralPath $taskApk -Destination (Join-Path $taskOutput 'love-advisor-1.3.10-debug.apk') -Force }
+if ($taskExitCode -eq 0 -and $Tasks -contains ':app:assembleDebug' -and (Test-Path -LiteralPath $taskApk)) {
+    $taskVersion=[regex]::Match((Get-Content -Raw -LiteralPath (Join-Path $taskSource 'app/build.gradle.kts')),'versionName\s*=\s*"V([^"\r\n]+)"').Groups[1].Value
+    if(!$taskVersion) { throw 'Cannot determine APK version; no previous APK will be overwritten' }
+    Copy-Item -LiteralPath $taskApk -Destination (Join-Path $taskOutput "love-advisor-$taskVersion-debug.apk") -Force
+}
 Write-Output "Build log: $taskLog"
 exit $taskExitCode

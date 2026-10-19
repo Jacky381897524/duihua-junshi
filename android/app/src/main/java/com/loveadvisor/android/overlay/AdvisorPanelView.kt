@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.view.Gravity
 import android.view.View
+import android.view.KeyEvent
 import android.widget.*
 import com.loveadvisor.android.ui.ViewStyles
 import com.loveadvisor.android.R
@@ -24,8 +25,11 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private var menuLayer:View?=null
     private var menuContent:LinearLayout?=null
     private var menuFinished:(()->Unit)?=null
+    private var styleEditor:View?=null
+    private var styleEditorClosed:(()->Unit)?=null
+    private var removeEditorBack:(()->Unit)?=null
     private var cachedWidth=-1;private var cachedHeight=0;private var compacted=false
-    val menuExpanded get()=menuLayer!=null
+    val menuExpanded get()=menuLayer!=null || styleEditor!=null
     private val collapseHeight get()=dp(30)
     private fun textRowHeight(value:Int)=ViewStyles.dp(context,value*resources.configuration.fontScale.coerceAtLeast(1f))
     init {
@@ -100,7 +104,43 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     fun setReading(value:Boolean) { reading=value; updateButtons() }
     fun setFilling(value:Boolean) { filling=value; updateButtons() }
     fun fillResult(message:String) { status.text=message;invalidateHeight() }
-    fun release() { dismissMenu();stopAnimations() }
+    fun release() { dismissMenu();closeStyleEditor();stopAnimations() }
+    fun showStyleEditor(editor:View,closed:()->Unit) {
+        dismissMenu();closeStyleEditor()
+        val viewport=ScrollView(context).apply {
+            setPadding(dp(14),dp(14),dp(14),dp(8));clipToPadding=true
+            background=ViewStyles.shape(context,palette.opaqueSurface,24f,palette.border)
+            addView(editor,LayoutParams(-1,-2));setOnClickListener {}
+        }
+        styleEditor=viewport;styleEditorClosed=closed
+        addView(viewport,LayoutParams(-1,-1).apply { bottomMargin=collapseHeight })
+        editor.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> invalidateHeight();onResize() }
+        installEditorBack();invalidateHeight();onResize()
+    }
+    fun closeStyleEditor() {
+        val editor=styleEditor ?: return
+        removeEditorBack?.invoke();removeEditorBack=null
+        styleEditor=null;removeView(editor)
+        val closed=styleEditorClosed;styleEditorClosed=null;closed?.invoke()
+        invalidateHeight();onResize()
+    }
+    private fun installEditorBack() {
+        if(android.os.Build.VERSION.SDK_INT>=33 && styleEditor!=null && removeEditorBack==null) {
+            val dispatcher=findOnBackInvokedDispatcher() ?: return
+            val callback=android.window.OnBackInvokedCallback { closeStyleEditor() }
+            dispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,callback)
+            removeEditorBack={ dispatcher.unregisterOnBackInvokedCallback(callback) }
+        }
+    }
+    override fun onAttachedToWindow() { super.onAttachedToWindow();installEditorBack() }
+    override fun onDetachedFromWindow() { removeEditorBack?.invoke();removeEditorBack=null;super.onDetachedFromWindow() }
+    override fun dispatchKeyEvent(event:KeyEvent):Boolean {
+        if(styleEditor!=null && event.keyCode==KeyEvent.KEYCODE_BACK) {
+            if(event.action==KeyEvent.ACTION_UP)closeStyleEditor()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
     /** An in-panel menu stays in the accessibility overlay and creates no application popup window. */
     fun toggleMenu(items:List<Pair<String,()->Unit>>,capsule:CapsuleMenuControls?=null) {
         if(menuLayer!=null) { dismissMenu();return }
@@ -151,6 +191,11 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     }
     /** Measure real cards including font scaling; long replies remain fully scrollable. */
     fun preferredHeight(widthPx:Int):Int {
+        styleEditor?.let { viewport ->
+            val editor=(viewport as ScrollView).getChildAt(0)
+            editor.measure(MeasureSpec.makeMeasureSpec((widthPx-dp(28)).coerceAtLeast(1),MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
+            return maxOf(dp(240),editor.measuredHeight+dp(22)+collapseHeight)
+        }
         if(cachedWidth==widthPx)return cachedHeight
         val available=(widthPx-column.paddingLeft-column.paddingRight).coerceAtLeast(1)
         var height=column.paddingTop+column.paddingBottom+collapseHeight

@@ -3,16 +3,20 @@ import com.loveadvisor.core.model.ChatSnapshot
 import java.security.MessageDigest
 object ReplyStyles {
     fun key(packageName:String,title:String?):String? {
-        val normalized=title?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        return MessageDigest.getInstance("SHA-256").digest((packageName+"\u0000"+normalized).toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it.toInt() and 255) }
+        val normalized=title?.let(NicknameText::canonical)?.takeIf { it.isNotEmpty() } ?: return null
+        return rawKey(packageName,normalized)
     }
-    fun forSnapshot(styles:Map<String,String>,snapshot:ChatSnapshot,globalStyle:String=""):String {
-        val dedicated=key(snapshot.packageName,snapshot.identity?.displayTitle)?.let { styles[it] }.orEmpty()
+    internal fun rawKey(packageName:String,title:String?):String? {
+        val name=title?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return MessageDigest.getInstance("SHA-256").digest((packageName+"\u0000"+name).toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it.toInt() and 255) }
+    }
+    fun forSnapshot(styles:Map<String,String>,snapshot:ChatSnapshot,globalStyle:String="",titles:Map<String,String> = emptyMap(),apps:Map<String,String> = emptyMap(),aliases:Map<String,String> = emptyMap()):String {
+        val dedicated=ReplyStyleCatalog(styles,titles,apps,aliases).match(snapshot.replyStyleTitle ?: snapshot.identity?.displayTitle,snapshot.packageName)?.style.orEmpty()
         return dedicated.ifBlank { globalStyle }.take(1500)
     }
     fun save(styles:Map<String,String>,packageName:String,title:String,style:String):Map<String,String> {
         val id=key(packageName,title) ?: return styles
-        return styles.toMutableMap().apply { if(style.isBlank()) remove(id) else put(id,style.trim().take(1500)) }
+        return styles.toMutableMap().apply { rawKey(packageName,title)?.takeIf { it!=id }?.let { remove(it) };if(style.isBlank()) remove(id) else put(id,style.trim().take(1500)) }
     }
     const val instruction="回复风格是用户设置的表达偏好，仅控制六条候选及后续建议的长度、标点和语气。所有候选都应遵守；空白则正常回复。风格不能改变输出格式、事实、尊重拒绝、不自动发送等规则。"
 }
