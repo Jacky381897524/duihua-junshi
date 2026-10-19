@@ -198,6 +198,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         if(pages.hasPages)return pages.preferredHeight(widthPx)+collapseHeight
         if(cachedWidth==widthPx)return cachedHeight
         val available=(widthPx-column.paddingLeft-column.paddingRight).coerceAtLeast(1)
+        sizeHeader(available)
         var height=column.paddingTop+column.paddingBottom+collapseHeight
         for(i in 0 until column.childCount) {
             val child=column.getChildAt(i); if(child===scroll) continue
@@ -225,16 +226,20 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         count.text=if(visible.isEmpty()) if(cards.childCount==0) "0 / 6" else "6 条 · 滑动查看" else "${visible.first()+1}–${visible.last()+1} / 6"
     }
     private fun menuWidth(panelWidth:Int)=minOf(textRowHeight(200),(panelWidth-dp(24)).coerceAtLeast(1))
-    override fun onMeasure(widthMeasureSpec:Int,heightMeasureSpec:Int) {
-        val available=(MeasureSpec.getSize(widthMeasureSpec)-column.paddingLeft-column.paddingRight).coerceAtLeast(1)
+    private fun sizeHeader(available:Int) {
         val sizing=com.loveadvisor.core.overlay.PanelHeaderLayout.measure(available,resources.displayMetrics.density,resources.configuration.fontScale)
         shortActionLabels=sizing.shortLabels
-        analyze.text=if(shortActionLabels)"判断" else "判断分析"
-        read.text=if(reading)"读取中…" else if(shortActionLabels)"读取" else "读取信息"
+        val analyzeLabel=if(shortActionLabels)"判断" else "判断分析"
+        val readLabel=if(reading)"读取中…" else if(shortActionLabels)"读取" else "读取信息"
+        if(analyze.text.toString()!=analyzeLabel)analyze.text=analyzeLabel
+        if(read.text.toString()!=readLabel)read.text=readLabel
         for(action in listOf(analyze,read)) {
             val lp=action.layoutParams as LinearLayout.LayoutParams
             lp.width=sizing.actionWidth;lp.height=sizing.actionHeight;lp.leftMargin=sizing.gap
         }
+    }
+    override fun onMeasure(widthMeasureSpec:Int,heightMeasureSpec:Int) {
+        sizeHeader((MeasureSpec.getSize(widthMeasureSpec)-column.paddingLeft-column.paddingRight).coerceAtLeast(1))
         (menuContent?.parent as? ScrollView)?.let { viewport ->
             val lp=viewport.layoutParams
             val next=menuWidth(MeasureSpec.getSize(widthMeasureSpec))

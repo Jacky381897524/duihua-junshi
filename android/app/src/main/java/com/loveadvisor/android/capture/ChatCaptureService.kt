@@ -366,9 +366,7 @@ class ChatCaptureService:AccessibilityService() {
         main.postDelayed({ if(!completed && !cancel.cancelled)complete(if(current())pkg else null,null) },6500)
         nativeWorker.execute {
             val window=runCatching { reader.read(expectedPackage=pkg) }.getOrNull()
-            val native=NativeReplyStyleTitle.read(window) ?: if(pkg==ChatApps.WECHAT) {
-                (window?.let { parser.extract(it) } as? CaptureResult.Readable)?.snapshot?.identity?.displayTitle
-            } else null
+            val native=NativeReplyStyleTitle.read(window)
             main.post {
                 if(!current() || window==null || window.windowId!=windowId || window.packageName!=pkg) { complete(null,null);return@post }
                 if(native!=null) { finish(native);return@post }
@@ -388,7 +386,7 @@ class ChatCaptureService:AccessibilityService() {
                         if(known!=null && previous!=null && previous===conversation.current && previous.packageName==pkg && previous.windowId==windowId &&
                             previousImage!=null && previousImage===visualFill && previousImage.windowId==windowId && previousImage.generation==generation &&
                             VisualFillReference.stamp(original)==previousImage.stamp) {
-                            original.recycle();finish(known);return@captureWindow
+                            original.recycle();finish(known,localOcr=previous.source==CaptureSource.OCR);return@captureWindow
                         }
                         val v=window.viewport
                         val x=((crop.left-v.left)*original.width.toDouble()/v.width).toInt().coerceIn(0,original.width-1)
@@ -470,7 +468,7 @@ class ChatCaptureService:AccessibilityService() {
         }
     }
     fun canCapture()=!stopping && graph.settings.load().overlayEnabled && !locked()
-    fun overlayAllowed()=CapturePolicy.overlayVisible(graph.settings.load().overlayEnabled,locked(),projecting,wechatForeground)
+    fun overlayAllowed()=!stopping && CapturePolicy.overlayVisible(graph.settings.load().overlayEnabled,locked(),projecting,wechatForeground)
     fun ensureOverlay() { if(::overlay.isInitialized) {
         if(overlayAllowed() && overlaySuspensions==0) {
             if(graph.settings.load().topCapsuleEnabled) {
@@ -490,8 +488,7 @@ class ChatCaptureService:AccessibilityService() {
         stopping=true
         stopService(Intent(this,ProjectionService::class.java))
         if(::island.isInitialized)island.stop()
-        readGate.invalidate();reset("辅助服务已停止")
-        if(::overlay.isInitialized) { overlay.hide();overlay.suppress() }
+        leaveForeground("辅助服务已停止")
         disableSelf()
     }
     fun beginProjectionCapture() { projecting=true; leaveForeground() }

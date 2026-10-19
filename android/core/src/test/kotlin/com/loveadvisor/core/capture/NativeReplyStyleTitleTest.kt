@@ -25,4 +25,16 @@ class NativeReplyStyleTitleTest {
         val window=chat.copy(packageName=ChatApps.WECHAT,windowClassName="com.tencent.mm.plugin.profile.ui.ContactInfoUI",nodes=listOf(title.copy(text="林佳琪"),input))
         assertNull(NativeReplyStyleTitle.read(window))
     }
+    @Test fun firstVisibleBodyDoesNotReplaceAnUnexposedWechatHeader() {
+        val window=WindowSnapshot(ChatApps.WECHAT,42,RectI(0,0,1000,2000),listOf(
+            title.copy(id=null,text="导航下的第一条消息",bounds=RectI(130,200,600,280)),
+            input.copy(bounds=RectI(120,1700,800,1800))))
+        assertNull(NativeReplyStyleTitle.read(window))
+    }
+    @Test fun differingHeaderCandidatesRequireImageRatherThanGuessingAName() {
+        val header=title.copy(id=null,text="甲",bounds=RectI(400,115,650,180))
+        val window=chat.copy(packageName=ChatApps.WECHAT,nodes=listOf(header,header.copy(text="乙",bounds=RectI(400,184,650,220)),input))
+        assertNull(NativeReplyStyleTitle.read(window))
+        assertEquals("甲",NativeReplyStyleTitle.read(window.copy(nodes=listOf(header,header,input))))
+    }
 }
