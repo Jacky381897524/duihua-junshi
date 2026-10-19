@@ -190,7 +190,7 @@ class OverlayController(private val service:ChatCaptureService) {
                 service.startActivity(Intent(service,activity).putExtra("contactTitle",service.currentChatSnapshot?.identity?.displayTitle).putExtra("targetPackage",service.currentChatSnapshot?.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } }
             panel?.toggleMenu(listOf("回复风格设置" to { editReplyStyle() })+links,capsuleMenuControls())
-        },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() },frosted=useFrostedWindow)
+        },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() },frosted=useFrostedWindow,onEditingFocus={ panelEditingFocus(it) })
         view.contentDescription="聊天候选面板"
         panel=view; panelParams=params(1,1,"LoveAdvisorPanel"); panelOnLeft=null
         view.setOnApplyWindowInsetsListener { _,insets ->
@@ -230,10 +230,11 @@ class OverlayController(private val service:ChatCaptureService) {
             val editor=ReplyStyleEditorView(service,pkg,title.orEmpty(),graph.settings.replyStyleCatalog(),graph.settings.load().globalReplyStyle,
                 { graph.settings.saveReplyStyleCatalog(it);service.notifyUser("专属风格已保存，下次生成或刷新时生效") },
                 { value -> graph.settings.update { it.copy(globalReplyStyle=value) };service.notifyUser("全对象风格已保存，下次生成或刷新时生效") },
-                { panel?.closeStyleEditor() })
+                { panel?.closeStyleEditor() },onChooseObject={ entries,selected ->
+                    view.showPage("style-objects",SavedStylePickerView(service,entries,{ entry -> selected(entry);view.popPage() },{ view.popPage() },{ selected(null);view.popPage() }),editable=true)
+                })
             view.fillResult("风格设置已打开；保存后在下一次生成或刷新时生效")
-            view.showStyleEditor(editor) { panelEditingFocus(false) }
-            panelEditingFocus(true)
+            view.showStyleEditor(editor) {}
         }
     }
     private fun panelEditingFocus(editing:Boolean) {

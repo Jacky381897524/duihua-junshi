@@ -7,6 +7,30 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ReplyStyleEditorDeviceTest {
+    @Test fun objectSelectionUsesAnInlineCallbackAndKeepsTheReadNicknameAsAlias() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val catalog=ReplyStyleCatalog().save("特殊昵称👩🏽‍💻","简短")
+            var saved:ReplyStyleCatalog?=null;var pickerOpened=false
+            val editor=ReplyStyleEditorView(InstrumentationRegistry.getInstrumentation().targetContext,"com.tencent.mm","识别昵称",catalog,"",{ saved=it },{}, {},onChooseObject={ entries,select ->
+                pickerOpened=true;select(entries.single())
+            })
+            editor.objectButton.performClick();assertTrue(pickerOpened)
+            assertEquals("特殊昵称👩🏽‍💻",editor.nicknameInput.text.toString())
+            editor.saveButton.performClick()
+            assertEquals("简短",saved?.match("识别昵称","com.tencent.mm")?.style)
+        }
+    }
+    @Test fun saveAndReturnHaveRealTouchHeightEvenInsideAShortOverlay() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val context=InstrumentationRegistry.getInstrumentation().targetContext
+            val editor=ReplyStyleEditorView(context,"com.tencent.mm","测试对象",ReplyStyleCatalog(),"",{}, {}, {})
+            val width=(260*context.resources.displayMetrics.density).toInt()
+            editor.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED))
+            assertTrue(editor.saveButton.measuredHeight>=48*context.resources.displayMetrics.density)
+            val back=(0 until editor.childCount).map { editor.getChildAt(it) }.filterIsInstance<android.widget.Button>().last()
+            assertTrue(back.measuredHeight>=44*context.resources.displayMetrics.density)
+        }
+    }
     @Test fun correctedSpecialNicknameAndRecognitionAliasSaveTogetherInThePanel() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             var saved:ReplyStyleCatalog?=null;var closed=false

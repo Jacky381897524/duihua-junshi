@@ -26,4 +26,8 @@ class PanelPalette(private val context:Context,private val frosted:Boolean=false
         textSize=11f;includeFontPadding=false;minHeight=0;minimumHeight=0;minWidth=0;minimumWidth=0
         setPadding(ViewStyles.dp(context,10f),0,ViewStyles.dp(context,10f),0)
     }
+    fun actionButton(value:String,primary:Boolean=false,heightDp:Int=48,action:()->Unit):Button=button(value,primary,action).apply {
+        textSize=14f;minimumHeight=ViewStyles.dp(context,heightDp.toFloat());minHeight=minimumHeight
+        setPadding(ViewStyles.dp(context,12f),ViewStyles.dp(context,9f),ViewStyles.dp(context,12f),ViewStyles.dp(context,9f))
+    }
 }
