@@ -36,8 +36,8 @@ class MessageAnalysisListView(context:Context,snapshot:ChatSnapshot,onReply:(Cha
         if(rows.isEmpty())content.addView(palette.text("本次没有读到可判断的对方消息",13f))
         viewport.addView(content);viewport.isFillViewport=false
         viewport.setOnScrollChangeListener { _,_,_,_,_->schedule() }
-        viewport.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_->schedule() }
-        content.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_->schedule() }
+        viewport.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_->initializeScroll();schedule() }
+        content.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_->initializeScroll();schedule() }
         addView(viewport,LayoutParams(-1,0,1f))
         val footer=LinearLayout(context).apply { orientation=HORIZONTAL }
         onAutomatic?.let { footer.addView(palette.button("恢复自动接话",action=it).apply { minimumHeight=dp(36) },LayoutParams(0,-2,1f).apply { rightMargin=dp(8) }) }
@@ -46,13 +46,18 @@ class MessageAnalysisListView(context:Context,snapshot:ChatSnapshot,onReply:(Cha
     }
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        post { if(!closed && isAttachedToWindow) { if(!opened) { viewport.fullScroll(ScrollView.FOCUS_DOWN);opened=true };ready=true;schedule() } }
+        post { if(!closed && isAttachedToWindow) { ready=true;initializeScroll();schedule() } }
     }
     // Backgrounding retains the request already paid for; only visible-page work is queued.
     override fun onDetachedFromWindow() { ready=false;removeCallbacks(next);super.onDetachedFromWindow() }
+    private fun initializeScroll() {
+        if(ready && !opened && viewport.height>0 && (viewport.getChildAt(0)?.height ?: 0)>0) {
+            opened=true;viewport.fullScroll(ScrollView.FOCUS_DOWN)
+        }
+    }
     private fun schedule() { removeCallbacks(next);if(!closed && ready)post(next) }
     private fun startVisible() {
-        if(closed || !ready || active!=null || !isAttachedToWindow)return
+        if(closed || !ready || active!=null || !isAttachedToWindow || !isShown)return
         val message=rows.asReversed().firstOrNull { it.id !in attempted && cards[it.id]?.getGlobalVisibleRect(Rect())==true } ?: return
         val card=cards.getValue(message.id);val requestEpoch=epoch
         active=message.id;card.show(null,"正在判断…")
