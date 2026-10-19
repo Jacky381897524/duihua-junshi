@@ -4,6 +4,14 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun modelDraftSaveKeepsLatestUnrelatedStylesAndHistorySettings() {
+        val candidate=SettingsData(profile=ProviderPresets.OPENROUTER.reply("fake").copy(selectedModelId="reply-id"),vision=ProviderPresets.OPENROUTER.vision("fake").copy(selectedModelId="vision-id"))
+        val current=SettingsData(replyStyles=mapOf("contact" to "温柔"),replyStyleAliases=mapOf("alias" to "contact"),historyEnabled=true)
+        val applied=com.loveadvisor.android.settings.ModelSettingsDraft(candidate).applyTo(current)
+        assertEquals("reply-id",applied.profile.selectedModelId)
+        assertEquals(current.replyStyles,applied.replyStyles);assertEquals(current.replyStyleAliases,applied.replyStyleAliases)
+        assertTrue(applied.historyEnabled)
+    }
     @Test fun groupContextDefaultsToOneHundredAndOnlyAllowsSupportedRanges() {
         fun limit(raw:String)=Gson().toJsonTree(AppSettings.decode(raw)).asJsonObject["groupContextLimit"]?.asInt
         assertEquals(100,limit("{}"))

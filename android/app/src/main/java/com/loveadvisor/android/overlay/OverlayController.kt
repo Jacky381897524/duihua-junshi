@@ -1,5 +1,4 @@
 package com.loveadvisor.android.overlay
-import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
@@ -15,9 +14,7 @@ import android.widget.ImageView
 import com.loveadvisor.android.R
 import com.loveadvisor.android.capture.ChatCaptureService
 import com.loveadvisor.android.ui.ViewStyles
-import com.loveadvisor.android.ui.DiagnosticsActivity
-import com.loveadvisor.android.settings.SettingsActivity
-import com.loveadvisor.android.advisor.ConsultationActivity
+import com.loveadvisor.android.settings.*
 import com.loveadvisor.android.input.*
 import com.loveadvisor.core.model.RectI
 import com.loveadvisor.core.overlay.*
@@ -186,10 +183,7 @@ class OverlayController(private val service:ChatCaptureService) {
                 })
             }
         },{ service.refresh() },{ service.captureNow() },{ anchor ->
-            val links=listOf("完整咨询" to ConsultationActivity::class.java,"悬浮窗设置" to com.loveadvisor.android.settings.OverlaySettingsActivity::class.java,"模型设置" to SettingsActivity::class.java,"连接诊断" to DiagnosticsActivity::class.java).map { (label,activity) -> label to {
-                service.startActivity(Intent(service,activity).putExtra("contactTitle",service.currentChatSnapshot?.identity?.displayTitle).putExtra("targetPackage",service.currentChatSnapshot?.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            } }
-            panel?.toggleMenu(listOf("回复风格设置" to { editReplyStyle() })+links,capsuleMenuControls())
+            panel?.toggleMenu(listOf("回复风格设置" to { editReplyStyle() },"悬浮窗设置" to { editOverlaySettings() },"模型设置" to { editModelSettings() }),capsuleMenuControls())
         },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() },frosted=useFrostedWindow,onEditingFocus={ panelEditingFocus(it) })
         view.contentDescription="聊天候选面板"
         panel=view; panelParams=params(1,1,"LoveAdvisorPanel"); panelOnLeft=null
@@ -250,6 +244,30 @@ class OverlayController(private val service:ChatCaptureService) {
             if(android.os.Build.VERSION.SDK_INT>=31 && frostedWindow!=null)frostedWindow?.update(p) else manager.updateViewLayout(view,p)
         }
         layout()
+    }
+    private fun editModelSettings() {
+        val view=panel ?: return
+        val scope=SettingsWorkScope(graph)
+        val host=object:SettingsFormHost {
+            override fun choose(title:String,items:List<String>,selected:Int,onSelected:(Int)->Unit) {
+                view.showPage("model-picker",ModelPickerView(service,title,items,selected,{ index -> view.popPage();onSelected(index) },{ view.popPage() }),editable=true)
+            }
+            override fun <T> work(id:String,task:(com.loveadvisor.core.api.Cancellation)->T,onSuccess:(T)->Unit,onFailure:(String)->Unit)=scope.work(id,task,onSuccess,onFailure)
+            override fun message(text:String)=service.notifyUser(text)
+            override fun close() { view.popPage() }
+        }
+        view.showPage("models",ModelSettingsView(service,graph,host),editable=true,closed={ scope.close() })
+    }
+    private fun editOverlaySettings() {
+        val view=panel ?: return
+        val previous=islandBounds
+        view.showPage("overlay-settings",OverlaySettingsView(service,graph,{
+            view.closeStyleEditor();hide()
+            val mode=if(graph.settings.load().topCapsuleEnabled)OverlayEntryMode.TOP_CAPSULE else OverlayEntryMode.BUBBLE
+            setEntryMode(mode);service.settingsChanged()
+            if(service.overlayAllowed()) { showPanel(mode==OverlayEntryMode.TOP_CAPSULE);if(mode==OverlayEntryMode.TOP_CAPSULE)islandBounds=previous;layout() }
+            service.notifyUser("悬浮窗设置已保存")
+        },{ view.popPage() }),editable=true)
     }
     private fun detachPanel(view:AdvisorPanelView) {
         panelWindow.detach {
