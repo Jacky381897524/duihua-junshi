@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Color
 import android.widget.Button
+import android.widget.LinearLayout
 import com.loveadvisor.android.ui.ViewStyles
 
 /** Native surfaces; frosted colors are used only over a compositor-owned backdrop. */
@@ -28,6 +29,7 @@ class PanelPalette(private val context:Context,private val frosted:Boolean=false
     }
     fun actionButton(value:String,primary:Boolean=false,heightDp:Int=48,action:()->Unit):Button=button(value,primary,action).apply {
         textSize=14f;minimumHeight=ViewStyles.dp(context,heightDp.toFloat());minHeight=minimumHeight
+        layoutParams=LinearLayout.LayoutParams(-1,-2)
         setPadding(ViewStyles.dp(context,12f),ViewStyles.dp(context,9f),ViewStyles.dp(context,12f),ViewStyles.dp(context,9f))
     }
 }

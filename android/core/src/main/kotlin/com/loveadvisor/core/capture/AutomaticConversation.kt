@@ -8,7 +8,10 @@ class AutomaticConversation {
     var updatedAt:Long=0
         private set
 
-    fun restore(snapshot:ChatSnapshot) { current=snapshot.copy(messages=snapshot.messages.takeLast(ConversationContextPolicy.forSnapshot(snapshot))) }
+    fun restore(snapshot:ChatSnapshot) {
+        val used=mutableSetOf<String>()
+        current=snapshot.copy(messages=snapshot.messages.takeLast(ConversationContextPolicy.forSnapshot(snapshot)).map { m -> if(used.add(m.id))m else m.copy(id=java.util.UUID.randomUUID().toString()).also { used.add(it.id) } })
+    }
     fun continues(snapshot:ChatSnapshot):Boolean {
         if(current!=null && (current?.packageName!=snapshot.packageName || current?.identity?.kind!=snapshot.identity?.kind))return false
         val existing=current?.messages.orEmpty(); val visible=snapshot.messages
@@ -42,8 +45,10 @@ class AutomaticConversation {
         val added=if(alreadyObserved) emptyList() else visible.drop(overlap)
         // A manually reread older viewport ends at what is actually visible.
         // Cached later rows must not determine the speaker we are continuing.
-        val context=when { observedAt!=null -> existing.take(observedAt)+visible;entered && overlap==0 -> visible;else -> existing+added }
-        current=snapshot.copy(messages=context.takeLast(ConversationContextPolicy.forSnapshot(snapshot)))
+        val context=when { observedAt!=null -> existing.take(observedAt)+visible.mapIndexed { i,m -> m.copy(id=existing[observedAt+i].id) };entered && overlap==0 -> visible;else -> existing+added }
+        val used=mutableSetOf<String>()
+        val unique=context.map { m -> if(used.add(m.id))m else m.copy(id=java.util.UUID.randomUUID().toString()).also { used.add(it.id) } }
+        current=snapshot.copy(messages=unique.takeLast(ConversationContextPolicy.forSnapshot(snapshot)))
         updatedAt=now
         return current!!.messages.isNotEmpty() && (entered || added.isNotEmpty() && added.last().speaker==Speaker.OTHER)
     }

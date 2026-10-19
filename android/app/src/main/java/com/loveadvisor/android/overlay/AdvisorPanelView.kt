@@ -13,12 +13,16 @@ import com.loveadvisor.core.model.SessionToken
 
 enum class PanelDragMode { TITLE, TOP_GRIP }
 data class CapsuleMenuControls(val locked:Boolean,val scale:Float,val toggleLock:()->Boolean,val resize:(Float,Boolean)->Unit,val finishResize:()->Unit)
-class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,private val onFill:(ReplyPlan,SessionToken)->Unit,private val onRefresh:()->Unit,onRead:()->Unit,onMenu:(View)->Unit,onClose:()->Unit,private val isCurrent:(SessionToken)->Boolean,private val reduced:()->Boolean,private val onDetails:((ReplyPlan,SessionToken,(String)->Unit)->Unit)?=null,dragMode:PanelDragMode=PanelDragMode.TITLE,private val onResize:()->Unit={},private val frosted:Boolean=false,private val onEditingFocus:(Boolean)->Unit={}):FrameLayout(context) {
+class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,private val onFill:(ReplyPlan,SessionToken)->Unit,private val onRefresh:()->Unit,onRead:()->Unit,onMenu:(View)->Unit,onClose:()->Unit,private val isCurrent:(SessionToken)->Boolean,private val reduced:()->Boolean,private val onDetails:((ReplyPlan,SessionToken,(ReplyDetail?,String?)->Unit)->Unit)?=null,dragMode:PanelDragMode=PanelDragMode.TITLE,private val onResize:()->Unit={},private val frosted:Boolean=false,private val onEditingFocus:(Boolean)->Unit={},onAnalyze:()->Unit={}):FrameLayout(context) {
     val dragHandle:View
     private val palette=PanelPalette(context,frosted)
     private val scoreLabel=if(com.loveadvisor.android.AppGraph.get(context).settings.load().judgeProvider=="CUSTOM")"评分" else "Jev"
     private val column=ViewStyles.column(context)
     private val summary:TextView; private val status:TextView; private val scroll:ScrollView
+    private val advice:TextView;private val level:TextView
+    private val analyze:Button
+    private var analysisAvailable=false
+    val currentPageId get()=pages.currentId
     private val cards:LinearLayout; private val refresh:Button; private val read:Button; private val count:TextView
     private var displayed:VisibleBatch?=null
     private var reading=false; private var loading=false; private var filling=false
@@ -51,15 +55,20 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         header.addView(close,LinearLayout.LayoutParams(textRowHeight(28),textRowHeight(28)).apply { leftMargin=dp(6) })
         column.addView(header,rowParams(textRowHeight(28),9))
         val analysisRow=ViewStyles.row(context).apply { gravity=Gravity.CENTER_VERTICAL }
-        summary=palette.text("点击读取信息，分析当前单聊",12f,bold=true).apply { maxLines=3 }
-        analysisRow.addView(summary,LinearLayout.LayoutParams(0,-2,1f).apply { rightMargin=dp(8) })
+        summary=palette.text("对方真实意图：读取后判断",12f,bold=true).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
+        column.addView(summary,rowParams(-2,6))
+        analyze=palette.button("判断分析") { onAnalyze() }.apply { contentDescription="判断分析" }
+        analysisRow.addView(analyze,LinearLayout.LayoutParams(0,textRowHeight(32),1f).apply { rightMargin=dp(8) })
         read=palette.button("读取信息") { onRead() }.apply { contentDescription="读取信息";maxLines=2 }
-        analysisRow.addView(read,LinearLayout.LayoutParams(dp(68),textRowHeight(28)))
+        analysisRow.addView(read,LinearLayout.LayoutParams(0,textRowHeight(32),1f))
         column.addView(analysisRow,rowParams(-2,5))
         status=palette.text("等待点击读取；聊天变化不会自动请求模型",11f,palette.muted).apply { maxLines=2 }
         column.addView(status,rowParams(-2,10))
         val label=ViewStyles.row(context)
-        label.addView(palette.text("候选回复 · 六种思路",11f,palette.muted),LinearLayout.LayoutParams(0,-2,1f))
+        advice=palette.text("建议：先读取当前对话",12f).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
+        column.addView(advice,rowParams(-2,6))
+        level=palette.text("等级 · 待判断",11f,palette.muted)
+        label.addView(level,LinearLayout.LayoutParams(0,-2,1f))
         count=palette.text("0 / 6",11f,palette.muted); label.addView(count)
         column.addView(label,rowParams(-2,7))
         scroll=ScrollView(context).apply { isFillViewport=false; clipToPadding=true; isVerticalScrollBarEnabled=true }
@@ -93,6 +102,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private fun invalidateHeight() { cachedWidth=-1 }
     private fun rowParams(height:Int,bottom:Int)=LinearLayout.LayoutParams(-1,height).apply { bottomMargin=dp(bottom) }
     private fun updateButtons() {
+        analyze.alpha=if(analysisAvailable && !reading && !loading && !filling)1f else .45f
         read.isEnabled=!reading && !loading && !filling; read.text=if(reading) "读取中…" else "读取信息"
         refresh.isEnabled=!reading && !loading && !filling && displayed?.let { isCurrent(it.ticket.session) }==true
         refresh.text=if(loading) "正在生成六条…" else "刷新换一批 · 6 条"
@@ -102,6 +112,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         }
     }
     fun setReading(value:Boolean) { reading=value; updateButtons() }
+    fun setAnalysisAvailable(value:Boolean) { analysisAvailable=value;updateButtons() }
     fun setFilling(value:Boolean) { filling=value; updateButtons() }
     fun fillResult(message:String) { status.text=message;invalidateHeight() }
     fun release() { dismissMenu();closeStyleEditor();stopAnimations() }
@@ -227,20 +238,28 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         status.text=state.error ?: when {
             state.loading && visible!=null -> "保留上一轮 · 正在生成新候选"
             state.loading -> "正在生成并由判断模型排序六条…"
-            visible!=null -> "六种方案，滑动选择 · $scoreLabel 为适合程度"
+            visible!=null -> "判断仅供参考 · $scoreLabel 为候选适合程度"
             else -> "点击读取信息后生成候选；聊天变化不会自动刷新"
         }
         if(visible!=null) {
-            val a=visible.batch.analysis; summary.text="${a.risk?.let { "风险 $it/9 · " } ?: ""}${a.intent}\n${a.action}"
+            val a=visible.batch.analysis
+            val current=isCurrent(visible.ticket.session)
+            summary.text=if(current)"对方真实意图：${a.intent}" else "对方真实意图：等待重新读取"
+            advice.text=if(current)"建议：${a.action}" else "建议：聊天已变化，请重新读取"
+            val grade=ConversationLevel.from(if(current)a.risk else null)
+            level.text="等级 · ${grade.label}${grade.value?.let { " $it/9" }.orEmpty()}"
+            val colors=intArrayOf(0xFF21884D.toInt(),0xFFBF7B13.toInt(),0xFFD64040.toInt())
+            val pos=grade.position
+            level.setTextColor(if(pos==null)palette.muted else android.animation.ArgbEvaluator().evaluate(if(pos<.5f)pos*2 else (pos-.5f)*2,colors[if(pos<.5f)0 else 1],colors[if(pos<.5f)1 else 2]) as Int)
             if(displayed!=visible) {
                 displayed=visible; cards.removeAllViews()
-                visible.batch.replies.forEachIndexed { i,plan -> cards.addView(ReplyCardView(context,i,plan,{ onCopy(plan) },{ onFill(plan,visible.ticket.session) },{ callback -> onDetails?.invoke(plan,visible.ticket.session,callback) ?: callback("该方案采用${plan.strategy.label}策略。") },compact=true,scoreLabel=scoreLabel,frosted=frosted,onContentChanged={ invalidateHeight();onResize() })) }
+                visible.batch.replies.forEachIndexed { i,plan -> cards.addView(ReplyCardView(context,i,plan,{ onCopy(plan) },{ onFill(plan,visible.ticket.session) },{ callback -> onDetails?.invoke(plan,visible.ticket.session,callback) ?: callback(null,"请重新读取后查看详情") },compact=true,scoreLabel=scoreLabel,frosted=frosted,onContentChanged={ invalidateHeight();onResize() })) }
                 scroll.scrollTo(0,0)
                 cards.post { updateCount() }
             }
-        } else { displayed=null; cards.removeAllViews(); summary.text="点击读取信息，分析当前单聊"; count.text="0 / 6" }
+        } else { displayed=null; cards.removeAllViews(); summary.text="对方真实意图：读取后判断";advice.text="建议：先读取当前对话";level.text="等级 · 待判断";level.setTextColor(palette.muted); count.text="0 / 6" }
         updateButtons()
     }
-    fun compact(enabled:Boolean) { if(compacted==enabled)return;compacted=enabled;summary.maxLines=if(enabled) 1 else 3; status.maxLines=if(enabled) 1 else 2;invalidateHeight() }
+    fun compact(enabled:Boolean) { if(compacted==enabled)return;compacted=enabled;summary.maxLines=if(enabled) 1 else 2; status.maxLines=if(enabled) 1 else 2;invalidateHeight() }
     fun stopAnimations() { OverlayAnimator.stop(this); for(i in 0 until cards.childCount) OverlayAnimator.stop(cards.getChildAt(i)) }
 }

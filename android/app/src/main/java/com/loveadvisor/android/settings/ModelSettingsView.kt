@@ -42,6 +42,7 @@ class ModelSettingsView(context:Context,private val graph:AppGraph,private val h
                 graph.controller.invalidate("配置变化"); toast("配置已加密保存"); host.close()
             } catch(e:Exception) { toast(redact(graph.safeError(e))) }
         })
+        body.addView(ViewStyles.button(context,"返回候选面板 / 取消") { host.close() })
     }
     fun refreshJudgeModels(profile:ApiProfile,onModels:(List<ApiModel>)->Unit) {
         work("catalog",{ cancel -> graph.catalog.list(profile,cancel).models },onModels)

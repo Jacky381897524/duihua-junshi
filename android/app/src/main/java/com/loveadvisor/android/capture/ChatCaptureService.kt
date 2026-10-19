@@ -408,12 +408,20 @@ class ChatCaptureService:AccessibilityService() {
         if(manualRead.active!=null || graph.coordinator.state.loading) return
         graph.currentObjectId=null; graph.controller.analyze(snapshot,objectId=null)
     }
-    fun describe(plan:ReplyPlan,token:SessionToken,callback:(String)->Unit) {
-        val snapshot=conversation.current ?: return callback("请先读取当前聊天")
+    fun replyTo(target:com.loveadvisor.core.model.ReplyTarget?) {
+        val snapshot=conversation.current ?: return notifyUser("请先读取当前群聊")
+        if(!overlayAllowed() || snapshot.identity?.kind!=ChatKind.GROUP || graph.tracker.lastSnapshot!=snapshot) { notifyUser("请重新读取当前群聊");return }
+        graph.controller.analyze(snapshot,objectId=null,replyTarget=target)
+    }
+    fun describe(plan:ReplyPlan,token:SessionToken,callback:(com.loveadvisor.core.advisor.ReplyDetail?,String?)->Unit) {
+        val snapshot=conversation.current ?: return callback(null,"请先读取当前聊天")
+        if(!graph.tracker.isCurrent(token))return callback(null,"聊天已变化，请重新读取")
         val cancel=Cancellation()
         worker.execute {
-            val detail=try { graph.automaticAdvisor.detail(graph.inputFor(snapshot,"","",null),plan,cancel) } catch(e:Exception) { graph.safeError(e) }
-            main.post { if(graph.tracker.sameConversation(token)) callback(detail) }
+            val detail=runCatching { graph.automaticAdvisor.detail(graph.inputFor(snapshot,"","",null),plan,cancel) }
+            main.post {
+                if(graph.tracker.isCurrent(token) && graph.coordinator.state.current?.batch?.replies?.any { it===plan }==true)callback(detail.getOrNull(),detail.exceptionOrNull()?.let { graph.safeError(it as? Exception ?: Exception()) })
+            }
         }
     }
     fun confirmDraft(snapshot:ChatSnapshot) { if(ChatApps.supported(snapshot.packageName)) accept(snapshot,manualRead.begin()) }

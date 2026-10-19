@@ -5,7 +5,9 @@ class AdvisorValidator {
     fun validate(batch:AdvisorBatch):ValidationResult {
         val errors=mutableListOf<String>()
         if(batch.replies.size!=6) errors.add("必须恰好六条候选回复")
-        if(batch.compact) {
+        if(batch.kind==com.loveadvisor.core.model.ChatKind.GROUP) {
+            if(batch.replies.any { it.targetMessageId.isNullOrBlank() || it.topic.isNullOrBlank() }) errors.add("群聊候选缺少对应话题或目标消息")
+        } else if(batch.compact) {
             if(batch.replies.none { it.strategy in setOf(Strategy.APPRECIATION,Strategy.TEASING,Strategy.INVITATION) }) errors.add("至少一条恋爱大师的欣赏、调侃或邀约策略")
             if(batch.replies.map { it.strategy }.distinct().size<6) errors.add("六条需使用不同策略")
         } else if(batch.replies.count { it.strategy.romance }<2) errors.add("至少两条明确使用恋爱大师表达、节奏、修复或关系推进策略")

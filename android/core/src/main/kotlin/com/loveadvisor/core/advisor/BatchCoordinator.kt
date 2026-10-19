@@ -11,6 +11,7 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
     private var active:RequestTicket?=null
     private val history=ReplyHistory()
     private var historySession:SessionToken?=null
+    private var target:ReplyTarget?=null
     @Synchronized fun observe(snapshot:ChatSnapshot,message:String?=null) {
         val before=tracker.currentToken
         val token=tracker.update(snapshot) ?: run { invalidate(); return }
@@ -28,11 +29,13 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
         if(same) status(message) else cancelPending(message)
         return same
     }
-    @Synchronized fun begin(snapshot:ChatSnapshot):RefreshRequest? {
+    @Synchronized fun begin(snapshot:ChatSnapshot,replyTarget:ReplyTarget?=null):RefreshRequest? {
         val token=tracker.update(snapshot) ?: run { invalidate(); return null }
-        if(state.loading && active?.session==token) return null
-        if(historySession!=token) { history.clear(); historySession=token }
-        val previous=state.current?.takeIf { it.ticket.session==token }
+        if(state.loading && active?.session==token && target==replyTarget) return null
+        val changed=target!=replyTarget
+        if(historySession!=token || changed) { history.clear(); historySession=token }
+        target=replyTarget
+        val previous=state.current?.takeIf { it.ticket.session==token && !changed }
         val ticket=gate.begin(token); active=ticket
         state=state.copy(current=state.current?.takeIf { tracker.sameConversation(it.ticket.session) },loading=true,error=null,isFailure=false)
         return RefreshRequest(ticket,previous==null,history.previousTexts,previous?.batch?.analysis)

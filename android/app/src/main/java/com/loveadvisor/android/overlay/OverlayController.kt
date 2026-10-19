@@ -40,6 +40,7 @@ class OverlayController(private val service:ChatCaptureService) {
     private var cancelStyleRead:(()->Unit)?=null
     private var confirmation:DraftConfirmWindow?=null
     private var cancelFill:(()->Unit)?=null
+    private var analysisSession:com.loveadvisor.core.model.SessionToken?=null
     private var imeInsetBottom=0
     private val main=Handler(Looper.getMainLooper())
     private val idle=BubbleIdlePolicy()
@@ -184,7 +185,7 @@ class OverlayController(private val service:ChatCaptureService) {
             }
         },{ service.refresh() },{ service.captureNow() },{ anchor ->
             panel?.toggleMenu(listOf("回复风格设置" to { editReplyStyle() },"悬浮窗设置" to { editOverlaySettings() },"模型设置" to { editModelSettings() }),capsuleMenuControls())
-        },{ hide() },{ graph.tracker.sameConversation(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() },frosted=useFrostedWindow,onEditingFocus={ panelEditingFocus(it) })
+        },{ hide() },{ graph.tracker.isCurrent(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() },frosted=useFrostedWindow,onEditingFocus={ panelEditingFocus(it) },onAnalyze={ showMessageAnalysis() })
         view.contentDescription="聊天候选面板"
         panel=view; panelParams=params(1,1,"LoveAdvisorPanel"); panelOnLeft=null
         view.setOnApplyWindowInsetsListener { _,insets ->
@@ -192,7 +193,7 @@ class OverlayController(private val service:ChatCaptureService) {
             if(bottom!=imeInsetBottom) { imeInsetBottom=bottom;view.post { resize() } }
             insets
         }
-        if(native) dragIsland(view.dragHandle) else drag(view.dragHandle); view.setReading(reading); view.setFilling(filling); view.render(state); layout(); attachPanel(view)
+        if(native) dragIsland(view.dragHandle) else drag(view.dragHandle); view.setReading(reading); view.setFilling(filling); view.setAnalysisAvailable(readSnapshot()!=null);view.render(state); layout(); attachPanel(view)
         OverlayAnimator.enter(view,graph.settings.load().reducedMotion,panel=true)
     }
     private fun attachPanel(view:AdvisorPanelView) {
@@ -221,14 +222,21 @@ class OverlayController(private val service:ChatCaptureService) {
             if(panel!==view)return@readStyleNickname
             view.setReading(false)
             if(pkg==null) { service.notifyUser("聊天页面已变化，请重新打开回复风格设置");return@readStyleNickname }
-            val editor=ReplyStyleEditorView(service,pkg,title.orEmpty(),graph.settings.replyStyleCatalog(),graph.settings.load().globalReplyStyle,
-                { graph.settings.saveReplyStyleCatalog(it);service.notifyUser("专属风格已保存，下次生成或刷新时生效") },
-                { value -> graph.settings.update { it.copy(globalReplyStyle=value) };service.notifyUser("全对象风格已保存，下次生成或刷新时生效") },
+            val snapshot=readSnapshot()
+            fun openEditor(kind:com.loveadvisor.core.model.ChatKind) {
+            val name=if(snapshot?.packageName==pkg && title==snapshot.identity?.displayTitle)snapshot.replyStyleTitle ?: title.orEmpty() else title.orEmpty()
+            val global=graph.settings.load().let { if(kind==com.loveadvisor.core.model.ChatKind.GROUP)it.globalGroupReplyStyle else it.globalReplyStyle }
+            val editor=ReplyStyleEditorView(service,pkg,name,graph.settings.replyStyleCatalog(kind),global,
+                { graph.settings.saveReplyStyleCatalog(it,kind);service.notifyUser("专属风格已保存，下次生成或刷新时生效") },
+                { value -> graph.settings.update { if(kind==com.loveadvisor.core.model.ChatKind.GROUP)it.copy(globalGroupReplyStyle=value) else it.copy(globalReplyStyle=value) };service.notifyUser("全对象风格已保存，下次生成或刷新时生效") },
                 { panel?.closeStyleEditor() },onChooseObject={ entries,selected ->
                     view.showPage("style-objects",SavedStylePickerView(service,entries,{ entry -> selected(entry);view.popPage() },{ view.popPage() },{ selected(null);view.popPage() }),editable=true)
-                })
+                },kind=kind)
             view.fillResult("风格设置已打开；保存后在下一次生成或刷新时生效")
             view.showStyleEditor(editor) {}
+            }
+            if(snapshot?.identity?.kind!=null)openEditor(snapshot.identity!!.kind)
+            else view.showPage("style-chat-kind",ModelPickerView(service,"当前对话类型（读取后可自动确认）",listOf("单聊专属 / 全对象风格","群聊专属 / 全部群聊风格"),-1,{ index -> view.popPage();openEditor(if(index==1)com.loveadvisor.core.model.ChatKind.GROUP else com.loveadvisor.core.model.ChatKind.DIRECT) },{ view.popPage() }),editable=true)
         }
     }
     private fun panelEditingFocus(editing:Boolean) {
@@ -275,7 +283,35 @@ class OverlayController(private val service:ChatCaptureService) {
             if(host!=null && android.os.Build.VERSION.SDK_INT>=31)host.hide() else manager.removeViewImmediate(view)
         }
     }
-    fun render(value:BatchState) { if(state==value) return; state=value; panel?.render(value);updateCapsuleStatus();layout() }
+    private fun readSnapshot()=service.currentChatSnapshot?.takeIf { graph.tracker.currentToken!=null && graph.tracker.lastSnapshot==it && service.overlayAllowed() }
+    private fun showMessageAnalysis() {
+        val view=panel ?: return
+        val snapshot=readSnapshot()
+        if(snapshot==null) { service.notifyUser("请先读取信息，才能判断分析");return }
+        if(reading || filling || state.loading) { service.notifyUser("请等待当前操作完成");return }
+        val token=graph.tracker.currentToken ?: return
+        val controller=com.loveadvisor.android.analysis.MessageAnalysisController(graph)
+        analysisSession=token
+        val group=snapshot.identity?.kind==com.loveadvisor.core.model.ChatKind.GROUP
+        fun current()=panel===view && graph.tracker.isCurrent(token) && readSnapshot()==snapshot
+        val list=MessageAnalysisListView(service,snapshot,{ message ->
+            if(!current()) { service.notifyUser("对话已变化，请重新读取");return@MessageAnalysisListView }
+            val detail=MessageJudgmentView(service,message,{ view.popPage() },if(group)({
+                if(current()) { view.closeStyleEditor();service.replyTo(com.loveadvisor.core.model.ReplyTarget(message.id)) } else service.notifyUser("对话已变化，请重新读取")
+            }) else null)
+            var cancel:(()->Unit)?=null
+            fun load() { detail.show(null,"正在判断这句话…");cancel?.invoke();cancel=controller.analyze(snapshot,message.id) { result,error ->
+                if(current())detail.show(result,error,retry=if(error!=null)({ load() }) else null)
+            } }
+            view.showPage("judgment-detail",detail,editable=true,closed={ cancel?.invoke() });load()
+        },{ view.popPage() },if(group)({ if(current()) { view.closeStyleEditor();service.replyTo(null) } }) else null)
+        view.showPage("judgment-list",list,editable=true,closed={ controller.close();analysisSession=null })
+    }
+    fun render(value:BatchState) {
+        state=value
+        if(analysisSession?.let { !graph.tracker.isCurrent(it) }==true)panel?.closeStyleEditor()
+        panel?.setAnalysisAvailable(readSnapshot()!=null);panel?.render(value);updateCapsuleStatus();layout()
+    }
     fun showFromIsland():Boolean { showPanel(true);return panelWindow.registered }
     fun setEntryMode(value:OverlayEntryMode) {
         if(entryMode==value) return

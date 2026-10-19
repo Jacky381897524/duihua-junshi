@@ -47,8 +47,10 @@ class AppGraph private constructor(val context:Context) {
     fun inputFor(snapshot:ChatSnapshot,goal:String,background:String,objectId:String?):AdvisorInput {
         var config=settings.load()
         if(ChatApps.supported(snapshot.packageName)) {
-            val catalog=ReplyStyleCatalog(config.replyStyles,config.replyStyleTitles,config.replyStyleApps,config.replyStyleAliases).rememberTitle(snapshot.replyStyleTitle ?: snapshot.identity?.displayTitle,snapshot.packageName)
-            if(catalog.titles!=config.replyStyleTitles || catalog.apps!=config.replyStyleApps) { settings.update { it.copy(replyStyleTitles=catalog.titles,replyStyleApps=catalog.apps) };config=settings.load() }
+            val kind=snapshot.identity?.kind ?: ChatKind.DIRECT
+            val catalog=settings.replyStyleCatalog(kind)
+            val remembered=catalog.rememberTitle(snapshot.replyStyleTitle ?: snapshot.identity?.displayTitle,snapshot.packageName)
+            if(remembered!=catalog) { settings.saveReplyStyleCatalog(remembered,kind);config=settings.load() }
         }
         val data=profiles.load(); val target=data.objects.find { it.id==objectId }
         val context=if(target!=null) memory.context(target.id) else null
@@ -56,7 +58,7 @@ class AppGraph private constructor(val context:Context) {
         val extra=BackgroundBuilder.build(data.self,target,context,history,background)
         val query=KnowledgeQuery(snapshot.messages.takeLast(80).joinToString("\n") { it.text },goal,data.notes)
         val selected=if(ChatApps.supported(snapshot.packageName)) KnowledgeRouter().unified(query,knowledge.documents) else KnowledgeRouter().select(query,knowledge.documents)
-        return AdvisorInput(config.profile,snapshot,goal,extra,selected,ReplyStyles.forSnapshot(config.replyStyles,snapshot,config.globalReplyStyle,config.replyStyleTitles,config.replyStyleApps,config.replyStyleAliases))
+        return AdvisorInput(config.profile,snapshot,goal,extra,selected,GroupReplyStyle.resolve(snapshot,settings.replyStyleCatalog(ChatKind.DIRECT),config.globalReplyStyle,settings.replyStyleCatalog(ChatKind.GROUP),config.globalGroupReplyStyle))
     }
     fun generate(input:AdvisorInput,common:AdvisorAnalysis?,previous:List<String>,cancel:Cancellation):AdvisorBatch {
         val config=settings.load()

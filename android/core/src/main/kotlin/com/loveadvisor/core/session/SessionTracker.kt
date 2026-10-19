@@ -45,7 +45,7 @@ class SessionTracker {
         val digest = MessageDigest.getInstance("SHA-256")
         digest.update(snapshot.identity?.kind?.name.orEmpty().toByteArray(Charsets.UTF_8))
         for (m in snapshot.messages) {
-            for (part in listOf(m.speaker.name, m.sender.orEmpty(), m.text,m.quote?.author.orEmpty(),m.quote?.text.orEmpty(),m.kind.name)) {
+            for (part in listOf(m.id,m.speaker.name, m.sender.orEmpty(), m.text,m.quote?.author.orEmpty(),m.quote?.text.orEmpty(),(m.kind as? MessageKind)?.name ?: "TEXT")) {
                 val data = part.toByteArray(Charsets.UTF_8)
                 digest.update("${data.size}:".toByteArray(Charsets.UTF_8)); digest.update(data)
             }

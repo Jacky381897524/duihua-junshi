@@ -18,6 +18,7 @@ class SettingsWorkScope(private val graph:AppGraph) {
     private val worker=Executors.newFixedThreadPool(2)
     private val tasks=mutableMapOf<String,Cancellation>()
     private var active=true
+    fun cancel(id:String) { tasks.remove(id)?.cancel() }
     fun <T> work(id:String,task:(Cancellation)->T,success:(T)->Unit,failure:(String)->Unit) {
         if(!active)return
         tasks.remove(id)?.cancel()

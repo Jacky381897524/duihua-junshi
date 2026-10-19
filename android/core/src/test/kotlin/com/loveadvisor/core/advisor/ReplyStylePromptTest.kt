@@ -22,7 +22,8 @@ class ReplyStylePromptTest {
                 val answers=(0..5).associate { "candidate_$it" to mapOf("score" to 3.0) }+mapOf("true_intent" to mapOf("choice" to "casual_chat"),"danger_level" to mapOf("score" to 0.0),"best_action" to mapOf("choice" to "acknowledge"))
                 return ApiResponse(200,Gson().toJson(mapOf("answers" to answers)))
             }
-            val content=Gson().toJson(mapOf("replies" to AdvisorFixtures.valid().replies.map { mapOf("strategy" to it.strategy.name,"text" to it.text) }))
+            val detail=JsonParser.parseString(request.body).asJsonObject["messages"].toString().contains("whenToUse")
+            val content=if(detail) Gson().toJson(ReplyDetail("承接原话","适合分享时","不要猜测","继续聊","留空间","尊重拒绝")) else Gson().toJson(mapOf("replies" to AdvisorFixtures.valid().replies.map { mapOf("strategy" to it.strategy.name,"text" to it.text) }))
             return ApiResponse(200,Gson().toJson(mapOf("choices" to listOf(mapOf("message" to mapOf("content" to content))))))
         }
     }

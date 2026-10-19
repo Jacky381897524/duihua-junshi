@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.3.11 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.4.0 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,15 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.4.0", "群聊接话、逐句判断与面板设置", listOf(
+                "回复风格、悬浮窗与模型设置全部可在面板内完成；移除面板中的完整咨询与连接诊断，保留主页入口。",
+                "用同一窗口的对象选择页替代弹出下拉框，自动带入已读昵称，扩大保存与返回按钮；专属风格保存在本机，清缓存不会删除。",
+                "面板显示简短意图、行动建议与彩色安全等级，候选详情分为六项短内容。",
+                "新增判断分析：选择已读的对方消息，结合此前对话推测意图、需要和建议动作；仅展示模型实际返回权重，未返回时明确标注。",
+                "支持微信、QQ与抖音群聊识别：按成员和话题共生成六条，或围绕指定消息生成六条；只填草稿，不自动@、引用或发送。",
+                "群聊上下文默认100条，可设50/100/200，只累计手动读取内容；群聊风格与单聊风格隔离。边缘裁切消息单独跳过，保留最后一句是我时继续我的话。",
+                "为后续记忆与关系估计预留证据接口，本版不显示好感度，不新增自动长期记忆。识别效果与各平台真群操作仍需设备验收。"
+            )),
             Release("V1.3.11", "特殊昵称与面板内风格设置", listOf(
                 "昵称匹配保留外文、花体、符号和组合表情，兼容等价字符编码，不再排除含标点或较长表情的标题。",
                 "面板菜单可直接设置当前对象专属风格或全对象风格，无需跳转主页；昵称可粘贴校正，也可选择已保存对象关联。",

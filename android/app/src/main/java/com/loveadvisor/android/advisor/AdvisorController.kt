@@ -13,21 +13,20 @@ class AdvisorController(private val graph:AppGraph) {
     private val main=Handler(Looper.getMainLooper())
     private val worker=Executors.newSingleThreadExecutor()
     private var cancel:Cancellation?=null
-    private data class Context(val snapshot:ChatSnapshot,val goal:String,val background:String,val objectId:String?)
+    private data class Context(val snapshot:ChatSnapshot,val goal:String,val background:String,val objectId:String?,val replyTarget:ReplyTarget?)
     private var lastContext:Context?=null
     private val listeners=linkedSetOf<(BatchState)->Unit>()
     fun listen(listener:(BatchState)->Unit) { listeners.add(listener); listener(graph.coordinator.state) }
     fun unlisten(listener:(BatchState)->Unit) { listeners.remove(listener) }
     fun publish() { listeners.toList().forEach { it(graph.coordinator.state) } }
-    fun analyze(snapshot:ChatSnapshot,goal:String=graph.currentGoal,background:String="",objectId:String?=graph.currentObjectId) {
-        val pending=graph.coordinator.begin(snapshot) ?: return
-        lastContext=Context(snapshot,goal,background,objectId)
-        val memoryRevision=graph.memory.state().revision
+    fun analyze(snapshot:ChatSnapshot,goal:String=graph.currentGoal,background:String="",objectId:String?=graph.currentObjectId,replyTarget:ReplyTarget?=null) {
+        val pending=graph.coordinator.begin(snapshot,replyTarget) ?: return
+        lastContext=Context(snapshot,goal,background,objectId,replyTarget)
         cancel?.cancel(); val current=Cancellation(); cancel=current; publish()
         val started=System.currentTimeMillis()
         worker.execute {
             try {
-                val input=graph.inputFor(snapshot,goal,background,objectId)
+                val input=graph.inputFor(snapshot,goal,background,objectId).copy(replyTarget=replyTarget)
                 val batch=graph.generate(input,pending.analysis,pending.previous,current); current.check()
                 main.post {
                     if(!current.cancelled && graph.coordinator.complete(pending.requestTicket,batch)) {
@@ -37,8 +36,7 @@ class AdvisorController(private val graph:AppGraph) {
                             try { graph.profiles.withExisting(objectId) { target ->
                                 if(current.cancelled || !graph.tracker.isCurrent(pending.requestTicket.session)) return@withExisting
                                 if(graph.settings.load().historyEnabled) graph.profiles.rememberChat(target.id,snapshot)
-                                val updates=batch.analysis.inferences.take(5).filter { it.isNotBlank() }.mapIndexed { index,text -> MemoryItem("analysis-hypothesis-$index",target.id,MemoryKind.HYPOTHESIS,text.take(200),true) }
-                                graph.memory.apply(MemoryUpdate(target.id,updates,expectedRevision=memoryRevision))
+
                             } } catch(_:Exception) { graph.record("memory",0,null,"failure") }
                         }
                     }
@@ -47,7 +45,7 @@ class AdvisorController(private val graph:AppGraph) {
             catch(e:Exception) { graph.record("advisor",System.currentTimeMillis()-started,(e as? ApiException)?.status,"failure"); main.post { if(!current.cancelled) { graph.coordinator.fail(pending.requestTicket,graph.safeError(e)); publish() } } }
         }
     }
-    fun refreshIndependent():Boolean { val context=lastContext ?: return false; if(context.snapshot.packageName!=graph.context.packageName || graph.tracker.lastSnapshot!=context.snapshot) return false; analyze(context.snapshot,context.goal,context.background,context.objectId); return true }
+    fun refreshIndependent():Boolean { val context=lastContext ?: return false; if(context.snapshot.packageName!=graph.context.packageName || graph.tracker.lastSnapshot!=context.snapshot) return false; analyze(context.snapshot,context.goal,context.background,context.objectId,context.replyTarget); return true }
     fun observe(snapshot:ChatSnapshot,message:String?=null) {
         val old=graph.tracker.currentToken
         graph.coordinator.observe(snapshot,message)

@@ -4,6 +4,13 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun groupStylesAreSeparateAndSurviveReopening() {
+        val original=SettingsData(replyStyles=mapOf("same" to "私聊"),groupReplyStyles=mapOf("same" to "群聊"),globalReplyStyle="私聊全部",globalGroupReplyStyle="群聊全部",groupReplyStyleAliases=mapOf("alias" to "same"))
+        val loaded=AppSettings.decode(Gson().toJson(original))
+        assertEquals("群聊",loaded.groupReplyStyles["same"]);assertEquals("私聊",loaded.replyStyles["same"])
+        assertEquals("群聊全部",loaded.globalGroupReplyStyle);assertEquals("same",loaded.groupReplyStyleAliases["alias"])
+        assertTrue(AppSettings.decode("{}").groupReplyStyles.isEmpty())
+    }
     @Test fun modelDraftSaveKeepsLatestUnrelatedStylesAndHistorySettings() {
         val candidate=SettingsData(profile=ProviderPresets.OPENROUTER.reply("fake").copy(selectedModelId="reply-id"),vision=ProviderPresets.OPENROUTER.vision("fake").copy(selectedModelId="vision-id"))
         val current=SettingsData(replyStyles=mapOf("contact" to "温柔"),replyStyleAliases=mapOf("alias" to "contact"),historyEnabled=true)
