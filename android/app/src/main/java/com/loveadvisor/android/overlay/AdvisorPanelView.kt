@@ -255,7 +255,8 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         status.text=state.error ?: when {
             state.loading && visible!=null -> "保留上一轮 · 正在生成新候选"
             state.loading -> "正在生成并由判断模型排序六条…"
-            visible!=null -> "判断仅供参考 · $scoreLabel 为候选适合程度"
+            visible!=null -> if(visible.batch.kind==com.loveadvisor.core.model.ChatKind.DIRECT && visible.batch.replies.firstOrNull()?.targetMessageId!=null)
+                "回复原话：${visible.batch.replies.first().targetLabel.orEmpty()}" else "判断仅供参考 · $scoreLabel 为候选适合程度"
             else -> "点击读取信息后生成候选；聊天变化不会自动刷新"
         }
         if(visible!=null) {

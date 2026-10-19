@@ -26,6 +26,18 @@ class CaptureSchedulingTest {
         val windows=listOf(AppWindow(1,false,false,4))
         assertEquals(1,ForegroundWindowSelector.select(windows,overlayActive=true)?.id)
     }
+    @Test fun focusedEditorOrKeyboardRetainsTheTopVisibleAppWithoutAnActiveFlag() {
+        val windows=listOf(AppWindow(1,false,false,4))
+        assertEquals(1,ForegroundWindowSelector.select(windows,overlayFocused=true)?.id)
+        assertNull(ForegroundWindowSelector.select(windows))
+        val switched=windows+AppWindow(2,true,false,5)
+        assertEquals(2,ForegroundWindowSelector.select(switched,overlayFocused=true)?.id)
+    }
+    @Test fun oemKeyboardNotListedAsAnInstalledImeIsStillNotAnAppSwitch() {
+        val pkg="com.example.securekeyboard"
+        assertFalse(CaptureEventPolicy.foregroundAppChanged(pkg,"$pkg.KeyboardWindow",emptySet(),inputMethodWindow=true))
+        assertTrue(CaptureEventPolicy.foregroundAppChanged(pkg,"$pkg.SettingsActivity",emptySet(),inputMethodWindow=false))
+    }
     @Test fun overlayFallbackUsesTopApplicationInsteadOfHiddenWechat() {
         val windows=listOf(AppWindow(1,false,false,2),AppWindow(2,false,false,4))
         assertEquals(2,ForegroundWindowSelector.select(windows,overlayActive=true)?.id)

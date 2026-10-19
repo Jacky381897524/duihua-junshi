@@ -10,10 +10,10 @@ class GroupReplyTargetsTest {
         val plans=(1..6).map { AdvisorFixtures.valid().replies.first().copy(id="$it",strategy=Strategy.ACKNOWLEDGE,text="我接着说第${it}句",targetMessageId="a",topic="吃饭") }
         val batch=AdvisorFixtures.valid().copy(replies=plans,compact=true,kind=ChatKind.GROUP)
         assertTrue(AdvisorValidator().validate(batch).valid)
-        assertTrue(GroupReplyTargets.valid(input,plans))
-        assertFalse(GroupReplyTargets.valid(input,plans.map { it.copy(targetMessageId="b") }))
-        assertFalse(GroupReplyTargets.valid(input.copy(replyTarget=ReplyTarget("c")),plans))
-        assertFalse(GroupReplyTargets.valid(input,plans.map { it.copy(targetMessageId="missing") }))
+        assertTrue(ReplyTargets.valid(input,plans))
+        assertFalse(ReplyTargets.valid(input,plans.map { it.copy(targetMessageId="b") }))
+        assertFalse(ReplyTargets.valid(input.copy(replyTarget=ReplyTarget("c")),plans))
+        assertFalse(ReplyTargets.valid(input,plans.map { it.copy(targetMessageId="missing") }))
     }
     @Test fun switchingTargetRejectsEarlierRequest() {
         val tracker=com.loveadvisor.core.session.SessionTracker();val coordinator=BatchCoordinator(tracker,com.loveadvisor.core.session.RequestGate(tracker))

@@ -293,19 +293,18 @@ class OverlayController(private val service:ChatCaptureService) {
         val token=graph.tracker.currentToken ?: return
         val controller=analysisController ?: com.loveadvisor.android.analysis.MessageAnalysisController(graph).also { analysisController=it }
         analysisSession=token
-        val group=snapshot.identity?.kind==com.loveadvisor.core.model.ChatKind.GROUP
         fun current()=panel===view && graph.tracker.isCurrent(token) && readSnapshot()==snapshot
         val list=MessageAnalysisListView(service,snapshot,{ message ->
             if(!current()) { service.notifyUser("对话已变化，请重新读取");return@MessageAnalysisListView }
-            val detail=MessageJudgmentView(service,message,{ view.popPage() },if(group)({
+            val detail=MessageJudgmentView(service,message,{ view.popPage() },{
                 if(current()) { view.closeStyleEditor();service.replyTo(com.loveadvisor.core.model.ReplyTarget(message.id)) } else service.notifyUser("对话已变化，请重新读取")
-            }) else null)
+            })
             var cancel:(()->Unit)?=null
             fun load() { detail.show(null,"正在判断这句话…");cancel?.invoke();cancel=controller.analyze(snapshot,message.id) { result,error ->
                 if(current())detail.show(result,error,retry=if(error!=null)({ load() }) else null)
             } }
             view.showPage("judgment-detail",detail,editable=true,closed={ cancel?.invoke() });load()
-        },{ view.popPage() },if(group)({ if(current()) { view.closeStyleEditor();service.replyTo(null) } }) else null)
+        },{ view.popPage() },{ if(current()) { view.closeStyleEditor();service.replyTo(null) } })
         view.showPage("judgment-list",list,editable=true,closed={ controller.cancel();analysisSession=null })
     }
     fun render(value:BatchState) {

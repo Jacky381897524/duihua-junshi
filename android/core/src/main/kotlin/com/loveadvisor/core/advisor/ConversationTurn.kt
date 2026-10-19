@@ -8,14 +8,15 @@ object ConversationTurn {
     fun data(snapshot:ChatSnapshot,target:ReplyTarget?=null):Map<String,String> {
         require(snapshot.messages.isNotEmpty() && snapshot.messages.none { it.speaker==Speaker.UNKNOWN }) { "消息归属未明确，请重新读取" }
         val last=snapshot.messages.last()
+        val lastTurn=if(snapshot.identity?.kind==ChatKind.DIRECT)snapshot.messages.takeLastWhile { it.speaker==last.speaker } else listOf(last)
         if(target!=null) {
             val selected=snapshot.messages.singleOrNull { it.id==target.messageId && it.speaker==Speaker.OTHER }
             require(selected!=null) { "指定消息已变化，请重新读取" }
             return mapOf("replyAs" to "ME","lastSpeaker" to last.speaker.name,"lastMessageId" to last.id,"lastMessageText" to last.text.take(1200),"responseMode" to "REPLY_TARGET","targetMessageId" to selected.id,"targetMessageText" to selected.text.take(1200),"targetSender" to selected.sender.orEmpty(),"turnInstruction" to "六条均以ME身份围绕targetMessageId指定原话回答。完整已读对话只作上下文，目标不改为最新消息，不与我后续已说过的话矛盾或重复，不编造新的对方回应。")
         }
         return mapOf("replyAs" to "ME","lastSpeaker" to last.speaker.name,"lastMessageId" to last.id,
-            "lastMessageText" to last.text.take(1200),"lastOtherMessageText" to snapshot.messages.lastOrNull { it.speaker==Speaker.OTHER }?.text.orEmpty().take(1200),
+            "lastMessageText" to last.text.take(1200),"lastTurnText" to lastTurn.joinToString("\n") { it.text.take(1200) }.takeLast(6000),"lastOtherMessageText" to snapshot.messages.lastOrNull { it.speaker==Speaker.OTHER }?.text.orEmpty().take(1200),
             "responseMode" to if(last.speaker==Speaker.ME)"CONTINUE_SELF" else "REPLY_OTHER",
-            "turnInstruction" to if(last.speaker==Speaker.ME)"六条均接着我最后一句继续说，分析完整上下文，不模拟对方回应" else "六条均以我身份回应对方，分析完整上下文")
+            "turnInstruction" to if(last.speaker==Speaker.ME)"六条均接着我最后一句继续说，分析完整上下文，不模拟对方回应" else "六条均以我身份回应对方，分析完整上下文；单聊结合lastTurnText中对方这一轮连续发言，末尾称呼或表情不能覆盖前面的追问，要接住尚未回答的问题")
     }
 }

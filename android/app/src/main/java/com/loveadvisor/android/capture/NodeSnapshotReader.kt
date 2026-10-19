@@ -17,8 +17,8 @@ class NodeSnapshotReader(private val service:AccessibilityService) {
     private fun applicationWindow():android.view.accessibility.AccessibilityWindowInfo? {
         val windows=service.windows
         val apps=windows.filter { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
-        val overlayActive=windows.any { (it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY || it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD) && it.isActive }
-        val selected=ForegroundWindowSelector.select(apps.map { AppWindow(it.id,it.isFocused,it.isActive,it.layer) },overlayActive) ?: return null
+        val transient=windows.filter { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY || it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+        val selected=ForegroundWindowSelector.select(apps.map { AppWindow(it.id,it.isFocused,it.isActive,it.layer) },overlayActive=transient.any { it.isActive },overlayFocused=transient.any { it.isFocused }) ?: return null
         return apps.firstOrNull { it.id==selected.id }
     }
     /** Passive foreground detection reads package/window metadata only, never message nodes. */

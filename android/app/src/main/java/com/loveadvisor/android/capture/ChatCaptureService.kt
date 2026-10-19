@@ -121,7 +121,8 @@ class ChatCaptureService:AccessibilityService() {
         val structural=event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED || event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         // Content/text/scroll events do not collect chat nodes, take screenshots, or start requests.
         if(!structural || !CaptureEventPolicy.shouldObserve(pkg,true,packageName)) return
-        if(event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && CaptureEventPolicy.foregroundAppChanged(pkg,event.className?.toString().orEmpty(),imePackages)) {
+        val inputMethodEvent=event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && windows.any { it.id==event.windowId && it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+        if(event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && CaptureEventPolicy.foregroundAppChanged(pkg,event.className?.toString().orEmpty(),imePackages,inputMethodEvent)) {
             leaveForeground(); return
         }
         if(event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && CaptureEventPolicy.navigationChanged(pkg,event.className?.toString().orEmpty())) {
@@ -416,7 +417,8 @@ class ChatCaptureService:AccessibilityService() {
     }
     fun replyTo(target:com.loveadvisor.core.model.ReplyTarget?) {
         val snapshot=conversation.current ?: return notifyUser("请先读取当前群聊")
-        if(!overlayAllowed() || snapshot.identity?.kind!=ChatKind.GROUP || graph.tracker.lastSnapshot!=snapshot) { notifyUser("请重新读取当前群聊");return }
+        if(!overlayAllowed() || snapshot.identity?.kind !in setOf(ChatKind.DIRECT,ChatKind.GROUP) || graph.tracker.lastSnapshot!=snapshot) { notifyUser("请重新读取当前对话");return }
+        if(target!=null && snapshot.messages.count { it.id==target.messageId && it.speaker==Speaker.OTHER }!=1) { notifyUser("请选择已读的对方消息");return }
         graph.controller.analyze(snapshot,objectId=null,replyTarget=target)
     }
     fun describe(plan:ReplyPlan,token:SessionToken,callback:(com.loveadvisor.core.advisor.ReplyDetail?,String?)->Unit) {

@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.4.2 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.4.3 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,12 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.4.3", "输入焦点与单聊选句回复", listOf(
+                "修正键盘或面板取得焦点时可能被误判为离开聊天的窗口选择；输入框实际退出问题仍需设备验收。",
+                "单聊可在判断分析里选择对方一句话，判断后围绕原话生成六条；刷新保留目标，面板显示对应原话，可恢复自动接话。",
+                "默认接话综合对方同一轮连续消息，避免只回答末尾称呼而忽略前面的追问；保留最后一句是我时继续我的话。",
+                "模型设置补充局域网HTTP说明；官方HTTPS接口无需打开。"
+            )),
             Release("V1.4.2", "候选操作按钮恢复紧凑比例", listOf(
                 "面板中的复制、填入、详情改为按文字宽度排列的短按钮，保留最小宽度与间距，取消等分铺满整行。"
             )),

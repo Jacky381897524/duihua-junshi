@@ -36,6 +36,7 @@ class JudgeSettingsForm(private val context:Context,private val host:SettingsFor
             }
         })
         custom.addView(ui.toggle("允许局域网 HTTP",allowHttp) { allowHttp=it })
+        custom.addView(ui.text("仅自建的 http://192.168… 等本地服务需要开启；HTTPS 官方接口无需开启。HTTP 不加密传输。",12f,ViewStyles.MUTED))
         custom.addView(ui.text("使用兼容 /chat/completions 的接口；先测试再保存。",12f,ViewStyles.MUTED))
         card.addView(normal);card.addView(custom);card.addView(status)
         source.setOnClickListener {

@@ -127,6 +127,7 @@ class ModelSettingsView(context:Context,private val graph:AppGraph,private val h
             val manual=ui.field("目录不可用时填写官方模型 ID"); card.addView(manual)
             card.addView(ui.button("采用此模型 ID") { val id=manual.text.toString().trim(); if(id.isBlank() || id.any { it.isISOControl() }) toast("模型 ID 无效") else { selected=id; revision++; showSelection() } })
             card.addView(ui.toggle("允许局域网 HTTP",allowHttp) { allowHttp=it; revision++; resolved=null })
+            card.addView(ui.text("仅自建的 http://192.168… 等本地服务需要开启；HTTPS 官方接口无需开启。HTTP 不加密传输。",12f,ViewStyles.MUTED))
         }
         private fun choose() {
             if(models.isEmpty()) { toast("请先刷新模型目录");return }
