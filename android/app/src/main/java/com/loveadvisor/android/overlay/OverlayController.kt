@@ -194,7 +194,7 @@ class OverlayController(private val service:ChatCaptureService) {
             if(bottom!=imeInsetBottom) { imeInsetBottom=bottom;view.post { resize() } }
             insets
         }
-        if(native) dragIsland(view.dragHandle) else drag(view.dragHandle); view.setReading(reading); view.setFilling(filling); view.setAnalysisAvailable(readSnapshot()!=null);view.render(state); layout(); attachPanel(view)
+        if(native) dragIsland(view.dragHandle) else drag(view.dragHandle); view.setReading(reading); view.setFilling(filling);view.setReadContext(readSnapshot()?.identity?.displayTitle);view.setAnalysisAvailable(readSnapshot()!=null);view.render(state); layout(); attachPanel(view)
         OverlayAnimator.enter(view,graph.settings.load().reducedMotion,panel=true)
     }
     private fun attachPanel(view:AdvisorPanelView) {
@@ -276,7 +276,7 @@ class OverlayController(private val service:ChatCaptureService) {
             setEntryMode(mode);service.settingsChanged()
             if(service.overlayAllowed()) { showPanel(mode==OverlayEntryMode.TOP_CAPSULE);if(mode==OverlayEntryMode.TOP_CAPSULE)islandBounds=previous;layout() }
             service.notifyUser("悬浮窗设置已保存")
-        },{ view.popPage() }),editable=true)
+        },{ view.popPage() },compact=true),editable=true)
     }
     private fun detachPanel(view:AdvisorPanelView) {
         panelWindow.detach {
@@ -284,7 +284,7 @@ class OverlayController(private val service:ChatCaptureService) {
             if(host!=null && android.os.Build.VERSION.SDK_INT>=31)host.hide() else manager.removeViewImmediate(view)
         }
     }
-    private fun readSnapshot()=service.currentChatSnapshot?.takeIf { graph.tracker.currentToken!=null && graph.tracker.lastSnapshot==it && service.overlayAllowed() }
+    private fun readSnapshot()=service.currentChatSnapshot?.takeIf { graph.tracker.currentToken!=null && graph.tracker.lastSnapshot==it }
     private fun showMessageAnalysis() {
         val view=panel ?: return
         val snapshot=readSnapshot()
@@ -310,7 +310,7 @@ class OverlayController(private val service:ChatCaptureService) {
     fun render(value:BatchState) {
         state=value
         if(analysisSession?.let { !graph.tracker.isCurrent(it) }==true) { panel?.closeStyleEditor();analysisController?.invalidate() }
-        panel?.setAnalysisAvailable(readSnapshot()!=null);panel?.render(value);updateCapsuleStatus();layout()
+        panel?.setReadContext(readSnapshot()?.identity?.displayTitle);panel?.setAnalysisAvailable(readSnapshot()!=null);panel?.render(value);updateCapsuleStatus();layout()
     }
     fun showFromIsland():Boolean { showPanel(true);return panelWindow.registered }
     fun setEntryMode(value:OverlayEntryMode) {
@@ -322,6 +322,14 @@ class OverlayController(private val service:ChatCaptureService) {
     }
     fun setReading(value:Boolean) { reading=value; panel?.setReading(value);updateCapsuleStatus();service.islandReading(value);layout() }
     fun themeChanged() { val expanded=panel!=null;val native=islandPanel;hide();if(expanded && service.overlayAllowed())showPanel(native) }
+    /** A foreground transition hides surfaces, but is not a request to discard an editor draft. */
+    fun suspendForBackground() {
+        main.removeCallbacks(autoHide);idle.pause();stopEdgeMotion();dragging=false
+        cancelFill?.invoke();cancelFill=null;filling=false;confirmation?.close();confirmation=null
+        panel?.let { it.stopAnimations();detachPanel(it) }
+        bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } }
+        capsule?.let { OverlayAnimator.stop(it);capsuleWindow.detach { manager.removeViewImmediate(it) } }
+    }
     fun hide() {
         val expanded=panel!=null
         cancelStyleRead?.invoke();cancelStyleRead=null
@@ -414,7 +422,7 @@ class OverlayController(private val service:ChatCaptureService) {
             val initial=OverlayGeometry.measure(a,InsetsI(),null,service.resources.displayMetrics.density)
             // A complete settings menu may be taller than the normal three-candidate panel.
             // Still respect the current keyboard/composer-safe viewport; small screens scroll.
-            val maxHeight=if(panel!!.currentPageId in setOf("models","model-picker"))minOf(initial.heightPx,(a.height*.78f).toInt()) else if(panel!!.menuExpanded)a.height else initial.heightPx
+            val maxHeight=if(panel!!.currentPageId=="overlay-settings")(a.height*.72f).toInt() else if(panel!!.currentPageId in setOf("models","model-picker"))minOf(initial.heightPx,(a.height*.78f).toInt()) else if(panel!!.menuExpanded)a.height else initial.heightPx
             val measured=initial.copy(heightPx=panel!!.preferredHeight(initial.widthPx).coerceIn(1,maxHeight.coerceAtLeast(1)))
             if(islandPanel) {
                 val opened=IslandPanelGeometry.open(measured,a,ViewStyles.dp(service,12f))

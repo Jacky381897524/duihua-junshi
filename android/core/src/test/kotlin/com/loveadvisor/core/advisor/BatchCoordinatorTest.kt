@@ -5,9 +5,9 @@ import com.loveadvisor.core.capture.WindowSnapshot
 import org.junit.Assert.*
 import org.junit.Test
 class BatchCoordinatorTest {
-    @Test fun islandReturnsToWaitingAfterLeavingACompletedConversation() {
+    @Test fun islandKeepsTheCompletedManualReadWhenCaptureIsPaused() {
         show();c.pauseCapture("返回后点击图标展开")
-        assertEquals("待读取",com.loveadvisor.core.overlay.NativeIslandEntryPolicy.status(false,c.state,false))
+        assertEquals("6条候选",com.loveadvisor.core.overlay.NativeIslandEntryPolicy.status(false,c.state,true))
     }
     @Test fun islandShowsActualFailuresButNeutralStatusClearsTheFailure() {
         val pending=c.begin(chat)!!;c.fail(pending.requestTicket,"接口超时")
@@ -35,11 +35,11 @@ class BatchCoordinatorTest {
     private fun show(batch:AdvisorBatch=AdvisorFixtures.valid()):VisibleBatch {
         val request=c.begin(chat)!!; assertTrue(c.complete(request.requestTicket,batch)); return c.state.current!!
     }
-    @Test fun leavingWechatKeepsCopyableCandidatesButCancelsWorkAndFill() {
+    @Test fun pausingCaptureKeepsUsableReadContextButCancelsPendingWork() {
         val old=show(); val pending=c.begin(chat)!!
         c.pauseCapture("已暂停读取")
         assertEquals(old,c.state.current); assertFalse(c.state.loading)
-        assertFalse(tracker.sameConversation(old.ticket.session))
+        assertTrue(tracker.sameConversation(old.ticket.session))
         assertFalse(c.complete(pending.requestTicket,AdvisorFixtures.valid()))
         assertEquals("已暂停读取",c.state.error)
     }

@@ -9,7 +9,8 @@ object ForegroundWindowSelector {
 object CaptureEventPolicy {
     fun foregroundAppChanged(pkg:String?,windowClass:String,imePackages:Set<String>,inputMethodWindow:Boolean=false):Boolean=
         !inputMethodWindow && pkg!=null && !ChatApps.supported(pkg) && pkg!="com.android.systemui" && pkg !in imePackages && windowClass.startsWith("$pkg.")
-    fun shouldObserve(pkg:String?,structural:Boolean,ownPackage:String)=pkg!=ownPackage && (ChatApps.supported(pkg) || structural)
+    fun shouldObserve(pkg:String?,structural:Boolean,ownPackage:String,transientWindow:Boolean=false)=
+        !transientWindow && (structural || pkg!=ownPackage && ChatApps.supported(pkg))
     fun navigationChanged(pkg:String?,windowClass:String)=ChatApps.supported(pkg) && windowClass.startsWith("$pkg.") &&
         (windowClass.endsWith("Activity") || windowClass.endsWith("UI")) && !windowClass.contains(".widget.")
 }

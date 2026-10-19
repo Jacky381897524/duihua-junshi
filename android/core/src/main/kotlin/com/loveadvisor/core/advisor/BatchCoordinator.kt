@@ -4,8 +4,10 @@ import com.loveadvisor.core.session.*
 import com.loveadvisor.core.capture.WindowSnapshot
 class BatchCoordinator(private val tracker:SessionTracker,private val gate:RequestGate) {
     @Synchronized fun pauseCapture(message:String) {
-        gate.cancel(); active=null; tracker.invalidate("capture-paused")
-        history.clear(); historySession=null; state=state.copy(loading=false,error=message,isFailure=false)
+        // Pausing screen capture revokes pending work, not the user's last manual read.
+        // Only a successful new read or explicit invalidation replaces that context.
+        gate.cancel(); active=null
+        state=state.copy(loading=false,error=message,isFailure=false)
     }
     var state=BatchState(); private set
     private var active:RequestTicket?=null

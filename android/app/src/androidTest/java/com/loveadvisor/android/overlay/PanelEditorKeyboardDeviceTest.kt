@@ -40,6 +40,14 @@ class PanelEditorKeyboardDeviceTest {
                 assertEquals("reply-style",panel.currentPageId)
                 assertEquals("尚未保存的风格草稿",editor.styleInput.text.toString())
                 assertTrue(editor.styleInput.hasFocus())
+                // A keyboard/configuration notification must resize this editor, not recreate candidates.
+                service.onConfigurationChanged(android.content.res.Configuration(service.resources.configuration))
+                assertSame(panel,panelField.get(controller))
+                assertEquals("reply-style",panel.currentPageId)
+                controller.suspendForBackground();service.ensureOverlay()
+                assertSame(panel,panelField.get(controller))
+                assertTrue(panel.isAttachedToWindow)
+                assertEquals("尚未保存的风格草稿",editor.styleInput.text.toString())
             }
         } finally {
             instrumentation.runOnMainSync {

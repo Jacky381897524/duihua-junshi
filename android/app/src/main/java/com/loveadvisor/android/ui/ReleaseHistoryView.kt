@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.4.3 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.4.4 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,12 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.4.4", "保留已读内容与面板草稿", listOf(
+                "后台返回和面板选句不再清空上次手动读取的内容，单聊与群聊共用；恢复面板不自动读取或调用模型。面板标出已读对象，成功手动读取新内容才更新上下文。",
+                "设置页临时隐藏保留原面板与未保存草稿；键盘和覆盖层按窗口类型处理，配置变化只调整布局。真机键盘表现待验收。",
+                "缩小面板内悬浮窗设置的字号、控件和间距，保存/返回并排，限制页面高度并保留滚动。",
+                "继续核对填入时的当前聊天和输入框；本地重新核验不请求模型。系统截图限制仍按要求搁置。"
+            )),
             Release("V1.4.3", "输入焦点与单聊选句回复", listOf(
                 "修正键盘或面板取得焦点时可能被误判为离开聊天的窗口选择；输入框实际退出问题仍需设备验收。",
                 "单聊可在判断分析里选择对方一句话，判断后围绕原话生成六条；刷新保留目标，面板显示对应原话，可恢复自动接话。",

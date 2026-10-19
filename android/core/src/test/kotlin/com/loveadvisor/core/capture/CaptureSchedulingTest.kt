@@ -3,6 +3,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CaptureSchedulingTest {
+    @Test fun ownActivityEventsAreCheckedAgainstTheActualForegroundWindow() {
+        assertTrue(CaptureEventPolicy.shouldObserve("com.loveadvisor.android",true,"com.loveadvisor.android"))
+        assertFalse(CaptureEventPolicy.shouldObserve("com.loveadvisor.android",false,"com.loveadvisor.android"))
+    }
+    @Test fun overlayAndKeyboardWindowEventsNeverLookLikeActivityNavigation() {
+        assertFalse(CaptureEventPolicy.shouldObserve("com.loveadvisor.android",true,"com.loveadvisor.android",transientWindow=true))
+        assertFalse(CaptureEventPolicy.shouldObserve("com.example.securekeyboard",true,"com.loveadvisor.android",transientWindow=true))
+    }
     @Test fun launcherAndOtherActivityImmediatelyInvalidateOldWechatRead() {
         assertTrue(CaptureEventPolicy.foregroundAppChanged("com.bbk.launcher2","com.bbk.launcher2.Launcher",emptySet()))
         assertTrue(CaptureEventPolicy.foregroundAppChanged("com.example.other","com.example.other.ChatActivity",emptySet()))
