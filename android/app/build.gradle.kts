@@ -7,13 +7,14 @@ android {
         applicationId = "com.loveadvisor.android"
         minSdk = 30
         targetSdk = 35
-        versionCode = 34
-        versionName = "V1.4.4"
+        versionCode = 35
+        versionName = "V1.4.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
+    buildFeatures { buildConfig = true }
     packaging { jniLibs { useLegacyPackaging = false } }
     signingConfigs { getByName("debug") {
         val configuredStore=System.getenv("LOVEADVISOR_SIGNING_STORE")

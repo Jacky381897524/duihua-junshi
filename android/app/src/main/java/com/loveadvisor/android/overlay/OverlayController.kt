@@ -299,16 +299,11 @@ class OverlayController(private val service:ChatCaptureService) {
         fun current()=panel===view && graph.tracker.isCurrent(token) && readSnapshot()==snapshot
         val list=MessageAnalysisListView(service,snapshot,{ message ->
             if(!current()) { service.notifyUser("对话已变化，请重新读取");return@MessageAnalysisListView }
-            val detail=MessageJudgmentView(service,message,{ view.popPage() },{
-                if(current()) { view.closeStyleEditor();service.replyTo(com.loveadvisor.core.model.ReplyTarget(message.id)) } else service.notifyUser("对话已变化，请重新读取")
-            })
-            var cancel:(()->Unit)?=null
-            fun load() { detail.show(null,"正在判断这句话…");cancel?.invoke();cancel=controller.analyze(snapshot,message.id) { result,error ->
-                if(current())detail.show(result,error,retry=if(error!=null)({ load() }) else null)
-            } }
-            view.showPage("judgment-detail",detail,editable=true,closed={ cancel?.invoke() });load()
-        },{ view.popPage() },{ if(current()) { view.closeStyleEditor();service.replyTo(null) } })
-        view.showPage("judgment-list",list,editable=true,closed={ controller.cancel();analysisSession=null })
+            view.closeStyleEditor();service.replyTo(com.loveadvisor.core.model.ReplyTarget(message.id))
+        },{ view.popPage() },{ if(current()) { view.closeStyleEditor();service.replyTo(null) } },{ message,callback ->
+            if(current())controller.analyze(snapshot,message.id,callback) else { callback(null,"请重新读取后判断");{} }
+        })
+        view.showPage("judgment-list",list,closed={ list.close();controller.cancel();analysisSession=null })
     }
     fun render(value:BatchState) {
         state=value
@@ -425,7 +420,7 @@ class OverlayController(private val service:ChatCaptureService) {
             val initial=OverlayGeometry.measure(a,InsetsI(),null,service.resources.displayMetrics.density)
             // A complete settings menu may be taller than the normal three-candidate panel.
             // Still respect the current keyboard/composer-safe viewport; small screens scroll.
-            val maxHeight=if(panel!!.currentPageId=="overlay-settings")(a.height*.72f).toInt() else if(panel!!.currentPageId in setOf("models","model-picker"))minOf(initial.heightPx,(a.height*.78f).toInt()) else if(panel!!.menuExpanded)a.height else initial.heightPx
+            val maxHeight=if(panel!!.currentPageId=="overlay-settings")(a.height*.72f).toInt() else if(panel!!.currentPageId in setOf("models","model-picker"))minOf(initial.heightPx,(a.height*.78f).toInt()) else if(panel!!.currentPageId=="judgment-list")initial.heightPx else if(panel!!.menuExpanded)a.height else initial.heightPx
             val measured=initial.copy(heightPx=panel!!.preferredHeight(initial.widthPx).coerceIn(1,maxHeight.coerceAtLeast(1)))
             if(islandPanel) {
                 val opened=IslandPanelGeometry.open(measured,a,ViewStyles.dp(service,12f))

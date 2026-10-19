@@ -82,6 +82,7 @@ class ChatCaptureService:AccessibilityService() {
     @Volatile private var navigation=0L
     private var foregroundRetries=0
     private var imePackages=emptySet<String>()
+    private var stopStartup:(()->Unit)?=null
     private var visualCancel:Cancellation?=null
     private var visualFill:VisualFillReference?=null
     var lastFillDiagnosticStatus="尚未点击填入"; private set
@@ -99,6 +100,16 @@ class ChatCaptureService:AccessibilityService() {
     } }
     override fun onServiceConnected() {
         stopping=false
+        stopStartup?.invoke()
+        val startup=com.loveadvisor.android.AppStartup.get(this)
+        stopStartup=startup.observe { state ->
+            if(!stopping && state.phase==com.loveadvisor.core.startup.StartupPhase.READY)connectReadyService()
+            else if(state.phase in setOf(com.loveadvisor.core.startup.StartupPhase.SLOW,com.loveadvisor.core.startup.StartupPhase.FAILED))diagnosticStatus="正在等待本地设置；打开对话军师查看加载状态"
+        }
+        startup.start()
+    }
+    private fun connectReadyService() {
+        if(::reader.isInitialized) { ensureOverlay();return }
         instance=this; reader=NodeSnapshotReader(this); overlay=OverlayController(this);island=com.loveadvisor.android.island.NativeIslandCoordinator(this,overlay)
         graph.tracker.lastSnapshot?.takeIf { ChatApps.supported(it.packageName) }?.let { conversation.restore(it);identity=it.identity }
         imePackages=runCatching { getSystemService(android.view.inputmethod.InputMethodManager::class.java).inputMethodList.map { it.packageName }.toSet() }.getOrDefault(emptySet())
@@ -523,6 +534,6 @@ class ChatCaptureService:AccessibilityService() {
     }
     override fun onInterrupt() { stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.suspend();readGate.invalidate();cancelScreenRead();if(::overlay.isInitialized)overlay.suspendForBackground() }
     override fun onConfigurationChanged(newConfig:android.content.res.Configuration) { super.onConfigurationChanged(newConfig);if(::overlay.isInitialized)overlay.resize();if(::reader.isInitialized)checkForeground() }
-    override fun onDestroy() { stopping=true;graph.controller.awaitCapture("辅助服务已停止；已保留已读内容");stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.destroy(); main.removeCallbacksAndMessages(null); readGate.invalidate();cancelScreenRead();if(::overlay.isInitialized)overlay.destroy();worker.shutdownNow();nativeWorker.shutdownNow();runCatching { unregisterReceiver(receiver) };instance=null;super.onDestroy() }
+    override fun onDestroy() { stopping=true;stopStartup?.invoke();stopStartup=null;if(::reader.isInitialized)graph.controller.awaitCapture("辅助服务已停止；已保留已读内容");stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.destroy(); main.removeCallbacksAndMessages(null); readGate.invalidate();cancelScreenRead();if(::overlay.isInitialized)overlay.destroy();worker.shutdownNow();nativeWorker.shutdownNow();runCatching { unregisterReceiver(receiver) };if(instance===this)instance=null;super.onDestroy() }
     companion object { @Volatile var instance:ChatCaptureService?=null; private set }
 }

@@ -48,9 +48,9 @@ class AutomaticAdvisor(private val client:ChatCompletionClient,private val judge
     }
     fun detail(input:AdvisorInput,plan:ReplyPlan,cancel:Cancellation):ReplyDetail {
         val raw=client.complete(input.profile,listOf(
-            PromptMessage("system",ConversationTurn.instruction+"\n依据实际对话和候选，分清事实与推测，不编造未读历史，尊重拒绝。只返回JSON：{\"why\":\"为什么这样说\",\"whenToUse\":\"适用条件\",\"caution\":\"注意事项\",\"positive\":\"对方积极回应后续\",\"ambiguous\":\"对方含糊回应后续\",\"rejection\":\"对方拒绝后尊重边界的后续\"}。前三项各最多60字，后三项各最多35字。每项一句短话。"),
+            PromptMessage("system",ConversationTurn.instruction+"\n依据实际对话和候选，分清事实与推测，不编造未读历史，尊重拒绝。只返回JSON：{\"why\":\"怎么接：一句具体建议\",\"whenToUse\":\"适用条件\",\"caution\":\"注意事项\",\"positive\":\"对方积极回应后的下一步\",\"ambiguous\":\"对方含糊回应后的下一步\",\"rejection\":\"对方拒绝后尊重边界的下一步\"}。why、whenToUse各最多36字，caution最多30字，后三项各最多28字。每项一句短话，不重复候选，不写段落，不含字段标题。"),
             PromptMessage("user",Gson().toJson(mapOf("messages" to input.snapshot.messages.takeLast(ConversationContextPolicy.forSnapshot(input.snapshot)),"replyStyle" to input.replyStyle.take(1500),"reply" to plan.text,"targetMessageId" to plan.targetMessageId,"strategy" to plan.strategy.name)+ConversationTurn.data(input.snapshot,plan.targetMessageId?.let(::ReplyTarget))))
         ),cancel,650)
-        return try { ReplyDetailCodec.decode(raw) } catch(_:Exception) { throw ApiException(message="详情格式不完整或内容过长，请重试") }
+        return try { ReplyDetailCodec.decode(raw) } catch(_:Exception) { throw ApiException(message="建议格式不完整或内容过长，请重试") }
     }
 }

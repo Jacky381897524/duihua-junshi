@@ -10,6 +10,7 @@ class DiagnosticsActivity:BaseActivity() {
         val wechat=runCatching { @Suppress("DEPRECATION") val p=packageManager.getPackageInfo("com.tencent.mm",0); "${p.versionName} / ${p.longVersionCode}" }.getOrDefault("未读取到")
         val config=graph.settings.load(); val text="设备：${Build.MANUFACTURER} ${Build.MODEL}\nAndroid：${Build.VERSION.RELEASE}（API ${Build.VERSION.SDK_INT}）\n微信：$wechat\n悬浮窗：${Settings.canDrawOverlays(this)}\n服务连接：${ChatCaptureService.instance!=null}\n选定模型：${config.profile.selectedModelId ?: "未选择"}\n\n脱敏事件（最近100条）：\n${graph.diagnosticText()}"
         body.addView(ViewStyles.text(this,text,15f).apply { setTextIsSelectable(true) })
+        body.addView(ViewStyles.text(this,"本次启动：${com.loveadvisor.android.AppStartup.description(this)}",13f,ViewStyles.MUTED))
         val service=ChatCaptureService.instance
         body.addView(ViewStyles.text(this,"入口：${if(config.topCapsuleEnabled) "左上角胶囊（无需通知）" else "普通悬浮球"}",14f))
         body.addView(ViewStyles.button(this,"悬浮窗与左上角胶囊设置") { open(com.loveadvisor.android.settings.OverlaySettingsActivity::class.java) })

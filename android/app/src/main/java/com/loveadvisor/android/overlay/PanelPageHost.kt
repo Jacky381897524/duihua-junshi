@@ -8,9 +8,12 @@ import android.widget.ScrollView
 import com.loveadvisor.android.ui.ViewStyles
 import com.loveadvisor.core.overlay.PanelPageStack
 
+/** Pages with pinned controls own their internal scroll viewport. */
+interface PanelViewportPage { val preferredViewportHeightDp:Int }
+
 /** All settings and selectors live inside the existing accessibility window. */
 class PanelPageHost(context:Context,private val onFocusChanged:(Boolean)->Unit,private val onChanged:()->Unit):FrameLayout(context) {
-    private data class Page(val viewport:ScrollView,val content:View,val closed:()->Unit)
+    private data class Page(val viewport:ViewGroup,val content:View,val closed:()->Unit)
     private val stack=PanelPageStack()
     private val pages=mutableListOf<Page>()
     val hasPages get()=stack.depth>0
@@ -24,7 +27,9 @@ class PanelPageHost(context:Context,private val onFocusChanged:(Boolean)->Unit,p
         if(!stack.push(id,editable))return
         pages.lastOrNull()?.viewport?.visibility=GONE
         (view.parent as? ViewGroup)?.removeView(view)
-        val viewport=ScrollView(context).apply {
+        val viewport=if(view is PanelViewportPage)FrameLayout(context).apply {
+            setPadding(dp(14),dp(14),dp(14),dp(12));addView(view,LayoutParams(-1,-1));isClickable=true
+        } else ScrollView(context).apply {
             setPadding(dp(14),dp(14),dp(14),dp(12));clipToPadding=true;isFillViewport=false
             addView(view,LayoutParams(-1,-2));isClickable=true
         }
@@ -46,6 +51,7 @@ class PanelPageHost(context:Context,private val onFocusChanged:(Boolean)->Unit,p
     }
     fun preferredHeight(widthPx:Int):Int {
         val page=pages.lastOrNull() ?: return 0
+        (page.content as? PanelViewportPage)?.let { return dp(it.preferredViewportHeightDp) }
         page.content.measure(MeasureSpec.makeMeasureSpec((widthPx-dp(28)).coerceAtLeast(1),MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
         return maxOf(dp(240),page.content.measuredHeight+dp(26))
     }

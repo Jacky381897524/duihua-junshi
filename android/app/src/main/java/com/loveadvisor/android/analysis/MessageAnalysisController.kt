@@ -21,7 +21,7 @@ class MessageAnalysisController(private val graph:AppGraph) {
         fun valid()=gate.accept(key,ticket) && graph.tracker.isCurrent(session) && revision()==key.judgeRevision
         val hit=cache.get(key)
         if(hit!=null)Handler(Looper.getMainLooper()).post { if(valid())onResult(hit,null) }
-        else scope.work("judgment",{ cancel -> graph.judge.inspect(profile,context,"",cancel) },{ result ->
+        else scope.work("judgment",{ cancel -> graph.judge.inspect(profile,context,"",cancel,targetId) },{ result ->
             if(valid()) { cache.put(key,result);onResult(result,null) }
             else if(gate.accept(key,ticket))onResult(null,"对话或判断模型已变化，请重新选择")
         },{ error -> if(gate.accept(key,ticket))onResult(null,if(valid())error else "对话或模型已变化，请重新读取") })

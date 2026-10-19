@@ -8,7 +8,7 @@ import com.loveadvisor.core.model.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticPanelTest {
-    @Test fun cachedHeightTracksNewRepliesAndExpandedDetails() {
+    @Test fun cachedHeightTracksNewRepliesButAdviceKeepsPanelHeight() {
         val i=InstrumentationRegistry.getInstrumentation()
         i.runOnMainSync {
             val panel=AdvisorPanelView(i.targetContext,{},{_,_->},{},{},{},{},{true},{true})
@@ -24,8 +24,8 @@ class AutomaticPanelTest {
             val long=panel.preferredHeight(width);assertTrue(long>short)
             show("短句",3);assertEquals(short,panel.preferredHeight(width))
             fun all(v:View):List<View> = listOf(v)+if(v is ViewGroup)(0 until v.childCount).flatMap { all(v.getChildAt(it)) } else emptyList()
-            all(panel).filterIsInstance<Button>().first { it.text=="详情" }.performClick()
-            assertTrue("展开详情后不可复用旧的卡片高度",panel.preferredHeight(width)>short)
+            all(panel).filterIsInstance<Button>().first { it.text=="建议" }.performClick()
+            assertEquals("建议在候选区滚动，不把面板撑高",short,panel.preferredHeight(width))
         }
     }
     @Test fun emptyPanelGrowsForCompleteMenuAndShrinksWhenDismissed() {

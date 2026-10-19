@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.4.4 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.4.5 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,12 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.4.5", "同页选句判断与紧凑建议", listOf(
+                "判断分析直接在每句原话下展示判断，右侧短按钮可指定回复；单聊与群聊均参考全部已读对话，所选目标不会被后续发言替换。",
+                "只对当前可见的句子依次判断，已判断结果在本次已读上下文中复用；不自动重新读取聊天。参考原文不再占用页面。",
+                "详情改为建议，面板内只显示怎么接、注意和一个后续分支；积极、含糊、拒绝可切换，每次只展开一条，面板保持原高度。",
+                "主页和无障碍服务共用后台本地设置初始化，慢加载有明确状态，失败可重试；不清除配置、不修改已有无障碍授权。覆盖安装首次启动仍需真机验证。"
+            )),
             Release("V1.4.4", "保留已读内容与面板草稿", listOf(
                 "后台返回和面板选句不再清空上次手动读取的内容，单聊与群聊共用；恢复面板不自动读取或调用模型。面板标出已读对象，成功手动读取新内容才更新上下文。",
                 "设置页临时隐藏保留原面板与未保存草稿；键盘和覆盖层按窗口类型处理，配置变化只调整布局。真机键盘表现待验收。",

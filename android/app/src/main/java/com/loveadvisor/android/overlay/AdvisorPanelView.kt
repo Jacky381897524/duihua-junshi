@@ -215,7 +215,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             val card=cards.getChildAt(i)
             card.measure(MeasureSpec.makeMeasureSpec(available,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
             val lp=card.layoutParams as LinearLayout.LayoutParams
-            height+=card.measuredHeight+lp.topMargin+if(i<2) lp.bottomMargin else 0
+            height+=card.measuredHeight-((card as? ReplyCardView)?.expandedAdviceHeight ?: 0)+lp.topMargin+if(i<2) lp.bottomMargin else 0
         }
         menuContent?.let { menu ->
             menu.measure(MeasureSpec.makeMeasureSpec(menuWidth(widthPx),MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
@@ -274,7 +274,9 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             level.setTextColor(palette.levelColor(grade))
             if(displayed!=visible) {
                 displayed=visible; cards.removeAllViews()
-                visible.batch.replies.forEachIndexed { i,plan -> cards.addView(ReplyCardView(context,i,plan,{ onCopy(plan) },{ onFill(plan,visible.ticket.session) },{ callback -> onDetails?.invoke(plan,visible.ticket.session,callback) ?: callback(null,"请重新读取后查看详情") },compact=true,scoreLabel=scoreLabel,frosted=frosted,onContentChanged={ invalidateHeight();onResize() })) }
+                visible.batch.replies.forEachIndexed { i,plan -> cards.addView(ReplyCardView(context,i,plan,{ onCopy(plan) },{ onFill(plan,visible.ticket.session) },{ callback -> onDetails?.invoke(plan,visible.ticket.session,callback) ?: callback(null,"请重新读取后查看建议") },compact=true,scoreLabel=scoreLabel,frosted=frosted,onContentChanged={ invalidateHeight();onResize() },onAdviceOpened={ opened ->
+                    for(at in 0 until cards.childCount)(cards.getChildAt(at) as? ReplyCardView)?.takeIf { it!==opened }?.collapseAdvice()
+                })) }
                 scroll.scrollTo(0,0)
                 cards.post { updateCount() }
             }

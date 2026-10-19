@@ -10,22 +10,47 @@ import com.loveadvisor.android.settings.OverlaySettingsActivity
 import com.loveadvisor.android.knowledge.KnowledgeActivity
 import com.loveadvisor.android.memory.ProfilesActivity
 import com.loveadvisor.android.advisor.*
+import com.loveadvisor.core.startup.StartupPhase
 
 class MainActivity : BaseActivity() {
     private var cacheBusy=false
     private var cacheBytes:Long?=null
     private var cacheButton:android.widget.Button?=null
+    private var stopStartup:(()->Unit)?=null
+    private var ready=false
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        render()
+        val startup=AppStartup.get(this)
+        stopStartup=startup.observe { state ->
+            ready=state.phase==StartupPhase.READY
+            if(ready) { render();ChatCaptureService.instance?.ensureOverlay() }
+            else renderStartup(state.phase)
+        }
+        renderStartup(startup.state.phase);startup.start()
     }
-    override fun onResume() { super.onResume(); render() }
+    override fun onResume() { super.onResume();if(ready)render() }
+    override fun onDestroy() { stopStartup?.invoke();stopStartup=null;super.onDestroy() }
+    private fun renderStartup(phase:StartupPhase) {
+        page("对话军师","正在准备本地设置")
+        val waiting=phase==StartupPhase.IDLE || phase==StartupPhase.LOADING
+        body.addView(ViewStyles.text(this,when(phase) {
+            StartupPhase.SLOW -> "本地设置读取较慢，页面仍可操作。读取完成后会自动进入主页。"
+            StartupPhase.FAILED -> "本地设置暂时未能读取，已有配置和专属风格均保留。可以点击重试。"
+            else -> "正在读取本地设置…"
+        },16f))
+        if(!waiting) {
+            body.addView(ViewStyles.text(this,AppStartup.description(this),12f,ViewStyles.MUTED))
+            body.addView(ViewStyles.button(this,if(phase==StartupPhase.SLOW)"检查读取状态" else "重试加载",true) { AppStartup.start(this);renderStartup(AppStartup.get(this).state.phase) })
+            body.addView(ViewStyles.button(this,"查看系统无障碍状态") { SystemSettingsNavigator(this).accessibility() })
+        }
+    }
     private fun render() {
         page("对话军师","读懂当下，再决定怎么回应。")
         body.addView(ViewStyles.button(this,"回复风格设置") { open(ReplyStyleActivity::class.java) })
         val hero=ViewStyles.card(this); body.addView(hero)
         hero.addView(ViewStyles.text(this,"一个对话，六种思路。",26f,bold=true)); hero.addView(ViewStyles.text(this,"结合聊天副驾、狗头军师与恋爱大师的知识，给你不同策略的候选回复。",15f,ViewStyles.MUTED))
         hero.addView(ViewStyles.button(this,"连接聊天悬浮窗",true) { open(PermissionsActivity::class.java) })
+        hero.addView(ViewStyles.text(this,"无障碍：${AccessibilityConnectionStatus.label(this)}",12f,ViewStyles.MUTED))
         hero.addView(ViewStyles.button(this,"完整咨询 / 润色草稿") { open(ConsultationActivity::class.java) })
         val config=graph.settings.load(); val model=ViewStyles.card(this); body.addView(model); model.addView(ViewStyles.text(this,"你的模型",19f,bold=true)); model.addView(ViewStyles.text(this,config.profile.selectedModelId ?: "填写服务地址与密钥，刷新选择模型",14f,ViewStyles.MUTED)); model.addView(ViewStyles.button(this,"模型与连接设置") { open(SettingsActivity::class.java) })
         body.addView(ViewStyles.switch(this,"启用聊天悬浮窗",config.overlayEnabled) { enabled -> graph.settings.update { it.copy(overlayEnabled=enabled) }; if(!enabled && com.loveadvisor.core.capture.CapturePolicy.invalidateForDisabledCapture(graph.tracker.currentToken)) graph.controller.invalidate(); ChatCaptureService.instance?.settingsChanged() })
@@ -54,7 +79,7 @@ class MainActivity : BaseActivity() {
         authorName.addView(ViewStyles.text(this,"作者",12f,ViewStyles.MUTED))
         authorName.addView(ViewStyles.text(this,"海街寺庙",17f,bold=true))
         authorRow.addView(authorName,android.widget.LinearLayout.LayoutParams(0,-2,1f))
-        authorRow.addView(ViewStyles.text(this,"V1.3.10",12f,ViewStyles.MUTED))
+        authorRow.addView(ViewStyles.text(this,BuildConfig.VERSION_NAME,12f,ViewStyles.MUTED))
     }
     private fun cacheLabel()=if(cacheBusy) "正在清理缓存…" else "清除缓存"+cacheBytes?.let { " · "+android.text.format.Formatter.formatFileSize(this,it) }.orEmpty()
     private fun updateCacheButton() { cacheButton?.apply { text=cacheLabel();isEnabled=!cacheBusy } }
