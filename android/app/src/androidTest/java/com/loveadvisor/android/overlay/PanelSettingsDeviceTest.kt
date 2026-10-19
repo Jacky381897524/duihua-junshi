@@ -9,6 +9,25 @@ import com.loveadvisor.core.api.Cancellation
 import org.junit.Assert.*
 import org.junit.Test
 class PanelSettingsDeviceTest {
+    @Test fun overlappingCatalogRequestsCanAllFinishAndRefreshAgain() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val context=InstrumentationRegistry.getInstrumentation().targetContext
+            var requests=0;val pending=mutableMapOf<String,(String)->Unit>()
+            val host=object:SettingsFormHost {
+                override fun choose(title:String,items:List<String>,selected:Int,onSelected:(Int)->Unit) {}
+                override fun <T> work(id:String,task:(Cancellation)->T,onSuccess:(T)->Unit,onFailure:(String)->Unit) { requests++;pending[id]=onFailure }
+                override fun message(text:String) {}
+                override fun close() {}
+            }
+            val view=ModelSettingsView(context,AppGraph.get(context),host)
+            fun all(v:View):List<View> = listOf(v)+if(v is ViewGroup)(0 until v.childCount).flatMap { all(v.getChildAt(it)) } else emptyList()
+            val buttons=all(view).filterIsInstance<Button>().filter { it.text=="刷新模型" }
+            assertEquals(2,buttons.size);buttons.forEach { it.performClick() }
+            assertEquals(2,pending.size)
+            pending.values.toList().forEach { it("模拟失败，重试") };pending.clear()
+            buttons.forEach { it.performClick() };assertEquals(4,requests)
+        }
+    }
     @Test fun openingModelSettingsIsLocalAndProviderSelectionUsesThePanelHost() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val context=InstrumentationRegistry.getInstrumentation().targetContext

@@ -18,6 +18,7 @@ class PanelPalette(private val context:Context,private val frosted:Boolean=false
     val selected=if(frosted) if(dark)0xCC233B61.toInt() else 0xB3DDEBFF.toInt() else if(dark) 0xFF233B61.toInt() else 0xFFEAF2FF.toInt()
     val opaqueSurface=if(dark) 0xFF1B2536.toInt() else 0xFFFAFBFD.toInt()
     val surface=if(frosted) if(dark)0xD91B2536.toInt() else 0xCCFAFBFD.toInt() else opaqueSurface
+    fun levelColor(level:com.loveadvisor.core.advisor.ConversationLevel)=level.tint(if(dark)0xFF79DFA4.toInt() else 0xFF21884D.toInt(),if(dark)0xFFF2C36A.toInt() else 0xFFBF7B13.toInt(),if(dark)0xFFFF8989.toInt() else 0xFFD64040.toInt(),muted)
     fun text(value:String,size:Float,color:Int=ink,bold:Boolean=false)=ViewStyles.text(context,value,size,color,bold).apply {
         setPadding(0,0,0,0);includeFontPadding=false;setLineSpacing(0f,1.22f)
     }

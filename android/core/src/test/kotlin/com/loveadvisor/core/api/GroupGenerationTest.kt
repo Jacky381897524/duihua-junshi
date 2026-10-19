@@ -6,8 +6,8 @@ import org.junit.Assert.*
 import org.junit.Test
 class GroupGenerationTest {
     @Test fun actualReplyAndJudgeRequestsKeep200RowsAndDistinctMembers() {
-        for(limit in listOf(100,200)) {
-            val messages=(0 until limit).map { ChatMessage("m$it",if(it==limit-1)Speaker.ME else Speaker.OTHER,if(it%2==0)"甲🔥" else "乙", "第${it}条内容") }
+        for(lastSpeaker in listOf(Speaker.ME,Speaker.OTHER)) for(limit in listOf(100,200)) {
+            val messages=(0 until limit).map { ChatMessage("m$it",if(it==limit-1)lastSpeaker else Speaker.OTHER,if(it%2==0)"甲🔥" else "乙", "第${it}条内容") }
             val snapshot=ChatSnapshot("com.tencent.mm",1,ConversationIdentity("g","群",ChatKind.GROUP,true),messages,contextLimit=limit)
             for(target in listOf<ReplyTarget?>(null,ReplyTarget("m1"))) {
                 val requests=mutableListOf<ApiRequest>()
@@ -22,11 +22,18 @@ class GroupGenerationTest {
                 assertEquals(1,batch.replies.map { it.strategy }.distinct().size)
                 val prompt=JsonParser.parseString(requests[0].body).asJsonObject["messages"].asJsonArray[1].asJsonObject["content"].asString
                 val data=JsonParser.parseString(prompt).asJsonObject
-                assertEquals(limit,data["messages"].asJsonArray.size());assertEquals("CONTINUE_SELF",data["responseMode"].asString)
+                assertEquals(limit,data["messages"].asJsonArray.size());assertEquals(if(target!=null)"REPLY_TARGET" else if(lastSpeaker==Speaker.ME)"CONTINUE_SELF" else "REPLY_OTHER",data["responseMode"].asString)
                 val decision=JsonParser.parseString(requests[1].body).asJsonObject["state"].asJsonObject
                 assertEquals(limit,decision["chat"].asJsonObject["messages"].asJsonArray.size())
                 assertTrue(decision.toString().contains("甲🔥"));assertTrue(decision.toString().contains("targetMessageId"))
-                if(target!=null)assertTrue(batch.replies.all { it.targetMessageId==target.messageId })
+                if(target!=null) {
+                    assertTrue(batch.replies.all { it.targetMessageId==target.messageId })
+                    assertEquals("REPLY_TARGET",decision["responseMode"].asString)
+                    assertEquals(target.messageId,decision["targetMessageId"].asString)
+                    assertEquals("第1条内容",decision["targetMessageText"].asString)
+                    val instruction=JsonParser.parseString(requests[1].body).asJsonObject["questions"].asJsonObject["true_intent"].asJsonObject["instructions"].asString
+                    assertTrue(instruction.contains("selected target"))
+                }
             }
         }
     }

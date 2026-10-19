@@ -12,6 +12,7 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
     private val history=ReplyHistory()
     private var historySession:SessionToken?=null
     private var target:ReplyTarget?=null
+    @Synchronized fun targetFor(snapshot:ChatSnapshot):ReplyTarget?=target.takeIf { snapshot.identity?.kind==ChatKind.GROUP && tracker.lastSnapshot==snapshot && historySession==tracker.currentToken }
     @Synchronized fun observe(snapshot:ChatSnapshot,message:String?=null) {
         val before=tracker.currentToken
         val token=tracker.update(snapshot) ?: run { invalidate(); return }

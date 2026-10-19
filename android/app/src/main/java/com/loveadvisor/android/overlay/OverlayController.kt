@@ -40,6 +40,7 @@ class OverlayController(private val service:ChatCaptureService) {
     private var cancelStyleRead:(()->Unit)?=null
     private var confirmation:DraftConfirmWindow?=null
     private var cancelFill:(()->Unit)?=null
+    private var analysisController:com.loveadvisor.android.analysis.MessageAnalysisController?=null
     private var analysisSession:com.loveadvisor.core.model.SessionToken?=null
     private var imeInsetBottom=0
     private val main=Handler(Looper.getMainLooper())
@@ -290,7 +291,7 @@ class OverlayController(private val service:ChatCaptureService) {
         if(snapshot==null) { service.notifyUser("请先读取信息，才能判断分析");return }
         if(reading || filling || state.loading) { service.notifyUser("请等待当前操作完成");return }
         val token=graph.tracker.currentToken ?: return
-        val controller=com.loveadvisor.android.analysis.MessageAnalysisController(graph)
+        val controller=analysisController ?: com.loveadvisor.android.analysis.MessageAnalysisController(graph).also { analysisController=it }
         analysisSession=token
         val group=snapshot.identity?.kind==com.loveadvisor.core.model.ChatKind.GROUP
         fun current()=panel===view && graph.tracker.isCurrent(token) && readSnapshot()==snapshot
@@ -305,11 +306,11 @@ class OverlayController(private val service:ChatCaptureService) {
             } }
             view.showPage("judgment-detail",detail,editable=true,closed={ cancel?.invoke() });load()
         },{ view.popPage() },if(group)({ if(current()) { view.closeStyleEditor();service.replyTo(null) } }) else null)
-        view.showPage("judgment-list",list,editable=true,closed={ controller.close();analysisSession=null })
+        view.showPage("judgment-list",list,editable=true,closed={ controller.cancel();analysisSession=null })
     }
     fun render(value:BatchState) {
         state=value
-        if(analysisSession?.let { !graph.tracker.isCurrent(it) }==true)panel?.closeStyleEditor()
+        if(analysisSession?.let { !graph.tracker.isCurrent(it) }==true) { panel?.closeStyleEditor();analysisController?.invalidate() }
         panel?.setAnalysisAvailable(readSnapshot()!=null);panel?.render(value);updateCapsuleStatus();layout()
     }
     fun showFromIsland():Boolean { showPanel(true);return panelWindow.registered }
@@ -482,5 +483,5 @@ class OverlayController(private val service:ChatCaptureService) {
             }
         }
     }
-    fun destroy() { hide();suppress();capsule?.release();capsule=null;main.removeCallbacksAndMessages(null);bubble?.drawable?.let { (it as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle() }; bubble=null; panel=null; bubbleParams=null; panelParams=null; graph.controller.unlisten(listener) }
+    fun destroy() { analysisController?.close();analysisController=null;hide();suppress();capsule?.release();capsule=null;main.removeCallbacksAndMessages(null);bubble?.drawable?.let { (it as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle() }; bubble=null; panel=null; bubbleParams=null; panelParams=null; graph.controller.unlisten(listener) }
 }

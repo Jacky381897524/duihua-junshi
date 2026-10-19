@@ -331,7 +331,7 @@ class ChatCaptureService:AccessibilityService() {
         return if(current.source==CaptureSource.OCR && overlayAllowed() && (window.packageName!=ChatApps.WECHAT || WeChatPageClassifier.classify(window) in setOf(WeChatPageKind.CHAT_OR_UNKNOWN,WeChatPageKind.GROUP)) && (nativeTitle==current.identity?.displayTitle || signature(window)==visualSignature)) current else null
     }
     fun captureNow() {
-        if(!overlayAllowed()) { notifyUser("请打开微信、QQ或抖音单聊后点击读取信息"); return }
+        if(!overlayAllowed()) { notifyUser("请打开微信、QQ或抖音聊天后点击读取信息"); return }
         if(manualRead.active!=null || graph.coordinator.state.loading) return
         manualRead.begin(); overlay.setReading(true); graph.controller.status("正在读取当前聊天屏幕…"); observe()
     }
@@ -406,7 +406,7 @@ class ChatCaptureService:AccessibilityService() {
         val token=graph.tracker.currentToken
         if(!overlayAllowed() || snapshot==null || snapshot.windowId!=foregroundWindowId || token==null || token.packageName!=snapshot.packageName || token.windowId!=snapshot.windowId || token.conversationId!=snapshot.identity?.id) { graph.controller.status("请先点击读取信息，再刷新候选"); return }
         if(manualRead.active!=null || graph.coordinator.state.loading) return
-        graph.currentObjectId=null; graph.controller.analyze(snapshot,objectId=null)
+        graph.currentObjectId=null; graph.controller.analyze(snapshot,objectId=null,replyTarget=graph.coordinator.targetFor(snapshot))
     }
     fun replyTo(target:com.loveadvisor.core.model.ReplyTarget?) {
         val snapshot=conversation.current ?: return notifyUser("请先读取当前群聊")
@@ -496,13 +496,13 @@ class ChatCaptureService:AccessibilityService() {
         if(::overlay.isInitialized) { overlay.hide(); ensureOverlay() }
     }
     private fun pagePauseMessage(w:WindowSnapshot)=when(WeChatPageClassifier.classify(w)) {
-        WeChatPageKind.MINI_PROGRAM -> "小程序页面，请进入微信单聊再读取"
-        WeChatPageKind.WEB_PAGE -> "网页页面，请进入微信单聊再读取"
-        WeChatPageKind.HOME -> "微信导航页面，请进入单聊再读取"
-        WeChatPageKind.CONTACT_PROFILE -> "联系人资料页面，请进入单聊再读取"
+        WeChatPageKind.MINI_PROGRAM -> "小程序页面，请进入微信真实聊天再读取"
+        WeChatPageKind.WEB_PAGE -> "网页页面，请进入微信真实聊天再读取"
+        WeChatPageKind.HOME -> "微信导航页面，请进入真实聊天再读取"
+        WeChatPageKind.CONTACT_PROFILE -> "联系人资料页面，请进入真实聊天再读取"
         WeChatPageKind.GROUP -> "请重新读取当前群聊，核对消息与成员"
         WeChatPageKind.INVALID -> "窗口范围暂不可用，请稍后点击读取信息"
-        else -> "未识别为可读取的单聊，请重新读取"
+        else -> "未识别为可读取的聊天，请重新读取"
     }
     override fun onInterrupt() { if(::island.isInitialized)island.stop();readGate.invalidate(); reset(); if(::overlay.isInitialized) { overlay.hide();overlay.suppress() } }
     override fun onConfigurationChanged(newConfig:android.content.res.Configuration) { super.onConfigurationChanged(newConfig);if(::overlay.isInitialized)overlay.themeChanged();if(::reader.isInitialized)checkForeground() }

@@ -45,7 +45,7 @@ class ModelSettingsView(context:Context,private val graph:AppGraph,private val h
         body.addView(ViewStyles.button(context,"返回候选面板 / 取消") { host.close() })
     }
     fun refreshJudgeModels(profile:ApiProfile,onModels:(List<ApiModel>)->Unit) {
-        work("catalog",{ cancel -> graph.catalog.list(profile,cancel).models },onModels)
+        work("catalog-judge",{ cancel -> graph.catalog.list(profile,cancel).models },onModels)
     }
     private fun toast(value:String)=host.message(redact(value))
     private fun redact(value:String):String {
@@ -96,7 +96,7 @@ class ModelSettingsView(context:Context,private val graph:AppGraph,private val h
             card.addView(ViewStyles.button(context,"刷新模型") {
                 if(!busy) {
                     busy=true; val submitted=profile(); status.text="正在读取服务模型目录…"
-                    work("catalog",{ cancel -> graph.catalog.list(submitted,cancel) },{ result ->
+                    work("catalog-$slot",{ cancel -> graph.catalog.list(submitted,cancel) },{ result ->
                         busy=false
                         if(result.profileRevision!=revision) status.text="配置变化，旧目录已丢弃"
                         else if(result.error!=null) status.text=result.error+"。服务未开放目录时，可填写官方模型 ID。"

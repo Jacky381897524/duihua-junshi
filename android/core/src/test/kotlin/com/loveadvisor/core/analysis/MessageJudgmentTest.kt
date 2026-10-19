@@ -32,4 +32,12 @@ class MessageJudgmentTest {
             val old=gate.begin(a);gate.begin(changed);assertFalse(gate.accept(a,old))
         }
     }
+    @Test fun pageCancellationKeepsSameKeyCacheButChangedSessionsNeverHit() {
+        val key=JudgmentKey(SessionToken("wechat",1,"a",1,1),"1","model")
+        val cache=JudgmentCache<Int>();val gate=JudgmentRequestGate()
+        gate.begin(key);cache.put(key,42);gate.invalidate()
+        assertEquals(42,cache.get(key));assertNull(cache.get(key.copy(session=key.session.copy(revision=2))))
+        for(i in 0..50)cache.put(key.copy(targetMessageId="$i"),i)
+        assertEquals(50,cache.size);assertNull(cache.get(key.copy(targetMessageId="0")))
+    }
 }

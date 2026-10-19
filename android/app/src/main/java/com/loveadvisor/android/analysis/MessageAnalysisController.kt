@@ -10,7 +10,7 @@ import java.security.MessageDigest
 class MessageAnalysisController(private val graph:AppGraph) {
     private val gate=JudgmentRequestGate()
     private val scope=SettingsWorkScope(graph)
-    private val cache=LinkedHashMap<JudgmentKey,MessageJudgment>()
+    private val cache=JudgmentCache<MessageJudgment>()
     fun revision():String=MessageDigest.getInstance("SHA-256").digest(Gson().toJson(graph.settings.load().judgeProfile()).toByteArray()).joinToString("") { "%02x".format(it) }
     fun analyze(snapshot:ChatSnapshot,targetId:String,onResult:(MessageJudgment?,String?)->Unit):()->Unit {
         val session=graph.tracker.currentToken ?: run { onResult(null,"请先读取信息，才能判断分析");return {} }
@@ -19,13 +19,15 @@ class MessageAnalysisController(private val graph:AppGraph) {
         val profile=graph.settings.load().judgeProfile()
         val key=JudgmentKey(session,targetId,revision());val ticket=gate.begin(key)
         fun valid()=gate.accept(key,ticket) && graph.tracker.isCurrent(session) && revision()==key.judgeRevision
-        val hit=cache[key]
+        val hit=cache.get(key)
         if(hit!=null)Handler(Looper.getMainLooper()).post { if(valid())onResult(hit,null) }
         else scope.work("judgment",{ cancel -> graph.judge.inspect(profile,context,"",cancel) },{ result ->
-            if(valid()) { cache[key]=result;while(cache.size>50)cache.remove(cache.keys.first());onResult(result,null) }
+            if(valid()) { cache.put(key,result);onResult(result,null) }
             else if(gate.accept(key,ticket))onResult(null,"对话或判断模型已变化，请重新选择")
         },{ error -> if(gate.accept(key,ticket))onResult(null,if(valid())error else "对话或模型已变化，请重新读取") })
         return { gate.invalidate();scope.cancel("judgment") }
     }
-    fun close() { gate.invalidate();cache.clear();scope.close() }
+    fun cancel() { gate.invalidate();scope.cancel("judgment") }
+    fun invalidate() { cancel();cache.clear() }
+    fun close() { invalidate();scope.close() }
 }

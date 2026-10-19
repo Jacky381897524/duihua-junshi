@@ -10,4 +10,11 @@ class ConversationLevelTest {
         assertNull(ConversationLevel.from(0).position)
         assertTrue((1..9).map { ConversationLevel.from(it).position!! }.zipWithNext().all { it.first<=it.second })
     }
+    @Test fun sharedGradeTintKeepsUnknownNeutralAndEndpointsGreenRed() {
+        val green=0xFF21884D.toInt();val amber=0xFFBF7B13.toInt();val red=0xFFD64040.toInt();val unknown=0xFF7E899B.toInt()
+        assertEquals(green,ConversationLevel.from(1).tint(green,amber,red,unknown))
+        assertEquals(red,ConversationLevel.from(9).tint(green,amber,red,unknown))
+        assertEquals(amber,ConversationLevel.from(5).tint(green,amber,red,unknown))
+        assertEquals(unknown,ConversationLevel.from(null).tint(green,amber,red,unknown))
+    }
 }

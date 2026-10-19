@@ -28,4 +28,24 @@ class GroupReplyTargetsTest {
         val rows=conv.current!!.messages
         assertEquals(rows.size,rows.map { it.id }.distinct().size)
     }
+    @Test fun refreshKeepsSelectedTargetUntilExplicitAutomaticModeOrNewRead() {
+        val s=snapshot();val tracker=com.loveadvisor.core.session.SessionTracker();val coordinator=BatchCoordinator(tracker,com.loveadvisor.core.session.RequestGate(tracker))
+        val selected=ReplyTarget("a");val first=coordinator.begin(s,selected)!!
+        val batch=AdvisorFixtures.valid().copy(kind=ChatKind.GROUP,compact=true,replies=AdvisorFixtures.valid().replies.map { it.copy(targetMessageId="a",topic="吃饭") })
+        assertTrue(coordinator.complete(first.requestTicket,batch))
+        assertEquals(selected,coordinator.targetFor(s))
+        val refresh=coordinator.begin(s,coordinator.targetFor(s))!!
+        assertFalse(refresh.previous.isEmpty());coordinator.fail(refresh.requestTicket,"模拟失败")
+        coordinator.begin(s,null);assertNull(coordinator.targetFor(s))
+        coordinator.invalidate();assertNull(coordinator.targetFor(s))
+    }
+    @Test fun selectedOlderMemberOverridesOrdinaryLastMeAndLastOtherModes() {
+        for(last in listOf(Speaker.ME,Speaker.OTHER)) {
+            val s=snapshot().copy(messages=snapshot().messages.dropLast(1)+ChatMessage("latest",last,"乙","另外一个话题"))
+            val fields=ConversationTurn.data(s,ReplyTarget("a"))
+            assertEquals("REPLY_TARGET",fields["responseMode"]);assertEquals("a",fields["targetMessageId"])
+            assertEquals("晚上吃饭",fields["targetMessageText"]);assertEquals("甲",fields["targetSender"])
+            assertFalse(fields["turnInstruction"]!!.contains("最后一句继续"))
+        }
+    }
 }

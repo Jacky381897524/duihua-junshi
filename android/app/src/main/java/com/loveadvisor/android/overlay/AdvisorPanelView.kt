@@ -248,9 +248,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             advice.text=if(current)"建议：${a.action}" else "建议：聊天已变化，请重新读取"
             val grade=ConversationLevel.from(if(current)a.risk else null)
             level.text="等级 · ${grade.label}${grade.value?.let { " $it/9" }.orEmpty()}"
-            val colors=intArrayOf(0xFF21884D.toInt(),0xFFBF7B13.toInt(),0xFFD64040.toInt())
-            val pos=grade.position
-            level.setTextColor(if(pos==null)palette.muted else android.animation.ArgbEvaluator().evaluate(if(pos<.5f)pos*2 else (pos-.5f)*2,colors[if(pos<.5f)0 else 1],colors[if(pos<.5f)1 else 2]) as Int)
+            level.setTextColor(palette.levelColor(grade))
             if(displayed!=visible) {
                 displayed=visible; cards.removeAllViews()
                 visible.batch.replies.forEachIndexed { i,plan -> cards.addView(ReplyCardView(context,i,plan,{ onCopy(plan) },{ onFill(plan,visible.ticket.session) },{ callback -> onDetails?.invoke(plan,visible.ticket.session,callback) ?: callback(null,"请重新读取后查看详情") },compact=true,scoreLabel=scoreLabel,frosted=frosted,onContentChanged={ invalidateHeight();onResize() })) }
