@@ -8,12 +8,12 @@ class AutomaticConversation {
     var updatedAt:Long=0
         private set
 
-    fun restore(snapshot:ChatSnapshot) { current=snapshot.copy(messages=snapshot.messages.takeLast(50)) }
+    fun restore(snapshot:ChatSnapshot) { current=snapshot.copy(messages=snapshot.messages.takeLast(ConversationContextPolicy.forSnapshot(snapshot))) }
     fun continues(snapshot:ChatSnapshot):Boolean {
-        if(current!=null && current?.packageName!=snapshot.packageName)return false
+        if(current!=null && (current?.packageName!=snapshot.packageName || current?.identity?.kind!=snapshot.identity?.kind))return false
         val existing=current?.messages.orEmpty(); val visible=snapshot.messages
         if(existing.isEmpty()) return true
-        fun same(a:ChatMessage,b:ChatMessage)=a.speaker==b.speaker && a.text==b.text && a.quote==b.quote
+        fun same(a:ChatMessage,b:ChatMessage)=ConversationContextPolicy.same(a,b)
         if(existing.size==visible.size && existing.indices.all { same(existing[it],visible[it]) }) return true
         val overlap=(minOf(existing.size,visible.size) downTo 1).firstOrNull { n -> (0 until n).all { same(existing[existing.size-n+it],visible[it]) } } ?: 0
         if(overlap>0) {
@@ -26,11 +26,11 @@ class AutomaticConversation {
 
     fun observe(snapshot:ChatSnapshot,now:Long,entered:Boolean):Boolean {
         val identity=requireNotNull(snapshot.identity)
-        require(identity.kind==ChatKind.DIRECT && snapshot.messages.none { it.speaker==Speaker.UNKNOWN })
-        val previous=current?.takeIf { it.packageName==snapshot.packageName && it.identity?.id==identity.id }
+        require(identity.kind in setOf(ChatKind.DIRECT,ChatKind.GROUP) && snapshot.messages.none { it.speaker==Speaker.UNKNOWN })
+        val previous=current?.takeIf { it.packageName==snapshot.packageName && it.identity?.id==identity.id && it.identity?.kind==identity.kind }
         val existing=previous?.messages.orEmpty()
         val visible=snapshot.messages
-        fun same(a:ChatMessage,b:ChatMessage)=a.speaker==b.speaker && a.text==b.text && a.quote==b.quote
+        fun same(a:ChatMessage,b:ChatMessage)=ConversationContextPolicy.same(a,b)
         val observedAt=if(visible.isNotEmpty() && existing.size>=visible.size)
             (existing.size-visible.size downTo 0).firstOrNull { start -> visible.indices.all { same(existing[start+it],visible[it]) } }
             else null
@@ -43,7 +43,7 @@ class AutomaticConversation {
         // A manually reread older viewport ends at what is actually visible.
         // Cached later rows must not determine the speaker we are continuing.
         val context=when { observedAt!=null -> existing.take(observedAt)+visible;entered && overlap==0 -> visible;else -> existing+added }
-        current=snapshot.copy(messages=context.takeLast(50))
+        current=snapshot.copy(messages=context.takeLast(ConversationContextPolicy.forSnapshot(snapshot)))
         updatedAt=now
         return current!!.messages.isNotEmpty() && (entered || added.isNotEmpty() && added.last().speaker==Speaker.OTHER)
     }

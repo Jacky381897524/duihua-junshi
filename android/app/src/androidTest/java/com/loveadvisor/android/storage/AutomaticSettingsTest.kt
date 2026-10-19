@@ -4,6 +4,12 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun groupContextDefaultsToOneHundredAndOnlyAllowsSupportedRanges() {
+        fun limit(raw:String)=Gson().toJsonTree(AppSettings.decode(raw)).asJsonObject["groupContextLimit"]?.asInt
+        assertEquals(100,limit("{}"))
+        assertEquals(200,limit("""{"groupContextLimit":200}"""))
+        assertEquals(100,limit("""{"groupContextLimit":73}"""))
+    }
     @Test fun confirmedNicknameAliasesAndOriginalUnicodeSurviveReopening() {
         val saved=AppSettings.decode("""{"replyStyles":{"target":"浪漫"},"replyStyleTitles":{"target":"🍃    L 。👩🏽‍💻"},"replyStyleApps":{"target":"com.tencent.mm"},"replyStyleAliases":{"alias":"target"},"globalReplyStyle":"简短"}""")
         val reopened=Gson().toJsonTree(AppSettings.decode(Gson().toJson(saved))).asJsonObject

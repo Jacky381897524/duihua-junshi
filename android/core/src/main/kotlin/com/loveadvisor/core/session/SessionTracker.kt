@@ -21,7 +21,7 @@ class SessionTracker {
         }
         val previous = currentToken
         val nextSignature = fingerprint(snapshot)
-        val same = previous?.packageName == snapshot.packageName && previous.windowId == snapshot.windowId && previous.conversationId == identity.id
+        val same = previous?.packageName == snapshot.packageName && previous.windowId == snapshot.windowId && previous.conversationId == identity.id && lastSnapshot?.identity?.kind==identity.kind
         if (!same) epoch++
         if (!same || nextSignature != signature) revision++
         currentToken = SessionToken(snapshot.packageName, snapshot.windowId, identity.id, revision, epoch)
@@ -43,8 +43,9 @@ class SessionTracker {
 
     private fun fingerprint(snapshot: ChatSnapshot): String {
         val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(snapshot.identity?.kind?.name.orEmpty().toByteArray(Charsets.UTF_8))
         for (m in snapshot.messages) {
-            for (part in listOf(m.speaker.name, m.sender.orEmpty(), m.text,m.quote?.author.orEmpty(),m.quote?.text.orEmpty())) {
+            for (part in listOf(m.speaker.name, m.sender.orEmpty(), m.text,m.quote?.author.orEmpty(),m.quote?.text.orEmpty(),m.kind.name)) {
                 val data = part.toByteArray(Charsets.UTF_8)
                 digest.update("${data.size}:".toByteArray(Charsets.UTF_8)); digest.update(data)
             }
