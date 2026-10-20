@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.4.7 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.4.8 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,11 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.4.8", "退出聊天时先隐藏再核验", listOf(
+                "窗口前台无法确认时先隐藏胶囊和面板，取消原先保持显示等待两次400毫秒的处理；有明确键盘或面板焦点时保留对应聊天，已读内容不清空。",
+                "旧聊天仅可见或活跃不再作为前台证明，后台旧窗口的迟到结果不能恢复显示；微信、QQ、抖音共用。",
+                "连接诊断加入脱敏前台切换时序，不记录聊天正文、昵称或截图。实际系统事件延迟仍需手机验收，截图限制问题未解决。"
+            )),
             Release("V1.4.7", "前台胶囊同步与精简诊断入口", listOf(
                 "前台切换按系统实际聚焦的应用窗口事件及时处理，移除额外事件等待；备用前台检查使用独立队列，避免排在聊天读取之后。微信、QQ、抖音共用此流程，不自动读取或请求模型。",
                 "连接诊断移除重复的悬浮窗与胶囊设置按钮；导出诊断增加实际军师版本，便于核对安装包。",

@@ -6,6 +6,7 @@ import android.os.*
 import android.graphics.Bitmap
 import android.util.Base64
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.Toast
 import com.loveadvisor.android.AppGraph
 import com.loveadvisor.android.overlay.OverlayController
@@ -85,6 +86,13 @@ class ChatCaptureService:AccessibilityService() {
     override fun onCreateInputMethod():android.accessibilityservice.InputMethod=VerifiedInputMethod(this) { editorEpoch.incrementAndGet() }
     @Volatile private var navigation=0L
     private var foregroundRetries=0
+    private val foregroundStages=ArrayDeque<String>()
+    private val foregroundTraceStarted=SystemClock.elapsedRealtime()
+    val lastForegroundStages get()=foregroundStages.joinToString(" → ").ifEmpty { "尚未取得前台事件" }
+    private fun foregroundStage(stage:String) {
+        if(foregroundStages.size>=24)foregroundStages.removeFirst()
+        foregroundStages.addLast("${SystemClock.elapsedRealtime()-foregroundTraceStarted}ms $stage")
+    }
     private var imePackages=emptySet<String>()
     private var stopStartup:(()->Unit)?=null
     private var visualCancel:Cancellation?=null
@@ -133,13 +141,12 @@ class ChatCaptureService:AccessibilityService() {
         }
         // Content/text/scroll events do not collect chat nodes, take screenshots, or start requests.
         if(!structural)return
+        foregroundStage(if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED)"windows-event" else "state-event")
         val currentWindows=windows
         val transientWindow=currentWindows.any { it.id==event.windowId && it.type in setOf(android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD,android.view.accessibility.AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) }
-        if(transientWindow) { overlay.resize();return }
-        if(!CaptureEventPolicy.shouldObserve(pkg,true,packageName,transientWindow))return
         // Event class names describe views as well as Activities. Resolve actual foreground
         // windows before hiding anything; an editor/IME event is not proof of an app switch.
-        if(event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && CaptureEventPolicy.navigationChanged(pkg,event.className?.toString().orEmpty())) {
+        if(!transientWindow && event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && CaptureEventPolicy.navigationChanged(pkg,event.className?.toString().orEmpty())) {
             reader.recordWindowClass(event.windowId,event.className?.toString().orEmpty())
             // The same Activity regaining focus after an overlay is not a new read.
             // Changed real windows are also checked by updateForeground below.
@@ -149,7 +156,8 @@ class ChatCaptureService:AccessibilityService() {
         }
         val apps=currentWindows.filter { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
         val signal=CaptureEventPolicy.confirmedForeground(pkg,event.windowId,apps.map { AppWindow(it.id,it.isFocused,it.isActive,it.layer) })
-        if(signal!=null) {
+        val externalFocused=currentWindows.any { it.isFocused && it.type !in setOf(AccessibilityWindowInfo.TYPE_APPLICATION,AccessibilityWindowInfo.TYPE_INPUT_METHOD,AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) }
+        if(signal!=null && !externalFocused) {
             // No app-root IPC and no wait behind a conversation read. Only OS window metadata.
             foregroundGate.invalidate();main.removeCallbacks(debounced)
             val frame=android.graphics.Rect().apply { apps.first { it.id==signal.windowId }.getBoundsInScreen(this) }
@@ -159,36 +167,79 @@ class ChatCaptureService:AccessibilityService() {
                 foregroundRetries=0
                 if(!wechatForeground || foregroundPackage!=next.packageName || foregroundWindowId!=next.windowId || lastForegroundWindow?.viewport!=next.viewport)updateForeground(next)
             } else if(!main.hasCallbacks(debounced))main.post(debounced)
-        } else if(!main.hasCallbacks(debounced))main.post(debounced)
+        } else {
+            // Even an IME/overlay event can coincide with the app losing foreground.
+            // Keep a known app only while focus metadata still proves it; don't wait for root IPC.
+            val known=knownForeground(currentWindows)
+            if(known!=null && canObserve()) {
+                foregroundGate.invalidate();main.removeCallbacks(debounced);foregroundRetries=0
+                if(lastForegroundWindow?.viewport!=known.viewport)updateForeground(known)
+                else if(transientWindow)overlay.resize()
+            } else {
+                foregroundStage("window-proof-missing")
+                if(wechatForeground)leaveForeground("正在核验前台，已保留已读内容")
+                if(!main.hasCallbacks(debounced))main.post(debounced)
+            }
+        }
+    }
+    private fun hasForegroundProof(windowId:Int?,currentWindows:List<AccessibilityWindowInfo>):Boolean {
+        val apps=currentWindows.filter { it.type==AccessibilityWindowInfo.TYPE_APPLICATION }.map { AppWindow(it.id,it.isFocused,it.isActive,it.layer) }
+        val transientFocused=currentWindows.any { it.isFocused && it.type in setOf(AccessibilityWindowInfo.TYPE_INPUT_METHOD,AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) }
+        val externalFocused=currentWindows.any { it.isFocused && it.type !in setOf(AccessibilityWindowInfo.TYPE_APPLICATION,AccessibilityWindowInfo.TYPE_INPUT_METHOD,AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) }
+        return ForegroundVisibility.canRetain(windowId,apps,transientFocused,externalFocused)
+    }
+    private fun knownForeground(currentWindows:List<AccessibilityWindowInfo>):WindowSnapshot? {
+        val pkg=foregroundPackage ?: return null
+        val id=foregroundWindowId ?: return null
+        if(!hasForegroundProof(id,currentWindows))return null
+        val current=currentWindows.firstOrNull { it.id==id && it.type==AccessibilityWindowInfo.TYPE_APPLICATION } ?: return null
+        val frame=android.graphics.Rect().apply { current.getBoundsInScreen(this) }
+        if(frame.isEmpty)return null
+        return WindowSnapshot(pkg,id,RectI(frame.left,frame.top,frame.right,frame.bottom),emptyList())
     }
     private fun locked()=getSystemService(KeyguardManager::class.java).isKeyguardLocked || !getSystemService(PowerManager::class.java).isInteractive
     private fun canObserve()=!stopping && CapturePolicy.overlayVisible(graph.settings.load().overlayEnabled,locked(),projecting)
     private fun checkForeground() {
         if(!canObserve()) { leaveForeground(); return }
         val lease=foregroundGate.begin() ?: return
+        foregroundStage("verify-start")
         foregroundWorker.execute {
             val window=runCatching { reader.foreground() }.getOrNull()
             main.post {
                 val completion=foregroundGate.complete(lease)
-                if(completion.accept && canObserve()) updateForeground(window)
+                if(completion.accept && canObserve())updateForeground(window)
                 if(completion.readAgain && !main.hasCallbacks(debounced)) main.post(debounced)
             }
         }
     }
-    private fun updateForeground(window:WindowSnapshot?) {
-        if(window==null) {
-            // Binder roots can disappear briefly while the keyboard acquires focus.
-            if(foregroundRetries++<2) { main.postDelayed(debounced,400);return }
+    /** True only when this exact snapshot is accepted, independently of retaining known UI. */
+    private fun updateForeground(window:WindowSnapshot?):Boolean {
+        val currentWindows=windows
+        val accepted=window!=null && (!ChatApps.supported(window.packageName) || hasForegroundProof(window.windowId,currentWindows))
+        if(window!=null && !accepted)foregroundStage("late-window-rejected")
+        val current=if(accepted)window else knownForeground(currentWindows)
+        if(current==null) {
+            foregroundStage("root-unconfirmed-hide")
+            val retry=foregroundRetries++<2
+            // Hide first. Bounded recovery is for re-entry, never permission to linger on home.
             leaveForeground("暂未取得前台窗口；已保留已读内容")
-            return
+            if(retry && canObserve())main.postDelayed(debounced,80)
+            return false
         }
         foregroundRetries=0
-        if(!ChatApps.supported(window.packageName)) { diagnosticStatus="当前前台应用不是微信、QQ或抖音"; leaveForeground(); return }
-        if(foregroundWindowId!=null && (foregroundWindowId!=window.windowId || foregroundPackage!=window.packageName)) cancelScreenRead("本次屏幕读取已取消；已保留上次内容")
-        foregroundWindowId=window.windowId;foregroundPackage=window.packageName; wechatForeground=true
-        lastForegroundWindow=window
-        diagnosticStatus="按需读取 · ${ChatApps.label(window.packageName)}窗口 ${window.windowId} · ${window.viewport.width}×${window.viewport.height} · 仅检查前台，未收集聊天正文"
+        if(!accepted) {
+            foregroundStage("root-missing-focus-kept")
+            if(lastForegroundWindow?.viewport==current.viewport)return false
+        }
+        if(!ChatApps.supported(current.packageName)) { diagnosticStatus="当前前台应用不是微信、QQ或抖音"; leaveForeground(); return false }
+        if(foregroundWindowId!=null && (foregroundWindowId!=current.windowId || foregroundPackage!=current.packageName)) cancelScreenRead("本次屏幕读取已取消；已保留上次内容")
+        val entering=!wechatForeground
+        foregroundWindowId=current.windowId;foregroundPackage=current.packageName; wechatForeground=true
+        lastForegroundWindow=current
+        diagnosticStatus="按需读取 · ${ChatApps.label(current.packageName)}窗口 ${current.windowId} · ${current.viewport.width}×${current.viewport.height} · 仅检查前台，未收集聊天正文"
+        if(entering)foregroundStage("show-confirmed-chat")
         ensureOverlay(); overlay.resize()
+        return accepted
     }
     /** Runs only for the active Read Information gesture, including its vision verification step. */
     private fun observe() {
@@ -206,7 +257,10 @@ class ChatCaptureService:AccessibilityService() {
                     graph.record("native-read",SystemClock.elapsedRealtime()-started,null,null)
                     if(w==null) finishRead(ticket,"系统未返回微信窗口，请重新点击读取信息")
                     else {
-                        updateForeground(w)
+                        if(!updateForeground(w)) {
+                            finishRead(ticket,"当前窗口已变化，本次读取已取消；已保留上次内容")
+                            return@post
+                        }
                         if(manualRead.accepts(ticket) && w.packageName==submittedPackage && ChatApps.supported(w.packageName)) {
                             lastWechatDiagnosticStatus="手动读取 · ${ChatApps.label(w.packageName)}窗口 ${w.windowId} · ${w.viewport.width}×${w.viewport.height} · ${w.nodes.size} 个节点 · ${when(result) { is CaptureResult.Readable -> "原生单聊读取成功"; is CaptureResult.NeedsImage -> result.reason; else -> pagePauseMessage(w) }}"
                             processWindow(w,result ?: CaptureResult.NotChat,ticket)
@@ -555,10 +609,13 @@ class ChatCaptureService:AccessibilityService() {
         if(interrupted)graph.controller.awaitCapture(message)
     }
     private fun leaveForeground(message:String="已保留已读内容，返回后可继续使用") {
+        val wasForeground=wechatForeground
+        if(wasForeground)foregroundStage("hide-foreground-lost")
         wechatForeground=false; foregroundWindowId=null;foregroundPackage=null
         lastForegroundWindow=null
         main.removeCallbacks(debounced);foregroundGate.invalidate();readGate.invalidate();cancelScreenRead(message)
         if(::overlay.isInitialized) { overlay.suspendForBackground();ensureOverlay() }
+        if(wasForeground)foregroundStage("overlays-detached")
     }
     private fun pagePauseMessage(w:WindowSnapshot)=when(WeChatPageClassifier.classify(w)) {
         WeChatPageKind.MINI_PROGRAM -> "小程序页面，请进入微信真实聊天再读取"
