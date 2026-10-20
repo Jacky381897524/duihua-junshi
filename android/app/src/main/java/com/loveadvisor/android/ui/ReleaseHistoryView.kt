@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.4.5 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.4.6 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,11 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.4.6", "填入连接等待与失败诊断", listOf(
+                "系统输入连接改按实际时间有限等待，避免键盘连接稍晚建立就提前失败；只尝试聚焦一次，不自动发送。",
+                "区分未定位输入框、位置无法核对、系统拒绝或中断聚焦等失败原因；连接诊断增加脱敏填入阶段，不记录昵称、草稿和回复正文。",
+                "保留当前聊天、完整草稿与写入后回读核对；具体机型的偶发填入与系统截图限制仍需验证。"
+            )),
             Release("V1.4.5", "同页选句判断与紧凑建议", listOf(
                 "判断分析直接在每句原话下展示判断，右侧短按钮可指定回复；单聊与群聊均参考全部已读对话，所选目标不会被后续发言替换。",
                 "只对当前可见的句子依次判断，已判断结果在本次已读上下文中复用；不自动重新读取聊天。参考原文不再占用页面。",

@@ -19,6 +19,8 @@ import java.util.UUID
 import com.loveadvisor.core.advisor.ReplyPlan
 import com.loveadvisor.android.input.VisualFillReference
 import com.loveadvisor.android.input.VerifiedInputMethod
+import com.loveadvisor.core.input.ComposerFocusResult
+import com.loveadvisor.core.input.FillStageTrace
 import com.loveadvisor.core.input.ImeFillPolicy
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
@@ -86,6 +88,8 @@ class ChatCaptureService:AccessibilityService() {
     private var visualCancel:Cancellation?=null
     private var visualFill:VisualFillReference?=null
     var lastFillDiagnosticStatus="尚未点击填入"; private set
+    private val fillTrace=FillStageTrace { SystemClock.elapsedRealtime() }
+    val lastFillStages get()=fillTrace.description()
     var lastScreenshotDiagnosticStatus="本次服务尚未请求截图"; private set
     var lastStyleNicknameFromOcr=false; private set
     private data class VisionReply(val result:VisionConversation,val windowId:Int,val cancel:Cancellation,val ticket:ManualReadGate.Ticket,val navigation:Long,val fillReference:VisualFillReference?)
@@ -443,10 +447,17 @@ class ChatCaptureService:AccessibilityService() {
     }
     fun confirmDraft(snapshot:ChatSnapshot) { if(ChatApps.supported(snapshot.packageName)) accept(snapshot,manualRead.begin()) }
     fun captureGeneration()=navigation
-    fun fillDiagnostic(message:String) { lastFillDiagnosticStatus=message }
+    fun fillDiagnostic(message:String,reset:Boolean=false) {
+        if(reset)fillTrace.begin()
+        lastFillDiagnosticStatus=message
+    }
+    /** Fixed stage labels and editor flags only; never record drafts, candidate text or names. */
+    fun fillStage(stage:String) { fillTrace.recorder()(stage) }
+    fun fillStageRecorder()=fillTrace.recorder()
     /** Local screenshot verifies the manually read title; no model call or new chat collection. */
     fun verifyVisualFill(token:SessionToken,requireComposerLayout:Boolean=false,callback:(Boolean)->Unit) {
         val ref=visualFill
+        val recordStage=fillStageRecorder()
         val liveWindow=foregroundWindowId;val lease=navigation
         if(ref==null || liveWindow==null || foregroundPackage!=token.packageName || !overlayAllowed() || !graph.tracker.sameConversation(token)) { callback(false);return }
         val cancel=Cancellation();var completed=false
@@ -454,30 +465,40 @@ class ChatCaptureService:AccessibilityService() {
         main.postDelayed({ finish(false) },5000)
         captureWindow(liveWindow,cancel) { image ->
             val matches=if(image is CaptureImageResult.Success) {
-                try { VisualFillReference.stamp(image.bitmap)==ref.stamp && (!requireComposerLayout || ref.viewport==lastForegroundWindow?.viewport && ref.footerStamp!=null && VisualFillReference.footerStamp(image.bitmap)==ref.footerStamp) } finally { image.bitmap.recycle() }
-            } else false
+                try {
+                    val titleMatches=VisualFillReference.stamp(image.bitmap)==ref.stamp
+                    val layoutMatches=!requireComposerLayout || ref.viewport==lastForegroundWindow?.viewport && ref.footerStamp!=null && VisualFillReference.footerStamp(image.bitmap)==ref.footerStamp
+                    if(!titleMatches)recordStage("title-mismatch")
+                    else if(!layoutMatches)recordStage("composer-layout-mismatch")
+                    titleMatches && layoutMatches
+                } finally { image.bitmap.recycle() }
+            } else { recordStage("verify-screenshot-failed code=${(image as CaptureImageResult.Failure).code}");false }
             finish(matches && ref===visualFill && lease==navigation && liveWindow==foregroundWindowId && foregroundPackage==token.packageName && overlayAllowed() && graph.tracker.sameConversation(token))
         }
     }
-    fun focusVisualComposer(token:SessionToken,callback:(Boolean)->Unit) {
+    fun focusVisualComposer(token:SessionToken,callback:(ComposerFocusResult)->Unit) {
         val ref=visualFill;val input=ref?.composer ?: ref?.keyboardButton
         val lease=navigation
-        if(ref==null || input==null || foregroundPackage!=token.packageName || !overlayAllowed() || !graph.tracker.sameConversation(token)) { callback(false);return }
+        if(foregroundPackage!=token.packageName || !overlayAllowed() || !graph.tracker.sameConversation(token)) { callback(ComposerFocusResult.CONTEXT_CHANGED);return }
         // Never tap a stale bottom coordinate when the IME has already changed the layout.
-        if(windows.any { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }) { callback(false);return }
+        if(windows.any { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }) { callback(ComposerFocusResult.KEYBOARD_VISIBLE);return }
+        if(ref==null) { callback(ComposerFocusResult.NO_REFERENCE);return }
+        if(input==null) { callback(ComposerFocusResult.NO_COMPOSER);return }
         verifyVisualFill(token,requireComposerLayout=true) { verified ->
-        if(!verified || ref!==visualFill || lease!=navigation || windows.any { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }) { callback(false);return@verifyVisualFill }
+        if(ref!==visualFill || lease!=navigation || !overlayAllowed()) { callback(ComposerFocusResult.CONTEXT_CHANGED);return@verifyVisualFill }
+        if(windows.any { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }) { callback(ComposerFocusResult.KEYBOARD_VISIBLE);return@verifyVisualFill }
+        if(!verified) { callback(ComposerFocusResult.UNVERIFIED_LAYOUT);return@verifyVisualFill }
         val path=Path().apply { moveTo((input.left+input.right)/2f,(input.top+input.bottom)/2f) }
         overlaySuspensions++;if(::island.isInitialized)island.suspend();overlay.suppress()
         val gesture=GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path,0,80)).build()
         var completed=false
-        fun finish(value:Boolean) { if(!completed) { completed=true;overlaySuspensions--;ensureOverlay();callback(value && lease==navigation && overlayAllowed()) } }
-        main.postDelayed({ finish(false) },2000)
+        fun finish(value:ComposerFocusResult) { if(!completed) { completed=true;overlaySuspensions--;ensureOverlay();callback(if(lease==navigation && overlayAllowed())value else ComposerFocusResult.CONTEXT_CHANGED) } }
+        main.postDelayed({ finish(ComposerFocusResult.TIMED_OUT) },2000)
         val submitted=dispatchGesture(gesture,object:GestureResultCallback() {
-            override fun onCompleted(gestureDescription:GestureDescription?) { finish(true) }
-            override fun onCancelled(gestureDescription:GestureDescription?) { finish(false) }
+            override fun onCompleted(gestureDescription:GestureDescription?) { finish(ComposerFocusResult.REQUESTED) }
+            override fun onCancelled(gestureDescription:GestureDescription?) { finish(ComposerFocusResult.CANCELLED) }
         },main)
-        if(!submitted)finish(false)
+        if(!submitted)finish(ComposerFocusResult.REJECTED)
         }
     }
     fun canCapture()=!stopping && graph.settings.load().overlayEnabled && !locked()

@@ -20,14 +20,23 @@ class ImeReplyFiller(private val service:ChatCaptureService) {
     fun fill(token:SessionToken,text:String,onConfirm:((String,()->Unit)->Unit)?,parentActive:()->Boolean={true},callback:(Boolean,String)->Unit) {
         val generation=service.captureGeneration();val finished=AtomicBoolean(false)
         val boundEditor=AtomicLong(-1)
+        val recordStage=service.fillStageRecorder()
+        var lastConnectionState:String?=null
+        fun connectionStage(value:String) { if(lastConnectionState!=value) { lastConnectionState=value;recordStage(value) } }
         fun active()=!finished.get() && parentActive() && (boundEditor.get()<0 || boundEditor.get()==service.editorGeneration()) && ChatCaptureService.instance===service && service.overlayAllowed() && service.captureGeneration()==generation && service.graph.tracker.sameConversation(token)
         fun done(success:Boolean,message:String) { if(finished.compareAndSet(false,true))callback(success,message) }
         fun fail(message:String) { val copied=active();if(copied)ClipboardController.copy(service,text,notify=false);done(false,FillFeedback.failure(message,copied)) }
         fun connection():InputMethod.AccessibilityInputConnection? {
             if(Build.VERSION.SDK_INT<33 || !active())return null
-            val method=service.inputMethod ?: return null
-            val e=method.currentInputEditorInfo ?: return null
-            return method.currentInputConnection.takeIf { e.packageName==token.packageName && ImeFillPolicy.editorAllowed(e.packageName,e.inputType,e.imeOptions) }
+            val method=service.inputMethod ?: run { connectionStage("ime-method-absent");return null }
+            val e=method.currentInputEditorInfo ?: run { connectionStage("ime-editor-absent");return null }
+            if(e.packageName!=token.packageName) { connectionStage("ime-other-package");return null }
+            if(!ImeFillPolicy.editorAllowed(e.packageName,e.inputType,e.imeOptions)) {
+                connectionStage("ime-editor-rejected type=0x${e.inputType.toString(16)} options=0x${e.imeOptions.toString(16)}");return null
+            }
+            val c=method.currentInputConnection
+            connectionStage(if(c==null)"ime-connection-absent" else "ime-connection-ready")
+            return c
         }
         fun draft(next:(InputMethod.AccessibilityInputConnection,String)->Unit) {
             val epoch=service.editorGeneration()
@@ -112,11 +121,20 @@ class ImeReplyFiller(private val service:ChatCaptureService) {
             if(finished.get())return
             if(!active()) { done(false,"聊天或输入连接已变化，已保留原稿");return }
             val imeVisible=service.windows.any { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
-            when(waiting.next(connection()!=null,imeVisible)) {
+            when(waiting.next(connection()!=null,imeVisible,android.os.SystemClock.uptimeMillis())) {
                 ImeConnectionStep.READY -> begin()
-                ImeConnectionStep.FOCUS -> service.focusVisualComposer(token) { if(!finished.get())main.postDelayed({ awaitConnection() },150) }
+                ImeConnectionStep.FOCUS -> service.focusVisualComposer(token) { result ->
+                    if(!finished.get()) {
+                        if(!active())done(false,"聊天或输入连接已变化，已保留原稿")
+                        else {
+                            recordStage("focus-${result.name.lowercase()}")
+                            if(waiting.focusFinished(result,android.os.SystemClock.uptimeMillis())==ImeConnectionStep.FAIL)fail(waiting.failureMessage)
+                            else main.postDelayed({ awaitConnection() },150)
+                        }
+                    }
+                }
                 ImeConnectionStep.WAIT -> main.postDelayed({ awaitConnection() },150)
-                ImeConnectionStep.FAIL -> fail("聊天输入框未就绪，请点输入框后重试")
+                ImeConnectionStep.FAIL -> fail(waiting.failureMessage)
             }
         }
         awaitConnection()

@@ -23,7 +23,7 @@ class ReplyFiller(private val service:ChatCaptureService) {
         val started=android.os.SystemClock.elapsedRealtime()
         fun active()=!finished.get() && ChatCaptureService.instance===service && service.overlayAllowed() && generation==service.captureGeneration() && guard.isCurrent(token)
         fun done(success:Boolean,message:String) { if(!finished.compareAndSet(false,true))return;val result=if(success || message.startsWith("填入失败："))message else FillFeedback.failure(message,false);service.fillDiagnostic(result);service.graph.record("fill",android.os.SystemClock.elapsedRealtime()-started,null,if(success)null else "failure");callback(success,result) }
-        service.fillDiagnostic("正在检查当前聊天与输入框")
+        service.fillDiagnostic("正在检查当前聊天与输入框",reset=true)
         main.postDelayed({ if(!finished.get())done(false,"填入超时，请在连接诊断查看最近填入") },25000)
         fun fallback(message:String) { if(!active())done(false,"聊天已变化，请重新读取") else { ClipboardController.copy(service,text,notify=false);done(false,FillFeedback.failure(message,true)) } }
         fun read(callbackTarget:(FillTarget?)->Unit) {
@@ -85,6 +85,7 @@ class ReplyFiller(private val service:ChatCaptureService) {
         read { first ->
             if(first==null) {
                 service.fillDiagnostic("原生输入框不可用，尝试系统输入连接")
+                service.fillStage("native-unavailable")
                 val confirm=onConfirm?.let { present -> { draft:String,write:()->Unit -> present(draft,write,{ done(false,"已保留微信原稿") }) } }
                 ImeReplyFiller(service).fill(token,text,confirm,{ active() }) { success,message -> done(success,message) }
                 return@read
