@@ -4,4 +4,4 @@
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews|flagInputMethodEditor"
     android:canRetrieveWindowContent="true" android:canTakeScreenshot="true" android:canPerformGestures="true"
-    android:notificationTimeout="250" />
+    android:notificationTimeout="0" />

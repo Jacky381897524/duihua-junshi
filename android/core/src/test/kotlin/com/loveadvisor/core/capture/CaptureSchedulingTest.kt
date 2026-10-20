@@ -3,6 +3,27 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CaptureSchedulingTest {
+    @Test fun focusedApplicationEventProvidesAnImmediateForegroundSignalForEachChatApp() {
+        val windows=listOf(AppWindow(7,true,false,3))
+        for(pkg in listOf("com.tencent.mm","com.tencent.mobileqq","com.ss.android.ugc.aweme")) {
+            val signal=CaptureEventPolicy.confirmedForeground(pkg,7,windows)
+            assertEquals(pkg,signal?.packageName)
+            assertEquals(7,signal?.windowId)
+        }
+    }
+    @Test fun focusedLauncherEventWinsOverTheBackgroundChatWithoutWaitingForItsTree() {
+        val windows=listOf(AppWindow(7,false,true,4),AppWindow(8,true,false,5))
+        val signal=CaptureEventPolicy.confirmedForeground("com.example.launcher",8,windows)
+        assertEquals("com.example.launcher",signal?.packageName)
+        assertEquals(8,signal?.windowId)
+    }
+    @Test fun overlayImeAndStaleWindowEventsCannotClaimTheFocusedApplication() {
+        val windows=listOf(AppWindow(7,true,false,3))
+        assertNull(CaptureEventPolicy.confirmedForeground("com.loveadvisor.android",90,windows))
+        assertNull(CaptureEventPolicy.confirmedForeground("com.example.keyboard",91,windows))
+        assertNull(CaptureEventPolicy.confirmedForeground(null,7,windows))
+        assertNull(CaptureEventPolicy.confirmedForeground("com.tencent.mm",7,listOf(AppWindow(7,false,true,3))))
+    }
     @Test fun ownActivityEventsAreCheckedAgainstTheActualForegroundWindow() {
         assertTrue(CaptureEventPolicy.shouldObserve("com.loveadvisor.android",true,"com.loveadvisor.android"))
         assertFalse(CaptureEventPolicy.shouldObserve("com.loveadvisor.android",false,"com.loveadvisor.android"))

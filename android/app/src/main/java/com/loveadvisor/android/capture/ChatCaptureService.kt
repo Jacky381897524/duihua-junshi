@@ -33,6 +33,8 @@ class ChatCaptureService:AccessibilityService() {
     private val main=Handler(Looper.getMainLooper())
     private val worker=Executors.newSingleThreadExecutor()
     private val nativeWorker=Executors.newSingleThreadExecutor { r -> Thread(r,"wechat-native-reader") }
+    private val foregroundWorker=Executors.newSingleThreadExecutor { r -> Thread(r,"chat-foreground-metadata") }
+    private val foregroundGate=CaptureReadGate()
     private val readGate=CaptureReadGate()
     private val manualRead=ManualReadGate()
     private val parser=AutomaticChatParser()
@@ -126,13 +128,15 @@ class ChatCaptureService:AccessibilityService() {
         val pkg=event.packageName?.toString()
         if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED && event.windowChanges and AccessibilityEvent.WINDOWS_CHANGE_REMOVED!=0) reader.forgetWindow(event.windowId)
         val structural=event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED || event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-        val transientWindow=structural && windows.any { it.id==event.windowId && it.type in setOf(android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD,android.view.accessibility.AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) }
-        if(transientWindow) { overlay.resize();return }
         if(ChatApps.supported(pkg) && event.eventType==AccessibilityEvent.TYPE_VIEW_SCROLLED && manualRead.active!=null) {
             cancelScreenRead("读取期间屏幕已滚动，本次读取已取消；已保留上次内容")
         }
         // Content/text/scroll events do not collect chat nodes, take screenshots, or start requests.
-        if(!structural || !CaptureEventPolicy.shouldObserve(pkg,true,packageName,transientWindow)) return
+        if(!structural)return
+        val currentWindows=windows
+        val transientWindow=currentWindows.any { it.id==event.windowId && it.type in setOf(android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD,android.view.accessibility.AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) }
+        if(transientWindow) { overlay.resize();return }
+        if(!CaptureEventPolicy.shouldObserve(pkg,true,packageName,transientWindow))return
         // Event class names describe views as well as Activities. Resolve actual foreground
         // windows before hiding anything; an editor/IME event is not proof of an app switch.
         if(event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && CaptureEventPolicy.navigationChanged(pkg,event.className?.toString().orEmpty())) {
@@ -143,19 +147,31 @@ class ChatCaptureService:AccessibilityService() {
                 readGate.invalidate();cancelScreenRead("本次屏幕读取已取消；已保留上次内容")
             }
         }
-        if(!main.hasCallbacks(debounced)) main.postDelayed(debounced,120)
+        val apps=currentWindows.filter { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+        val signal=CaptureEventPolicy.confirmedForeground(pkg,event.windowId,apps.map { AppWindow(it.id,it.isFocused,it.isActive,it.layer) })
+        if(signal!=null) {
+            // No app-root IPC and no wait behind a conversation read. Only OS window metadata.
+            foregroundGate.invalidate();main.removeCallbacks(debounced)
+            val frame=android.graphics.Rect().apply { apps.first { it.id==signal.windowId }.getBoundsInScreen(this) }
+            val next=WindowSnapshot(signal.packageName,signal.windowId,RectI(frame.left,frame.top,frame.right,frame.bottom),emptyList())
+            if(!canObserve())leaveForeground()
+            else if(!ChatApps.supported(signal.packageName) || !frame.isEmpty) {
+                foregroundRetries=0
+                if(!wechatForeground || foregroundPackage!=next.packageName || foregroundWindowId!=next.windowId || lastForegroundWindow?.viewport!=next.viewport)updateForeground(next)
+            } else if(!main.hasCallbacks(debounced))main.post(debounced)
+        } else if(!main.hasCallbacks(debounced))main.post(debounced)
     }
     private fun locked()=getSystemService(KeyguardManager::class.java).isKeyguardLocked || !getSystemService(PowerManager::class.java).isInteractive
     private fun canObserve()=!stopping && CapturePolicy.overlayVisible(graph.settings.load().overlayEnabled,locked(),projecting)
     private fun checkForeground() {
         if(!canObserve()) { leaveForeground(); return }
-        val lease=readGate.begin() ?: return
-        nativeWorker.execute {
+        val lease=foregroundGate.begin() ?: return
+        foregroundWorker.execute {
             val window=runCatching { reader.foreground() }.getOrNull()
             main.post {
-                val completion=readGate.complete(lease)
+                val completion=foregroundGate.complete(lease)
                 if(completion.accept && canObserve()) updateForeground(window)
-                if(completion.readAgain && !main.hasCallbacks(debounced)) main.postDelayed(debounced,120)
+                if(completion.readAgain && !main.hasCallbacks(debounced)) main.post(debounced)
             }
         }
     }
@@ -541,7 +557,7 @@ class ChatCaptureService:AccessibilityService() {
     private fun leaveForeground(message:String="已保留已读内容，返回后可继续使用") {
         wechatForeground=false; foregroundWindowId=null;foregroundPackage=null
         lastForegroundWindow=null
-        main.removeCallbacks(debounced); readGate.invalidate();cancelScreenRead(message)
+        main.removeCallbacks(debounced);foregroundGate.invalidate();readGate.invalidate();cancelScreenRead(message)
         if(::overlay.isInitialized) { overlay.suspendForBackground();ensureOverlay() }
     }
     private fun pagePauseMessage(w:WindowSnapshot)=when(WeChatPageClassifier.classify(w)) {
@@ -553,8 +569,8 @@ class ChatCaptureService:AccessibilityService() {
         WeChatPageKind.INVALID -> "窗口范围暂不可用，请稍后点击读取信息"
         else -> "未识别为可读取的聊天，请重新读取"
     }
-    override fun onInterrupt() { stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.suspend();readGate.invalidate();cancelScreenRead();if(::overlay.isInitialized)overlay.suspendForBackground() }
+    override fun onInterrupt() { stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.suspend();foregroundGate.invalidate();readGate.invalidate();cancelScreenRead();if(::overlay.isInitialized)overlay.suspendForBackground() }
     override fun onConfigurationChanged(newConfig:android.content.res.Configuration) { super.onConfigurationChanged(newConfig);if(::overlay.isInitialized)overlay.resize();if(::reader.isInitialized)checkForeground() }
-    override fun onDestroy() { stopping=true;stopStartup?.invoke();stopStartup=null;if(::reader.isInitialized)graph.controller.awaitCapture("辅助服务已停止；已保留已读内容");stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.destroy(); main.removeCallbacksAndMessages(null); readGate.invalidate();cancelScreenRead();if(::overlay.isInitialized)overlay.destroy();worker.shutdownNow();nativeWorker.shutdownNow();runCatching { unregisterReceiver(receiver) };if(instance===this)instance=null;super.onDestroy() }
+    override fun onDestroy() { stopping=true;stopStartup?.invoke();stopStartup=null;if(::reader.isInitialized)graph.controller.awaitCapture("辅助服务已停止；已保留已读内容");stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.destroy(); main.removeCallbacksAndMessages(null);foregroundGate.invalidate();readGate.invalidate();cancelScreenRead();if(::overlay.isInitialized)overlay.destroy();worker.shutdownNow();nativeWorker.shutdownNow();foregroundWorker.shutdownNow();runCatching { unregisterReceiver(receiver) };if(instance===this)instance=null;super.onDestroy() }
     companion object { @Volatile var instance:ChatCaptureService?=null; private set }
 }

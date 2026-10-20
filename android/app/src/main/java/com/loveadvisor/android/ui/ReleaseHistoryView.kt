@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.4.6 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.4.7 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,11 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.4.7", "前台胶囊同步与精简诊断入口", listOf(
+                "前台切换按系统实际聚焦的应用窗口事件及时处理，移除额外事件等待；备用前台检查使用独立队列，避免排在聊天读取之后。微信、QQ、抖音共用此流程，不自动读取或请求模型。",
+                "连接诊断移除重复的悬浮窗与胶囊设置按钮；导出诊断增加实际军师版本，便于核对安装包。",
+                "包含 V1.4.6 的输入连接有限等待、具体失败原因及按操作隔离的填入阶段记录；闲置后首次填入与实际切换延迟仍需手机验收。系统截图限制未解决。"
+            )),
             Release("V1.4.6", "填入连接等待与失败诊断", listOf(
                 "系统输入连接改按实际时间有限等待，避免键盘连接稍晚建立就提前失败；只尝试聚焦一次，不自动发送。",
                 "区分未定位输入框、位置无法核对、系统拒绝或中断聚焦等失败原因；连接诊断增加脱敏填入阶段，不记录昵称、草稿和回复正文。",

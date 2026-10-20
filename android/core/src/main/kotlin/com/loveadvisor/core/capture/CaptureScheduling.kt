@@ -1,12 +1,19 @@
 package com.loveadvisor.core.capture
 
 data class AppWindow(val id:Int,val focused:Boolean,val active:Boolean,val layer:Int)
+data class ForegroundSignal(val packageName:String,val windowId:Int)
 object ForegroundWindowSelector {
     fun select(windows:List<AppWindow>,overlayActive:Boolean=false,overlayFocused:Boolean=false):AppWindow?=windows.filter { it.focused }.maxByOrNull { it.layer }
         ?: windows.filter { it.active }.maxByOrNull { it.layer }
         ?: windows.takeIf { overlayActive || overlayFocused }?.maxByOrNull { it.layer }
 }
 object CaptureEventPolicy {
+    /** Event package is usable only when the same application window actually has focus. */
+    fun confirmedForeground(pkg:String?,eventWindowId:Int,windows:List<AppWindow>):ForegroundSignal? {
+        if(pkg.isNullOrBlank() || eventWindowId<0)return null
+        val focused=windows.filter { it.focused }.maxByOrNull { it.layer } ?: return null
+        return if(focused.id==eventWindowId)ForegroundSignal(pkg,eventWindowId) else null
+    }
     fun foregroundAppChanged(pkg:String?,windowClass:String,imePackages:Set<String>,inputMethodWindow:Boolean=false):Boolean=
         !inputMethodWindow && pkg!=null && !ChatApps.supported(pkg) && pkg!="com.android.systemui" && pkg !in imePackages && windowClass.startsWith("$pkg.")
     fun shouldObserve(pkg:String?,structural:Boolean,ownPackage:String,transientWindow:Boolean=false)=
