@@ -11,6 +11,7 @@ import com.loveadvisor.android.knowledge.KnowledgeActivity
 import com.loveadvisor.android.memory.ProfilesActivity
 import com.loveadvisor.android.advisor.*
 import com.loveadvisor.core.startup.StartupPhase
+import com.loveadvisor.core.startup.StartupStage
 
 class MainActivity : BaseActivity() {
     private var cacheBusy=false
@@ -19,7 +20,20 @@ class MainActivity : BaseActivity() {
     private var stopStartup:(()->Unit)?=null
     private var ready=false
     override fun onCreate(savedInstanceState: Bundle?) {
+        AppStartupTrace.mark(StartupStage.MAIN_CREATE_ENTERED)
         super.onCreate(savedInstanceState)
+        val firstDraw=object:android.view.ViewTreeObserver.OnDrawListener {
+            private var observed=false
+            override fun onDraw() {
+                if(observed)return
+                observed=true;AppStartupTrace.mark(StartupStage.FIRST_DRAW)
+                window.decorView.post {
+                    val observer=window.decorView.viewTreeObserver
+                    if(observer.isAlive)observer.removeOnDrawListener(this)
+                }
+            }
+        }
+        window.decorView.viewTreeObserver.addOnDrawListener(firstDraw)
         val startup=AppStartup.get(this)
         stopStartup=startup.observe { state ->
             ready=state.phase==StartupPhase.READY
@@ -27,8 +41,9 @@ class MainActivity : BaseActivity() {
             else renderStartup(state.phase)
         }
         renderStartup(startup.state.phase);startup.start()
+        AppStartupTrace.mark(StartupStage.MAIN_CREATED)
     }
-    override fun onResume() { super.onResume();if(ready)render() }
+    override fun onResume() { super.onResume();AppStartupTrace.mark(StartupStage.MAIN_RESUMED);if(ready)render() }
     override fun onDestroy() { stopStartup?.invoke();stopStartup=null;super.onDestroy() }
     private fun renderStartup(phase:StartupPhase) {
         page("对话军师","正在准备本地设置")

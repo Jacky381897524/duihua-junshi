@@ -20,17 +20,22 @@ object AppStartup {
         StartupLoader(worker,Executor { main.post(it) }) {
             val began=SystemClock.elapsedRealtime();stage="初始化本地组件"
             Log.i("AdvisorStartup","begin")
+            AppStartupTrace.mark(StartupStage.GRAPH_BEGIN)
             val graph=AppGraph.get(app)
-            stage="读取本地加密设置";graph.settings.load()
+            AppStartupTrace.mark(StartupStage.GRAPH_READY)
+            stage="读取本地加密设置";AppStartupTrace.mark(StartupStage.SETTINGS_READ_BEGIN)
+            graph.settings.load();AppStartupTrace.mark(StartupStage.SETTINGS_READ_READY)
             stage="本地设置就绪"
             graph.record("startup",SystemClock.elapsedRealtime()-began,null,null)
             Log.i("AdvisorStartup","ready ${SystemClock.elapsedRealtime()-began}ms")
+            AppStartupTrace.mark(StartupStage.STARTUP_READY)
             graph
         }.also { created ->
             loader=created
             created.observe { state ->
                 if(state.phase==StartupPhase.LOADING)main.postDelayed({ created.markSlow(state.attempt) },8000)
-                if(state.phase==StartupPhase.FAILED)Log.w("AdvisorStartup","failed ${state.errorType}")
+                if(state.phase==StartupPhase.SLOW)AppStartupTrace.mark(StartupStage.STARTUP_SLOW)
+                if(state.phase==StartupPhase.FAILED) { AppStartupTrace.mark(StartupStage.STARTUP_FAILED);Log.w("AdvisorStartup","failed ${state.errorType}") }
             }
         }
     }

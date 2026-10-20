@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.4.8 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.4.9 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,11 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.4.9", "输入区域定位与混合消息读取", listOf(
+                "读取时补充原生输入区域与本地空白输入框定位，不增加模型调用；定位不确定时不点击，保留标题、布局、草稿与写入回读核验。",
+                "视觉解析遇到文件卡片、不支持或不完整的单条消息时保留其余完整内容，兼容空字段；拒绝截断或无可用内容的结果，不自动重试接口。",
+                "新增当前和上次进程的脱敏启动阶段，后台有限保存；安装后卡在系统样式的正在更新画面仍需现场核验，不标记为已解决。"
+            )),
             Release("V1.4.8", "退出聊天时先隐藏再核验", listOf(
                 "窗口前台无法确认时先隐藏胶囊和面板，取消原先保持显示等待两次400毫秒的处理；有明确键盘或面板焦点时保留对应聊天，已读内容不清空。",
                 "旧聊天仅可见或活跃不再作为前台证明，后台旧窗口的迟到结果不能恢复显示；微信、QQ、抖音共用。",

@@ -101,6 +101,7 @@ class ChatCaptureService:AccessibilityService() {
     private val fillTrace=FillStageTrace { SystemClock.elapsedRealtime() }
     val lastFillStages get()=fillTrace.description()
     var lastScreenshotDiagnosticStatus="本次服务尚未请求截图"; private set
+    var lastComposerDiagnosticStatus="尚未定位输入区域"; private set
     var lastStyleNicknameFromOcr=false; private set
     private data class VisionReply(val result:VisionConversation,val windowId:Int,val cancel:Cancellation,val ticket:ManualReadGate.Ticket,val navigation:Long,val fillReference:VisualFillReference?)
     private var pendingVision:VisionReply?=null
@@ -339,14 +340,23 @@ class ChatCaptureService:AccessibilityService() {
                         val positionScale=original.height.toDouble()/scaled.height
                         val titleStamp=VisualFillReference.stamp(original)
                         val footerStamp=VisualFillReference.footerStamp(original)
+                        val nativeInput=w.nodes.filter { it.editable && !it.text.orEmpty().contains("搜索") && ImeFillPolicy.composerAllowed(it.bounds,w.viewport) }.map { it.bounds }.distinct().singleOrNull()
+                        val localInput=if(nativeInput==null)runCatching {
+                            com.loveadvisor.core.input.WechatComposerLocator.locate(w.packageName,original.width,original.height,original::getPixel)?.let { r ->
+                                RectI(w.viewport.left+(r.left*w.viewport.width.toDouble()/original.width).toInt(),w.viewport.top+(r.top*w.viewport.height.toDouble()/original.height).toInt(),
+                                    w.viewport.left+(r.right*w.viewport.width.toDouble()/original.width).toInt(),w.viewport.top+(r.bottom*w.viewport.height.toDouble()/original.height).toInt())
+                            }?.takeIf { ImeFillPolicy.composerAllowed(it,w.viewport) }
+                        }.getOrNull() else null
                         val bytes=ByteArrayOutputStream(); scaled.compress(Bitmap.CompressFormat.JPEG,90,bytes)
                         if(scaled!==original) scaled.recycle(); original.recycle()
                         val readVisual=graph.vision.read(config.vision.copy(apiKey=key),"data:image/jpeg;base64,"+Base64.encodeToString(bytes.toByteArray(),Base64.NO_WRAP),cancel,w.packageName,config.groupContextLimit)
-                        val input=readVisual.composer?.let { r -> RectI(w.viewport.left+(r.left*positionScale).toInt(),w.viewport.top+(r.top*positionScale).toInt(),w.viewport.left+(r.right*positionScale).toInt(),w.viewport.top+(r.bottom*positionScale).toInt()) }?.takeIf { ImeFillPolicy.composerAllowed(it,w.viewport) }
+                        val modelInput=readVisual.composer?.let { r -> RectI(w.viewport.left+(r.left*positionScale).toInt(),w.viewport.top+(r.top*positionScale).toInt(),w.viewport.left+(r.right*positionScale).toInt(),w.viewport.top+(r.bottom*positionScale).toInt()) }?.takeIf { ImeFillPolicy.composerAllowed(it,w.viewport) }
+                        val input=nativeInput ?: localInput ?: modelInput
                         val visual=readVisual.copy(positions=readVisual.positions.mapValues { (_,y)->w.viewport.top+y*positionScale })
                         cancel.check()
                         main.post {
                             if(!cancel.cancelled && lease==navigation && manualRead.accepts(ticket) && overlayAllowed()) {
+                                lastComposerDiagnosticStatus=when { nativeInput!=null -> "原生文字输入区域";localInput!=null -> "本地识别空白文字输入区域";modelInput!=null -> "视觉返回文字输入区域";else -> "本次未确认文字输入区域" }
                                 graph.record("vision",SystemClock.elapsedRealtime()-started,null,null)
                                 pendingVision=VisionReply(visual,w.windowId,cancel,ticket,lease,titleStamp?.let { VisualFillReference(w.windowId,lease,it,input,footerStamp,w.viewport) })
                                 observe() // One local verification read; no second screenshot or automatic retry.
