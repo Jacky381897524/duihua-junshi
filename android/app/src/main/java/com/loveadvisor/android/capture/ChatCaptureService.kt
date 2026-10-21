@@ -25,6 +25,8 @@ import com.loveadvisor.core.input.FillStageTrace
 import com.loveadvisor.core.input.ImeFillPolicy
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import com.loveadvisor.android.diagnostics.DiagnosticLogs as Logs
+import com.loveadvisor.core.diagnostics.*
 
 /** Passive events check foreground metadata. Only an explicit gesture reads or analyzes messages. */
 class ChatCaptureService:AccessibilityService() {
@@ -38,6 +40,8 @@ class ChatCaptureService:AccessibilityService() {
     private val foregroundGate=CaptureReadGate()
     private val readGate=CaptureReadGate()
     private val manualRead=ManualReadGate()
+    private var readLog:LogOperation?=null
+    private var fillLog:LogOperation?=null
     private val parser=AutomaticChatParser()
     private val conversation=AutomaticConversation()
     private var identity:ConversationIdentity?=null
@@ -65,7 +69,7 @@ class ChatCaptureService:AccessibilityService() {
         val lease=if(::island.isInitialized)island.lease else null
         if(!::reader.isInitialized || lease==null || lease.id!=leaseId || !overlayAllowed() || overlaySuspensions!=0) { complete(false);return }
         nativeWorker.execute {
-            val fresh=runCatching { reader.foreground() }.getOrNull()
+            val fresh=Logs.recover(LogStep.FOREGROUND_ENTER) { reader.foreground() }
             main.post {
                 val valid=instance===this && lease===island.lease && lease.generation==navigation && overlayAllowed() && overlaySuspensions==0 && fresh?.packageName==lease.packageName && fresh.windowId==lease.windowId
                 complete(valid && island.handleNativeTap(leaseId))
@@ -109,11 +113,15 @@ class ChatCaptureService:AccessibilityService() {
     var lastWechatDiagnosticStatus="尚未点击读取信息"; private set
     private val debounced=Runnable { checkForeground() }
     private val readPending=Runnable { observe() }
-    private val cleanup=object:Runnable { override fun run() { worker.execute { runCatching { graph.recent.cleanup() } }; main.postDelayed(this,12*3600000L) } }
+    private val cleanup=object:Runnable { override fun run() { worker.execute { Logs.recover(LogStep.LOCAL_TASK) { graph.recent.cleanup() } }; main.postDelayed(this,12*3600000L) } }
     private val receiver=object:BroadcastReceiver() { override fun onReceive(context:Context?,intent:Intent?) {
         when(intent?.action) { Intent.ACTION_SCREEN_OFF -> leaveForeground(); Intent.ACTION_USER_PRESENT -> checkForeground() }
     } }
+    private fun platform(pkg:String?)=when(pkg) { ChatApps.WECHAT->1L;"com.tencent.mobileqq"->2L;"com.ss.android.ugc.aweme"->3L;else->0L }
+    override fun onCreate() { super.onCreate();Logs.event(LogStep.SERVICE_CREATE,LogState.OK) }
+    override fun onUnbind(intent:Intent?):Boolean { Logs.event(LogStep.SERVICE_UNBIND,LogState.WARN);Logs.flush();return super.onUnbind(intent) }
     override fun onServiceConnected() {
+        Logs.event(LogStep.SERVICE_BIND,LogState.OK)
         stopping=false
         stopStartup?.invoke()
         val startup=com.loveadvisor.android.AppStartup.get(this)
@@ -126,8 +134,9 @@ class ChatCaptureService:AccessibilityService() {
     private fun connectReadyService() {
         if(::reader.isInitialized) { ensureOverlay();return }
         instance=this; reader=NodeSnapshotReader(this); overlay=OverlayController(this);island=com.loveadvisor.android.island.NativeIslandCoordinator(this,overlay)
+        Logs.event(LogStep.SERVICE_READY,LogState.OK)
         graph.tracker.lastSnapshot?.takeIf { ChatApps.supported(it.packageName) }?.let { conversation.restore(it);identity=it.identity }
-        imePackages=runCatching { getSystemService(android.view.inputmethod.InputMethodManager::class.java).inputMethodList.map { it.packageName }.toSet() }.getOrDefault(emptySet())
+        imePackages=Logs.recover(LogStep.SERVICE_READY) { getSystemService(android.view.inputmethod.InputMethodManager::class.java).inputMethodList.map { it.packageName }.toSet() } ?: emptySet()
         val screenEvents=IntentFilter(Intent.ACTION_SCREEN_OFF).apply { addAction(Intent.ACTION_USER_PRESENT) }
         if(Build.VERSION.SDK_INT>=33) registerReceiver(receiver,screenEvents,RECEIVER_NOT_EXPORTED) else registerReceiver(receiver,screenEvents)
         main.post(cleanup); checkForeground()
@@ -205,7 +214,7 @@ class ChatCaptureService:AccessibilityService() {
         val lease=foregroundGate.begin() ?: return
         foregroundStage("verify-start")
         foregroundWorker.execute {
-            val window=runCatching { reader.foreground() }.getOrNull()
+            val window=Logs.recover(LogStep.FOREGROUND_ENTER) { reader.foreground() }
             main.post {
                 val completion=foregroundGate.complete(lease)
                 if(completion.accept && canObserve())updateForeground(window)
@@ -238,7 +247,7 @@ class ChatCaptureService:AccessibilityService() {
         foregroundWindowId=current.windowId;foregroundPackage=current.packageName; wechatForeground=true
         lastForegroundWindow=current
         diagnosticStatus="按需读取 · ${ChatApps.label(current.packageName)}窗口 ${current.windowId} · ${current.viewport.width}×${current.viewport.height} · 仅检查前台，未收集聊天正文"
-        if(entering)foregroundStage("show-confirmed-chat")
+        if(entering) { foregroundStage("show-confirmed-chat");Logs.event(LogStep.FOREGROUND_ENTER,LogState.OK,metrics=mapOf(LogMetric.PLATFORM to platform(current.packageName),LogMetric.WINDOW_ID to current.windowId.toLong())) }
         ensureOverlay(); overlay.resize()
         return accepted
     }
@@ -248,14 +257,15 @@ class ChatCaptureService:AccessibilityService() {
         if(!overlayAllowed()) { leaveForeground(); return }
         val lease=readGate.begin() ?: run { main.removeCallbacks(readPending); main.postDelayed(readPending,120); return }
         val submittedIdentity=identity; val submittedNavigation=navigation;val submittedPackage=foregroundPackage
+        val parent=readLog
+        val log=Logs.begin(LogStep.READ_NATIVE,parent)
         nativeWorker.execute {
-            val started=SystemClock.elapsedRealtime()
-            val w=runCatching { reader.read(submittedIdentity,submittedPackage) }.getOrNull()
-            val result=w?.let { parser.extract(it) }
+            val w=try { reader.read(submittedIdentity,submittedPackage) } catch(error:Exception) { val fault=LogFault.capture(error);Logs.end(log,LogState.FAIL,fault.reason,fault);null }
+            val result=w?.let { Logs.recover(LogStep.READ_PARSE,log) { parser.extract(it) } }
             main.post {
                 val completion=readGate.complete(lease)
                 if(completion.accept && manualRead.accepts(ticket) && submittedNavigation==navigation && canObserve()) {
-                    graph.record("native-read",SystemClock.elapsedRealtime()-started,null,null)
+                    Logs.end(log,if(w==null)LogState.FAIL else LogState.OK,if(w==null)LogReason.NO_NODES else LogReason.NONE,metrics=mapOf(LogMetric.NODE_COUNT to (w?.nodes?.size ?: 0).toLong()))
                     if(w==null) finishRead(ticket,"系统未返回微信窗口，请重新点击读取信息")
                     else {
                         if(!updateForeground(w)) {
@@ -268,11 +278,13 @@ class ChatCaptureService:AccessibilityService() {
                         }
                     }
                 }
+                if(!completion.accept || !manualRead.accepts(ticket) || submittedNavigation!=navigation)Logs.end(log,LogState.CANCELLED,LogReason.RESULT_STALE)
                 if(completion.readAgain && !main.hasCallbacks(debounced)) main.postDelayed(debounced,120)
             }
         }
     }
     private fun processWindow(w:WindowSnapshot,result:CaptureResult,ticket:ManualReadGate.Ticket) {
+        Logs.event(LogStep.READ_PARSE,if(result==CaptureResult.NotChat)LogState.FAIL else LogState.OK,when(result) { is CaptureResult.NeedsImage->LogReason.NEEDS_VISION;is CaptureResult.Readable->LogReason.NONE;else->LogReason.NO_CHAT },readLog,metrics=mapOf(LogMetric.NODE_COUNT to w.nodes.size.toLong(),LogMetric.WINDOW_ID to w.windowId.toLong(),LogMetric.PLATFORM to platform(w.packageName)))
         val verifying=pendingVision; pendingVision=null
         val title=if(w.packageName==ChatApps.WECHAT)TextSceneParser.title(w.nodes,w.viewport)?.trim() else null
         if(verifying!=null && (verifying.windowId!=w.windowId || verifying.navigation!=navigation || verifying.ticket!=ticket || verifying.cancel.cancelled || title!=null && title!=verifying.result.title)) {
@@ -301,6 +313,7 @@ class ChatCaptureService:AccessibilityService() {
     }
     private fun accept(observed:ChatSnapshot,ticket:ManualReadGate.Ticket,fillReference:VisualFillReference?=null) {
         if(!manualRead.accepts(ticket)) return
+        Logs.event(LogStep.READ_ACCEPT,LogState.OK,operation=readLog,metrics=mapOf(LogMetric.MESSAGE_COUNT to observed.messages.size.toLong(),LogMetric.CHAT_KIND to if(observed.identity?.kind==ChatKind.GROUP)2L else 1L,LogMetric.HAS_INPUT to if(fillReference?.composer!=null)1L else 0L))
         if(identity!=null && (identity!!.displayTitle!=observed.identity?.displayTitle || !conversation.continues(observed))) {
             conversation.clear(); identity=null
             graph.controller.invalidate("已读取另一段聊天")
@@ -316,8 +329,8 @@ class ChatCaptureService:AccessibilityService() {
         conversation.observe(snapshot,System.currentTimeMillis(),entered)
         val merged=conversation.current ?: run { finishRead(ticket,"未取得可分析的对话，请重新读取"); return }
         graph.controller.observe(merged,"正在生成六条候选…")
-        worker.execute { runCatching { graph.recent.remember(merged) }.onFailure { graph.record("recent",0,null,"failure") } }
-        graph.currentObjectId=null; graph.controller.analyze(merged,objectId=null)
+        worker.execute { Logs.recover(LogStep.LOCAL_TASK) { graph.recent.remember(merged) } }
+        graph.currentObjectId=null; graph.controller.analyze(merged,objectId=null,diagnosticParent=readLog)
         finishRead(ticket)
     }
     private fun captureVision(w:WindowSnapshot,ticket:ManualReadGate.Ticket) {
@@ -325,12 +338,13 @@ class ChatCaptureService:AccessibilityService() {
         val config=graph.settings.load()
         val key=config.vision.apiKey.ifBlank { if(ProviderPresets.ownsOpenRouter(config.vision)) ProviderPresets.openRouterKey(config.profile,config.vision) else "" }
         if(key.isBlank()) { finishRead(ticket,"请在设置填写视觉接口密钥，再点击读取信息"); return }
-        val cancel=Cancellation(); visualCancel=cancel; val lease=navigation; val started=SystemClock.elapsedRealtime()
+        val cancel=Cancellation(); visualCancel=cancel; val lease=navigation
+        val visionLog=Logs.begin(LogStep.VISION_REQUEST,readLog)
         graph.controller.awaitVision(w,"正在读取${ChatApps.label(w.packageName)}气泡与双方…")
         captureWindow(w.windowId,cancel) { image ->
-            if(cancel.cancelled || lease!=navigation || !manualRead.accepts(ticket) || locked()) { if(image is CaptureImageResult.Success) image.bitmap.recycle(); return@captureWindow }
+            if(cancel.cancelled || lease!=navigation || !manualRead.accepts(ticket) || locked()) { Logs.end(visionLog,LogState.CANCELLED,LogReason.RESULT_STALE);if(image is CaptureImageResult.Success) image.bitmap.recycle(); return@captureWindow }
             when(image) {
-                is CaptureImageResult.Failure -> finishRead(ticket,"${image.message}，请点击读取信息重试")
+                is CaptureImageResult.Failure -> { Logs.end(visionLog,LogState.FAIL,if(image.protected)LogReason.SCREENSHOT_SECURE else LogReason.SCREENSHOT_FAILED);finishRead(ticket,"${image.message}，请点击读取信息重试") }
                 is CaptureImageResult.Success -> worker.execute {
                     var scaledToRecycle:Bitmap?=null
                     try {
@@ -341,15 +355,15 @@ class ChatCaptureService:AccessibilityService() {
                         val titleStamp=VisualFillReference.stamp(original)
                         val footerStamp=VisualFillReference.footerStamp(original)
                         val nativeInput=w.nodes.filter { it.editable && !it.text.orEmpty().contains("搜索") && ImeFillPolicy.composerAllowed(it.bounds,w.viewport) }.map { it.bounds }.distinct().singleOrNull()
-                        val localInput=if(nativeInput==null)runCatching {
+                        val localInput=if(nativeInput==null)Logs.recover(LogStep.READ_PARSE,visionLog) {
                             com.loveadvisor.core.input.WechatComposerLocator.locate(w.packageName,original.width,original.height,original::getPixel)?.let { r ->
                                 RectI(w.viewport.left+(r.left*w.viewport.width.toDouble()/original.width).toInt(),w.viewport.top+(r.top*w.viewport.height.toDouble()/original.height).toInt(),
                                     w.viewport.left+(r.right*w.viewport.width.toDouble()/original.width).toInt(),w.viewport.top+(r.bottom*w.viewport.height.toDouble()/original.height).toInt())
                             }?.takeIf { ImeFillPolicy.composerAllowed(it,w.viewport) }
-                        }.getOrNull() else null
+                        } else null
                         val bytes=ByteArrayOutputStream(); scaled.compress(Bitmap.CompressFormat.JPEG,90,bytes)
                         if(scaled!==original) scaled.recycle(); original.recycle()
-                        val readVisual=graph.vision.read(config.vision.copy(apiKey=key),"data:image/jpeg;base64,"+Base64.encodeToString(bytes.toByteArray(),Base64.NO_WRAP),cancel,w.packageName,config.groupContextLimit)
+                        val readVisual=Logs.within(visionLog) { graph.vision.read(config.vision.copy(apiKey=key),"data:image/jpeg;base64,"+Base64.encodeToString(bytes.toByteArray(),Base64.NO_WRAP),cancel,w.packageName,config.groupContextLimit) }
                         val modelInput=readVisual.composer?.let { r -> RectI(w.viewport.left+(r.left*positionScale).toInt(),w.viewport.top+(r.top*positionScale).toInt(),w.viewport.left+(r.right*positionScale).toInt(),w.viewport.top+(r.bottom*positionScale).toInt()) }?.takeIf { ImeFillPolicy.composerAllowed(it,w.viewport) }
                         val input=nativeInput ?: localInput ?: modelInput
                         val visual=readVisual.copy(positions=readVisual.positions.mapValues { (_,y)->w.viewport.top+y*positionScale })
@@ -357,13 +371,13 @@ class ChatCaptureService:AccessibilityService() {
                         main.post {
                             if(!cancel.cancelled && lease==navigation && manualRead.accepts(ticket) && overlayAllowed()) {
                                 lastComposerDiagnosticStatus=when { nativeInput!=null -> "原生文字输入区域";localInput!=null -> "本地识别空白文字输入区域";modelInput!=null -> "视觉返回文字输入区域";else -> "本次未确认文字输入区域" }
-                                graph.record("vision",SystemClock.elapsedRealtime()-started,null,null)
+                                Logs.event(LogStep.VISION_RESULT,LogState.OK,operation=visionLog,metrics=mapOf(LogMetric.MESSAGE_COUNT to visual.messages.size.toLong(),LogMetric.HAS_INPUT to if(input!=null)1L else 0L));Logs.end(visionLog,LogState.OK)
                                 pendingVision=VisionReply(visual,w.windowId,cancel,ticket,lease,titleStamp?.let { VisualFillReference(w.windowId,lease,it,input,footerStamp,w.viewport) })
                                 observe() // One local verification read; no second screenshot or automatic retry.
-                            }
+                            } else Logs.end(visionLog,LogState.CANCELLED,LogReason.RESULT_STALE)
                         }
-                    } catch(_:java.util.concurrent.CancellationException) { }
-                    catch(e:Exception) { main.post { if(!cancel.cancelled && lease==navigation && manualRead.accepts(ticket)) {
+                    } catch(_:java.util.concurrent.CancellationException) { Logs.end(visionLog,LogState.CANCELLED,LogReason.USER_CANCELLED) }
+                    catch(e:Exception) { val fault=LogFault.capture(e);Logs.end(visionLog,LogState.FAIL,fault.reason,fault);main.post { if(!cancel.cancelled && lease==navigation && manualRead.accepts(ticket)) {
                         val reason=graph.safeError(e)
                         lastWechatDiagnosticStatus="视觉读取失败 · $reason"
                         finishRead(ticket,reason)
@@ -374,6 +388,7 @@ class ChatCaptureService:AccessibilityService() {
         }
     }
     private fun captureWindow(windowId:Int,cancel:Cancellation,callback:(CaptureImageResult)->Unit) {
+        val log=Logs.begin(LogStep.SCREENSHOT_REQUEST,fillLog ?: readLog,metrics=mapOf(LogMetric.WINDOW_ID to windowId.toLong(),LogMetric.API_LEVEL to Build.VERSION.SDK_INT.toLong()))
         val detach=Build.VERSION.SDK_INT<34
         val now=SystemClock.elapsedRealtime()
         val deadline=now+5000L
@@ -384,6 +399,11 @@ class ChatCaptureService:AccessibilityService() {
         fun finish(image:CaptureImageResult) {
             if(completed) { if(image is CaptureImageResult.Success)image.bitmap.recycle();return }
             completed=true
+            val expired=SystemClock.elapsedRealtime()>=deadline
+            val failure=image as? CaptureImageResult.Failure
+            val state=if(cancel.cancelled)LogState.CANCELLED else if(failure!=null || expired)LogState.FAIL else LogState.OK
+            val reason=when { cancel.cancelled->LogReason.USER_CANCELLED;failure?.protected==true->LogReason.SCREENSHOT_SECURE;failure!=null || expired->LogReason.SCREENSHOT_FAILED;else->LogReason.NONE }
+            Logs.event(LogStep.SCREENSHOT_RESULT,state,reason,log,metrics=mapOf(LogMetric.SCREENSHOT_CODE to (failure?.code ?: 0).toLong()));Logs.end(log,state,reason)
             lastScreenshotDiagnosticStatus=when(image) {
                 is CaptureImageResult.Success -> "无障碍截图成功 · API ${Build.VERSION.SDK_INT}"
                 is CaptureImageResult.Failure -> "无障碍截图失败 · code=${image.code} · 受保护=${image.protected} · API ${Build.VERSION.SDK_INT}"
@@ -406,13 +426,15 @@ class ChatCaptureService:AccessibilityService() {
                 if(remaining>0) { main.postDelayed(attempt,remaining);return@Runnable }
                 lastActualCaptureStart=actualNow
                 lastReservedCaptureStart=maxOf(lastReservedCaptureStart,actualNow)
-                runCatching { WindowCapture(this).capture(windowId,cancel) { finish(it) } }.onFailure { finish(CaptureImageResult.Failure(-1,"系统暂未允许窗口截图")) }
+                try { WindowCapture(this).capture(windowId,cancel) { finish(it) } } catch(error:Exception) { Logs.failed(LogStep.SCREENSHOT_RESULT,error,log);finish(CaptureImageResult.Failure(-1,"系统暂未允许窗口截图")) }
             }
         }
         main.postDelayed(attempt,delay)
     }
     private fun finishRead(ticket:ManualReadGate.Ticket,message:String?=null) {
         if(!manualRead.finish(ticket)) return
+        Logs.event(LogStep.READ_FINISH,if(message==null)LogState.OK else LogState.FAIL,if(message==null)LogReason.NONE else Logs.reason(message),readLog)
+        Logs.end(readLog,if(message==null)LogState.OK else LogState.FAIL,if(message==null)LogReason.NONE else Logs.reason(message));readLog=null
         visualCancel?.cancel(); visualCancel=null; pendingVision=null; main.removeCallbacks(readPending)
         overlay.setReading(false)
         if(message!=null) { graph.controller.awaitCapture(message);graph.controller.status(message,failure=true) }
@@ -433,13 +455,17 @@ class ChatCaptureService:AccessibilityService() {
         return if(current.source==CaptureSource.OCR && overlayAllowed() && (window.packageName!=ChatApps.WECHAT || WeChatPageClassifier.classify(window) in setOf(WeChatPageKind.CHAT_OR_UNKNOWN,WeChatPageKind.GROUP))) current else null
     }
     fun captureNow() {
+        Logs.event(LogStep.READ_TAP)
         if(!overlayAllowed()) { notifyUser("请打开微信、QQ或抖音聊天后点击读取信息"); return }
-        if(manualRead.active!=null || graph.coordinator.state.loading) return
+        if(manualRead.active!=null || graph.coordinator.state.loading) { Logs.event(LogStep.READ_TAP,LogState.SKIP,LogReason.BUSY);return }
+        readLog=Logs.begin(LogStep.READ_TAP,metrics=mapOf(LogMetric.PLATFORM to platform(foregroundPackage)))
         manualRead.begin(); overlay.setReading(true); graph.controller.status("正在读取当前聊天屏幕…"); observe()
     }
     fun captureImage() { captureNow() }
     /** Explicit style-menu gesture only: native nickname or cropped local OCR, no analysis/network/navigation. */
     fun readStyleNickname(callback:(String?,String?)->Unit):()->Unit {
+        val log=Logs.begin(LogStep.LOCAL_TASK)
+        Logs.event(LogStep.PAGE_OPEN,reason=LogReason.PAGE_REPLY_STYLE,operation=log)
         val cancel=Cancellation()
         val pkg=foregroundPackage;val windowId=foregroundWindowId;val generation=navigation
         val previous=conversation.current;val previousImage=visualFill
@@ -447,19 +473,19 @@ class ChatCaptureService:AccessibilityService() {
         fun current()=!cancel.cancelled && instance===this && overlayAllowed() && generation==navigation && pkg==foregroundPackage && windowId==foregroundWindowId
         fun complete(resultPackage:String?,title:String?,localOcr:Boolean=false) {
             if(completed || cancel.cancelled)return
-            completed=true;cancel.cancel();lastStyleNicknameFromOcr=localOcr;callback(resultPackage,title)
+            completed=true;cancel.cancel();Logs.end(log,if(resultPackage==null)LogState.CANCELLED else if(title==null)LogState.FAIL else LogState.OK,if(resultPackage==null)LogReason.RESULT_STALE else if(title==null)LogReason.NO_NODES else LogReason.NONE);lastStyleNicknameFromOcr=localOcr;callback(resultPackage,title)
         }
         fun finish(title:String?,localOcr:Boolean=false) {
             if(!current()) { complete(null,null);return }
             nativeWorker.execute {
-                val fresh=runCatching { reader.foreground() }.getOrNull()
+                val fresh=Logs.recover(LogStep.FOREGROUND_ENTER,log) { reader.foreground() }
                 main.post { complete(if(current() && fresh!=null && fresh.packageName==pkg && fresh.windowId==windowId)pkg else null,title,localOcr) }
             }
         }
-        if(pkg==null || windowId==null || !current()) { main.post { complete(null,null) };return { cancel.cancel() } }
+        if(pkg==null || windowId==null || !current()) { main.post { complete(null,null) };return { cancel.cancel();Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED) } }
         main.postDelayed({ if(!completed && !cancel.cancelled)complete(if(current())pkg else null,null) },6500)
         nativeWorker.execute {
-            val window=runCatching { reader.read(expectedPackage=pkg) }.getOrNull()
+            val window=Logs.recover(LogStep.READ_NATIVE,log) { reader.read(expectedPackage=pkg) }
             val native=NativeReplyStyleTitle.read(window)
             main.post {
                 if(!current() || window==null || window.windowId!=windowId || window.packageName!=pkg) { complete(null,null);return@post }
@@ -493,15 +519,17 @@ class ChatCaptureService:AccessibilityService() {
                         recognizer.recognize(header,cancel,{ boxes,_ -> finish(boxes?.let { ReplyStyleHeader.title(it) },localOcr=true) },{
                             if(!header.isRecycled)header.recycle();recognizer.close()
                         })
-                    } catch(_:Exception) {
+                    } catch(error:Exception) {
+                        Logs.failed(LogStep.READ_PARSE,error,log)
                         cropped?.let { if(!it.isRecycled)it.recycle() };if(!original.isRecycled)original.recycle();ocr?.close();finish(null)
                     }
                 }
             }
         }
-        return { cancel.cancel() }
+        return { cancel.cancel();Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED) }
     }
     fun refresh() {
+        Logs.event(LogStep.REFRESH_TAP)
         val snapshot=conversation.current
         val token=graph.tracker.currentToken
         if(!overlayAllowed() || snapshot==null || token==null || graph.tracker.lastSnapshot!=snapshot || token.packageName!=snapshot.packageName || token.conversationId!=snapshot.identity?.id) { graph.controller.status("请先点击读取信息，再刷新候选"); return }
@@ -509,6 +537,7 @@ class ChatCaptureService:AccessibilityService() {
         graph.currentObjectId=null; graph.controller.analyze(snapshot,objectId=null,replyTarget=graph.coordinator.targetFor(snapshot))
     }
     fun replyTo(target:com.loveadvisor.core.model.ReplyTarget?) {
+        Logs.event(LogStep.TARGET_REPLY_TAP)
         val snapshot=conversation.current ?: return notifyUser("请先读取当前对话")
         if(!overlayAllowed() || snapshot.identity?.kind !in setOf(ChatKind.DIRECT,ChatKind.GROUP) || graph.tracker.lastSnapshot!=snapshot) { notifyUser("请重新读取当前对话");return }
         if(target!=null && snapshot.messages.count { it.id==target.messageId && it.speaker==Speaker.OTHER }!=1) { notifyUser("请选择已读的对方消息");return }
@@ -518,22 +547,36 @@ class ChatCaptureService:AccessibilityService() {
         val snapshot=conversation.current ?: return callback(null,"请先读取当前聊天")
         if(!graph.tracker.isCurrent(token))return callback(null,"聊天已变化，请重新读取")
         val cancel=Cancellation()
+        val log=Logs.begin(LogStep.ADVICE_REQUEST)
         worker.execute {
-            val detail=runCatching { graph.automaticAdvisor.detail(graph.inputFor(snapshot,"","",null),plan,cancel) }
+            var error:Exception?=null
+            val detail=try { Logs.within(log) { graph.automaticAdvisor.detail(graph.inputFor(snapshot,"","",null),plan,cancel) } } catch(e:Exception) { error=e;Logs.failed(LogStep.ADVICE_RESULT,e,log);null }
             main.post {
-                if(graph.tracker.isCurrent(token) && graph.coordinator.state.current?.batch?.replies?.any { it===plan }==true)callback(detail.getOrNull(),detail.exceptionOrNull()?.let { graph.safeError(it as? Exception ?: Exception()) })
+                if(graph.tracker.isCurrent(token) && graph.coordinator.state.current?.batch?.replies?.any { it===plan }==true) { Logs.end(log,if(detail!=null)LogState.OK else LogState.FAIL,if(detail!=null)LogReason.NONE else LogReason.STEP_FAILED);callback(detail,error?.let { graph.safeError(it) }) }
+                else Logs.end(log,LogState.CANCELLED,LogReason.RESULT_STALE)
             }
         }
     }
     fun confirmDraft(snapshot:ChatSnapshot) { if(ChatApps.supported(snapshot.packageName)) accept(snapshot,manualRead.begin()) }
     fun captureGeneration()=navigation
     fun fillDiagnostic(message:String,reset:Boolean=false) {
-        if(reset)fillTrace.begin()
+        if(reset) { fillTrace.begin();fillLog=Logs.begin(LogStep.FILL_TAP) }
         lastFillDiagnosticStatus=message
     }
+    fun finishFillLog(success:Boolean,message:String,cancelled:Boolean=false) {
+        val state=if(success)LogState.OK else if(cancelled)LogState.CANCELLED else LogState.FAIL
+        val reason=if(success)LogReason.NONE else if(cancelled)LogReason.USER_CANCELLED else Logs.reason(message)
+        Logs.event(LogStep.FILL_RESULT,state,reason,fillLog);Logs.end(fillLog,state,reason);fillLog=null
+    }
+    fun currentFillOperation()=fillLog
     /** Fixed stage labels and editor flags only; never record drafts, candidate text or names. */
-    fun fillStage(stage:String) { fillTrace.recorder()(stage) }
-    fun fillStageRecorder()=fillTrace.recorder()
+    fun fillStage(stage:String) { fillStageRecorder()(stage) }
+    fun fillStageRecorder():(String)->Unit {
+        val recorder=fillTrace.recorder();val log=fillLog
+        return { stage -> recorder(stage);Logs.event(LogStep.FILL_STAGE,reason=when(stage.substringBefore(' ')) {
+            "native-unavailable"->LogReason.NATIVE_INPUT_UNAVAILABLE;"ime-method-absent"->LogReason.IME_METHOD_ABSENT;"ime-editor-absent"->LogReason.IME_EDITOR_ABSENT;"ime-other-package"->LogReason.IME_OTHER_PACKAGE;"ime-editor-rejected"->LogReason.IME_EDITOR_REJECTED;"ime-connection-absent"->LogReason.IME_CONNECTION_ABSENT;"ime-connection-ready"->LogReason.IME_CONNECTION_READY;"focus-requested"->LogReason.FOCUS_REQUESTED;"focus-rejected"->LogReason.FOCUS_REJECTED;"focus-cancelled"->LogReason.FOCUS_CANCELLED;"focus-timed_out"->LogReason.FOCUS_TIMED_OUT;"title-mismatch"->LogReason.TITLE_MISMATCH;"composer-layout-mismatch"->LogReason.COMPOSER_LAYOUT_MISMATCH;else->LogReason.STEP_FAILED
+        },operation=log) }
+    }
     /** Local screenshot verifies the manually read title; no model call or new chat collection. */
     fun verifyVisualFill(token:SessionToken,requireComposerLayout:Boolean=false,callback:(Boolean)->Unit) {
         val ref=visualFill
@@ -599,6 +642,7 @@ class ChatCaptureService:AccessibilityService() {
     fun showFloating() { graph.settings.update { it.copy(overlayEnabled=true) }; checkForeground() }
     fun settingsChanged() { if(::island.isInitialized && !graph.settings.load().nativeIslandEnabled) { if(graph.settings.load().topCapsuleEnabled)island.suspend() else island.stop() };if(!canObserve()) leaveForeground() else checkForeground() }
     fun stopAssistance() {
+        Logs.event(LogStep.UI_ACTION,reason=LogReason.UI_SERVICE_STOP)
         stopping=true
         graph.controller.awaitCapture("辅助服务已停止；已保留已读内容")
         stopService(Intent(this,ProjectionService::class.java))
@@ -609,9 +653,10 @@ class ChatCaptureService:AccessibilityService() {
     fun beginProjectionCapture() { projecting=true; leaveForeground() }
     fun endProjectionCapture() { projecting=false; checkForeground() }
     fun previewOcr(draft:ConversationDraft) { graph.controller.status("请返回微信，点击读取信息获取当前聊天") }
-    fun notifyUser(text:String) { Toast.makeText(this,text,Toast.LENGTH_SHORT).show() }
+    fun notifyUser(text:String) { if(text.contains("失败") || text.contains("请") || text.contains("未能"))Logs.feedback(text);Toast.makeText(this,text,Toast.LENGTH_SHORT).show() }
     private fun cancelScreenRead(message:String="本次读取已取消；已保留上次内容") {
         val interrupted=manualRead.active!=null
+        if(interrupted) { Logs.end(readLog,LogState.CANCELLED,Logs.reason(message));readLog=null }
         manualRead.cancel(); main.removeCallbacks(readPending)
         visualCancel?.cancel(); visualCancel=null; pendingVision=null
         lastWindow=null; navigation++
@@ -620,7 +665,7 @@ class ChatCaptureService:AccessibilityService() {
     }
     private fun leaveForeground(message:String="已保留已读内容，返回后可继续使用") {
         val wasForeground=wechatForeground
-        if(wasForeground)foregroundStage("hide-foreground-lost")
+        if(wasForeground) { foregroundStage("hide-foreground-lost");Logs.event(LogStep.FOREGROUND_LEAVE,LogState.OK) }
         wechatForeground=false; foregroundWindowId=null;foregroundPackage=null
         lastForegroundWindow=null
         main.removeCallbacks(debounced);foregroundGate.invalidate();readGate.invalidate();cancelScreenRead(message)
@@ -636,8 +681,8 @@ class ChatCaptureService:AccessibilityService() {
         WeChatPageKind.INVALID -> "窗口范围暂不可用，请稍后点击读取信息"
         else -> "未识别为可读取的聊天，请重新读取"
     }
-    override fun onInterrupt() { stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.suspend();foregroundGate.invalidate();readGate.invalidate();cancelScreenRead();if(::overlay.isInitialized)overlay.suspendForBackground() }
+    override fun onInterrupt() { Logs.event(LogStep.SERVICE_INTERRUPT,LogState.WARN);stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.suspend();foregroundGate.invalidate();readGate.invalidate();cancelScreenRead();if(::overlay.isInitialized)overlay.suspendForBackground();Logs.flush() }
     override fun onConfigurationChanged(newConfig:android.content.res.Configuration) { super.onConfigurationChanged(newConfig);if(::overlay.isInitialized)overlay.resize();if(::reader.isInitialized)checkForeground() }
-    override fun onDestroy() { stopping=true;stopStartup?.invoke();stopStartup=null;if(::reader.isInitialized)graph.controller.awaitCapture("辅助服务已停止；已保留已读内容");stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.destroy(); main.removeCallbacksAndMessages(null);foregroundGate.invalidate();readGate.invalidate();cancelScreenRead();if(::overlay.isInitialized)overlay.destroy();worker.shutdownNow();nativeWorker.shutdownNow();foregroundWorker.shutdownNow();runCatching { unregisterReceiver(receiver) };if(instance===this)instance=null;super.onDestroy() }
+    override fun onDestroy() { Logs.event(LogStep.SERVICE_DESTROY,LogState.OK);stopping=true;stopStartup?.invoke();stopStartup=null;if(::reader.isInitialized)graph.controller.awaitCapture("辅助服务已停止；已保留已读内容");stopService(Intent(this,ProjectionService::class.java));if(::island.isInitialized)island.destroy(); main.removeCallbacksAndMessages(null);foregroundGate.invalidate();readGate.invalidate();cancelScreenRead();if(::overlay.isInitialized)overlay.destroy();worker.shutdownNow();nativeWorker.shutdownNow();foregroundWorker.shutdownNow();Logs.recover(LogStep.SERVICE_DESTROY) { unregisterReceiver(receiver) };if(instance===this)instance=null;Logs.flush();super.onDestroy() }
     companion object { @Volatile var instance:ChatCaptureService?=null; private set }
 }

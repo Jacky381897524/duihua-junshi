@@ -62,7 +62,7 @@ class OverlaySettingsView(context:Context,private val graph:AppGraph,private val
             try {
                 graph.settings.update { it.copy(frostedPanelEnabled=frosted,topCapsuleEnabled=capsule,nativeIslandEnabled=false,nativeIslandConfirmedBuild=null,reducedMotion=reduced,capsuleLocked=locked,capsuleScale=scale.coerceIn(.7f,2f),capsuleOffsetXdp=if(resetPosition)0f else it.capsuleOffsetXdp,capsuleOffsetYdp=if(resetPosition)0f else it.capsuleOffsetYdp,bubbleAutoHideSeconds=value,fillPanelBehavior=if(keep)"keep" else "collapse",groupContextLimit=limit) }
                 onSaved()
-            } catch(_:Exception) { status.text="保存失败，请重试";status.visibility=VISIBLE }
+            } catch(error:Exception) { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(com.loveadvisor.core.diagnostics.LogStep.CONFIG_SAVE,error);status.text="保存失败，请重试";status.visibility=VISIBLE }
         }
         val back=button("返回",heightDp=44,action=onCancel)
         if(compact) {

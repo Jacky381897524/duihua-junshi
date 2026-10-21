@@ -77,7 +77,7 @@ class MainActivity : BaseActivity() {
         body.addView(ViewStyles.button(this,"逐轮模拟练习") { open(PracticeActivity::class.java) })
         body.addView(ViewStyles.button(this,"导入聊天 / 本地截图识别") { open(ImportActivity::class.java) })
         body.addView(ViewStyles.button(this,"多对象独立分析与比较") { open(ComparisonActivity::class.java) })
-        body.addView(ViewStyles.button(this,"连接诊断") { open(DiagnosticsActivity::class.java) })
+        body.addView(ViewStyles.button(this,"诊断日志") { open(DiagnosticsActivity::class.java) })
         addCacheButton()
         body.addView(ViewStyles.button(this,"关于与许可") { open(AboutActivity::class.java) })
         body.addView(ViewStyles.button(this,"更新记录") { open(ReleaseHistoryActivity::class.java) })

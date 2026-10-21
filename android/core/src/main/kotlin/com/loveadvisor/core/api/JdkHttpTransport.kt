@@ -44,8 +44,8 @@ class JdkHttpTransport(private val connectTimeout: Int = 15000, private val read
             return ApiResponse(status,output.toString("UTF-8"),connection.headerFields.filterKeys { it!=null }.mapValues { it.value.joinToString(",") })
         } catch(e:CancellationException) { throw e }
         catch(e:ApiException) { throw e }
-        catch(_:SocketTimeoutException) { cancel.check(); throw ApiException(message="网络请求超时，请稍后重试") }
-        catch(_:java.io.IOException) { cancel.check(); throw ApiException(message="网络连接失败，请检查服务地址和网络") }
+        catch(error:SocketTimeoutException) { cancel.check(); throw ApiException(message="网络请求超时，请稍后重试").apply { initCause(error) } }
+        catch(error:java.io.IOException) { cancel.check(); throw ApiException(message="网络连接失败，请检查服务地址和网络").apply { initCause(error) } }
         finally { cancel.release(connection); connection.disconnect() }
     }
 }

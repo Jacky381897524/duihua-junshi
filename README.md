@@ -2,11 +2,11 @@
 
 <img src="docs/images/logo.png" alt="对话军师 Logo" width="96" />
 
-**一个对话，六种思路。** 海街寺庙整合开发的 Android 聊天助手，最新测试版 **V1.4.10（服务状态刷新与故障诊断）**。
+**一个对话，六种思路。** 海街寺庙整合开发的 Android 聊天助手，最新测试版 **V1.4.11（持久诊断日志与操作追踪）**。
 
 ## 下载与使用
 
-[下载 V1.4.10 测试版 APK](https://github.com/Jacky381897524/duihua-junshi/releases/download/v1.4.10/duihua-junshi-V1.4.10.apk) · [发布说明、源码包与校验文件](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.4.10)
+[下载 V1.4.11 测试版 APK](https://github.com/Jacky381897524/duihua-junshi/releases/download/v1.4.11/duihua-junshi-V1.4.11.apk) · [发布说明、源码包与校验文件](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.4.11)
 
 [所有历史版本](https://github.com/Jacky381897524/duihua-junshi/releases) · [V1.4.9](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.4.9) · [V1.4.5](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.4.5) · [V1.3.10](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.3.10) · [V1.3.09](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.3.09) · [V1.2.12](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.2.12) · [完整更新记录](CHANGELOG.md)
 
@@ -32,7 +32,7 @@
 - **判断接口**：默认 OpenRouter `typesafe/jev-1.13`，也可接入自定义判断模型。
 - **已读上下文**：单聊最近50条，群聊默认100条，可选50／100／200；只累计手动读取，不自动翻聊天。后台返回保留本次运行中的已读内容与面板草稿；填入仍核对当前聊天与输入框。
 - **清除缓存**：主页显示缓存大小，后台清理内部与外部临时缓存；保留密钥、模型配置、风格、关系记忆、聊天历史及系统编译缓存。
-- **故障诊断**：页面和导出包含实际版本及版本代码，后台读取本软件最近五条系统进程退出原因；服务恢复后可查看系统仍保留的历史。连接权限页在前台刷新状态，不把用户终止或更新退出直接当作服务崩溃。
+- **诊断日志**：在最新版本上统一维护；本机记录实际版本、进程、操作编号、阶段、耗时、错误类别和脱敏代码位置，串联读取、截图、视觉、判断、生成、填入、复制、设置及服务变化。重启后保留，清除缓存不会删除；默认滚动保留最多30天／10,000条／4MiB，可导出完整日志文件。记录不含聊天、昵称、密钥、接口地址或截图。异常退出尽力留下最近一次收据，并结合本软件最近五条系统退出记录；未完成或未写入不能直接证明崩溃，也不保证每次得出唯一根因。
 - **屏幕与权限适配**：避让横屏挖孔、刘海、导航栏和键盘；菜单与操作按钮适应窄屏及大字体，底部收起条保持可触达；权限入口提供标准系统备用页面。具体品牌和机型仍需实测。
 
 进入聊天或展开候选面板不会自动调用模型。「读取信息」收集当前内容；「刷新换一批」使用已读取上下文。主动进入「判断分析」后，对可见句子按需请求判断并复用结果。判断、回复和必要的截图会发送到你配置的服务，服务用量由相应平台计费。

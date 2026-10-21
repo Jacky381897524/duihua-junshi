@@ -1,4 +1,6 @@
 package com.loveadvisor.android.overlay
+import com.loveadvisor.android.diagnostics.DiagnosticLogs as Logs
+import com.loveadvisor.core.diagnostics.*
 import android.graphics.BitmapFactory
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
@@ -156,7 +158,8 @@ class OverlayController(private val service:ChatCaptureService) {
             try {
                 val first=!capsuleWindow.registered
                 capsule?.let { capsuleWindow.attach { manager.addView(it,capsuleParams) };if(first)OverlayAnimator.enter(it,graph.settings.load().reducedMotion,panel=true) }
-            } catch(_:RuntimeException) {
+            } catch(error:RuntimeException) {
+                Logs.failed(LogStep.OVERLAY_SHOW,error)
                 graph.settings.update { it.copy(topCapsuleEnabled=false) };setEntryMode(OverlayEntryMode.BUBBLE)
                 service.notifyUser("未能显示左上角胶囊，已恢复悬浮球")
             }
@@ -168,6 +171,7 @@ class OverlayController(private val service:ChatCaptureService) {
     }
     fun show() { showPanel(false) }
     private fun showPanel(native:Boolean) {
+        Logs.event(LogStep.UI_ACTION,reason=LogReason.UI_OPEN_PANEL)
         if(!service.overlayAllowed()) return
         if(panel!=null) { if(islandPanel==native) return else hide() }
         showBubble();islandPanel=native;islandBounds=null
@@ -205,8 +209,9 @@ class OverlayController(private val service:ChatCaptureService) {
                 try {
                     val host=frostedWindow ?: FrostedPanelWindow(service,view).also { frostedWindow=it }
                     host.show(p)
-                } catch(_:RuntimeException) {
-                    runCatching { frostedWindow?.release() };frostedWindow=null;useFrostedWindow=false
+                } catch(error:RuntimeException) {
+                    Logs.failed(LogStep.OVERLAY_SHOW,error)
+                    Logs.recover(LogStep.OVERLAY_HIDE) { frostedWindow?.release() };frostedWindow=null;useFrostedWindow=false
                     view.useFrostedWindow(false)
                     manager.addView(view,p)
                     service.notifyUser("当前系统未能启用毛玻璃，已使用清晰面板")
@@ -215,6 +220,7 @@ class OverlayController(private val service:ChatCaptureService) {
         }
     }
     private fun editReplyStyle() {
+        Logs.event(LogStep.PAGE_OPEN,reason=LogReason.PAGE_REPLY_STYLE)
         if(filling || reading) { service.notifyUser("请等待当前读取或填入完成");return }
         if(cancelStyleRead!=null)return
         val view=panel ?: return
@@ -322,6 +328,7 @@ class OverlayController(private val service:ChatCaptureService) {
     fun themeChanged() { val expanded=panel!=null;val native=islandPanel;hide();if(expanded && service.overlayAllowed())showPanel(native) }
     /** A foreground transition hides surfaces, but is not a request to discard an editor draft. */
     fun suspendForBackground() {
+        if(panelWindow.registered || bubbleWindow.registered || capsuleWindow.registered)Logs.event(LogStep.OVERLAY_HIDE,LogState.OK)
         main.removeCallbacks(autoHide);idle.pause();stopEdgeMotion();dragging=false
         cancelFill?.invoke();cancelFill=null;filling=false;confirmation?.close();confirmation=null
         panel?.let { it.stopAnimations();detachPanel(it) }
@@ -329,6 +336,7 @@ class OverlayController(private val service:ChatCaptureService) {
         capsule?.let { OverlayAnimator.stop(it);capsuleWindow.detach { manager.removeViewImmediate(it) } }
     }
     fun hide() {
+        Logs.event(LogStep.UI_ACTION,reason=LogReason.UI_CLOSE_PANEL)
         val expanded=panel!=null
         cancelStyleRead?.invoke();cancelStyleRead=null
         cancelFill?.invoke();cancelFill=null;filling=false;confirmation?.close();confirmation=null

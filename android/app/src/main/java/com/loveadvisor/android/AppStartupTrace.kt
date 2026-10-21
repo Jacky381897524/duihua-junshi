@@ -28,6 +28,7 @@ object AppStartupTrace {
     fun mark(stage:StartupStage) {
         val current=trace ?: return
         if(current.mark(stage)) {
+            com.loveadvisor.android.diagnostics.DiagnosticLogs.event(com.loveadvisor.core.diagnostics.LogStep.STARTUP,when(stage) { StartupStage.STARTUP_FAILED->com.loveadvisor.core.diagnostics.LogState.FAIL;StartupStage.STARTUP_SLOW->com.loveadvisor.core.diagnostics.LogState.WARN;else->com.loveadvisor.core.diagnostics.LogState.OK },metrics=mapOf(com.loveadvisor.core.diagnostics.LogMetric.COUNT to stage.ordinal.toLong()))
             val value=current.snapshot.current
             Log.i("AdvisorStartup","${value.version} pid=${value.pid} ${stage.name} +${value.events.first { it.stage==stage }.elapsedMs}ms")
         }

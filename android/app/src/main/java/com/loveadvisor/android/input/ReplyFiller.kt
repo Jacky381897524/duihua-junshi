@@ -20,16 +20,18 @@ class ReplyFiller(private val service:ChatCaptureService) {
         val guard=FillGuard(service.graph.tracker,allowOlderRevision=true)
         val generation=service.captureGeneration()
         val finished=AtomicBoolean(false)
-        val started=android.os.SystemClock.elapsedRealtime()
+
         fun active()=!finished.get() && ChatCaptureService.instance===service && service.overlayAllowed() && generation==service.captureGeneration() && guard.isCurrent(token)
-        fun done(success:Boolean,message:String) { if(!finished.compareAndSet(false,true))return;val result=if(success || message.startsWith("填入失败："))message else FillFeedback.failure(message,false);service.fillDiagnostic(result);service.graph.record("fill",android.os.SystemClock.elapsedRealtime()-started,null,if(success)null else "failure");callback(success,result) }
+        fun done(success:Boolean,message:String,cancelled:Boolean=false) { if(!finished.compareAndSet(false,true))return;val result=if(success || message.startsWith("填入失败："))message else FillFeedback.failure(message,false);service.fillDiagnostic(result);service.finishFillLog(success,result,cancelled);callback(success,result) }
         service.fillDiagnostic("正在检查当前聊天与输入框",reset=true)
-        main.postDelayed({ if(!finished.get())done(false,"填入超时，请在连接诊断查看最近填入") },25000)
+        val diagnosticOperation=service.currentFillOperation()
+        main.postDelayed({ if(!finished.get())done(false,"填入超时，请在诊断日志查看填入阶段") },25000)
         fun fallback(message:String) { if(!active())done(false,"聊天已变化，请重新读取") else { ClipboardController.copy(service,text,notify=false);done(false,FillFeedback.failure(message,true)) } }
         fun read(callbackTarget:(FillTarget?)->Unit) {
+            com.loveadvisor.android.diagnostics.DiagnosticLogs.event(com.loveadvisor.core.diagnostics.LogStep.FILL_STAGE,operation=diagnosticOperation,reason=com.loveadvisor.core.diagnostics.LogReason.FILL_NATIVE_READ)
             if(!active()) { done(false,"聊天已变化，请重新读取");return }
             worker.execute {
-                val read=runCatching { service.readFillWindow() }.getOrNull()
+                val read=com.loveadvisor.android.diagnostics.DiagnosticLogs.recover(com.loveadvisor.core.diagnostics.LogStep.FILL_STAGE,diagnosticOperation) { service.readFillWindow() }
                 main.post {
                     if(finished.get())return@post
                     if(!active()) { done(false,"聊天已变化，请重新读取");return@post }
@@ -41,8 +43,9 @@ class ReplyFiller(private val service:ChatCaptureService) {
             }
         }
         fun action(target:FillTarget,command:Int,bundle:Bundle?=null,next:(Boolean)->Unit) {
+            com.loveadvisor.android.diagnostics.DiagnosticLogs.event(com.loveadvisor.core.diagnostics.LogStep.FILL_STAGE,operation=diagnosticOperation,reason=when(command) { AccessibilityNodeInfo.ACTION_CLICK->com.loveadvisor.core.diagnostics.LogReason.FILL_CLICK;AccessibilityNodeInfo.ACTION_FOCUS->com.loveadvisor.core.diagnostics.LogReason.FILL_FOCUS;AccessibilityNodeInfo.ACTION_SET_TEXT->com.loveadvisor.core.diagnostics.LogReason.FILL_SET_TEXT;AccessibilityNodeInfo.ACTION_PASTE->com.loveadvisor.core.diagnostics.LogReason.FILL_PASTE;AccessibilityNodeInfo.ACTION_SET_SELECTION->com.loveadvisor.core.diagnostics.LogReason.FILL_SELECTION;else->com.loveadvisor.core.diagnostics.LogReason.STEP_FAILED })
             if(!active()) { done(false,"聊天已变化，请重新读取");return }
-            worker.execute { val result=runCatching { if(active()) (target.handle as AccessibilityNodeInfo).performAction(command,bundle) else false }.getOrDefault(false);main.post { if(!finished.get()) { if(active())next(result) else done(false,"聊天已变化，请重新读取") } } }
+            worker.execute { val result=com.loveadvisor.android.diagnostics.DiagnosticLogs.recover(com.loveadvisor.core.diagnostics.LogStep.FILL_STAGE,diagnosticOperation) { if(active()) (target.handle as AccessibilityNodeInfo).performAction(command,bundle) else false } ?: false;main.post { if(!finished.get()) { if(active())next(result) else done(false,"聊天已变化，请重新读取") } } }
         }
         fun verify(attempt:Int) {
             main.postDelayed({ read { observed ->
@@ -86,17 +89,17 @@ class ReplyFiller(private val service:ChatCaptureService) {
             if(first==null) {
                 service.fillDiagnostic("原生输入框不可用，尝试系统输入连接")
                 service.fillStage("native-unavailable")
-                val confirm=onConfirm?.let { present -> { draft:String,write:()->Unit -> present(draft,write,{ done(false,"已保留微信原稿") }) } }
+                val confirm=onConfirm?.let { present -> { draft:String,write:()->Unit -> present(draft,write,{ done(false,"已保留微信原稿",cancelled=true) }) } }
                 ImeReplyFiller(service).fill(token,text,confirm,{ active() }) { success,message -> done(success,message) }
                 return@read
             }
             val draft=first.editable.text.orEmpty()
             if(draft.isNotBlank() && draft!=text) {
                 if(onConfirm==null) fallback("输入框已有草稿，未覆盖")
-                else onConfirm(draft,{ if(!finished.get())write(draft) },{ done(false,"已保留微信原稿") })
+                else onConfirm(draft,{ if(!finished.get())write(draft) },{ done(false,"已保留微信原稿",cancelled=true) })
             } else write(draft)
         }
-        return { if(Looper.myLooper()==Looper.getMainLooper())done(false,"已取消填入，保留原稿") else main.post { done(false,"已取消填入，保留原稿") } }
+        return { if(Looper.myLooper()==Looper.getMainLooper())done(false,"已取消填入，保留原稿",cancelled=true) else main.post { done(false,"已取消填入，保留原稿",cancelled=true) } }
     }
     companion object { private val worker=Executors.newSingleThreadExecutor { r->Thread(r,"verified-wechat-fill") } }
 }

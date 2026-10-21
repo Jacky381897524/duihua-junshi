@@ -16,7 +16,7 @@ object ViewStyles {
     fun button(c:Context,value:String,primary:Boolean=false,action:()->Unit)=Button(c).apply {
         stateListAnimator=null; elevation=0f; translationZ=0f; backgroundTintList=null
         text=value; textSize=15f; isAllCaps=false; setTextColor(if(primary) Color.WHITE else themed(c,BLUE)); background=shape(c,if(primary) BLUE else Color.WHITE,18f,if(primary) null else 0xFFDCE3EE.toInt())
-        minimumHeight=dp(c,46f); setPadding(dp(c,14f),dp(c,6f),dp(c,14f),dp(c,6f)); setOnClickListener { performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); action() }
+        minimumHeight=dp(c,46f); setPadding(dp(c,14f),dp(c,6f),dp(c,14f),dp(c,6f)); setOnClickListener { performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); com.loveadvisor.android.diagnostics.DiagnosticLogs.dispatch(value,action) }
         layoutParams=LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(c,8f); bottomMargin=dp(c,4f) }
     }
     fun field(c:Context,hintValue:String,value:String="",multiline:Boolean=false)=EditText(c).apply {
@@ -30,5 +30,5 @@ object ViewStyles {
         layoutParams=LinearLayout.LayoutParams(dp(c,56f),dp(c,32f)).apply { topMargin=dp(c,6f); rightMargin=dp(c,7f) }
     }
     fun card(c:Context)=column(c,18).apply { background=shape(c); layoutParams=LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(c,12f); bottomMargin=dp(c,4f) } }
-    fun switch(c:Context,title:String,checked:Boolean,action:(Boolean)->Unit)=Switch(c).apply { text=title; isChecked=checked; setTextColor(themed(c,INK)); setPadding(0,dp(c,10f),0,dp(c,10f)); setOnCheckedChangeListener { _,value -> action(value) } }
+    fun switch(c:Context,title:String,checked:Boolean,action:(Boolean)->Unit)=Switch(c).apply { text=title; isChecked=checked; setTextColor(themed(c,INK)); setPadding(0,dp(c,10f),0,dp(c,10f)); setOnCheckedChangeListener { _,value -> com.loveadvisor.android.diagnostics.DiagnosticLogs.event(com.loveadvisor.core.diagnostics.LogStep.SETTING_CHANGE,metrics=mapOf(com.loveadvisor.core.diagnostics.LogMetric.ENABLED to if(value)1L else 0L));action(value) } }
 }

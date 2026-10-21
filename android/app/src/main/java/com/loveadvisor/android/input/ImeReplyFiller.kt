@@ -21,6 +21,7 @@ class ImeReplyFiller(private val service:ChatCaptureService) {
         val generation=service.captureGeneration();val finished=AtomicBoolean(false)
         val boundEditor=AtomicLong(-1)
         val recordStage=service.fillStageRecorder()
+        val diagnosticOperation=service.currentFillOperation()
         var lastConnectionState:String?=null
         fun connectionStage(value:String) { if(lastConnectionState!=value) { lastConnectionState=value;recordStage(value) } }
         fun active()=!finished.get() && parentActive() && (boundEditor.get()<0 || boundEditor.get()==service.editorGeneration()) && ChatCaptureService.instance===service && service.overlayAllowed() && service.captureGeneration()==generation && service.graph.tracker.sameConversation(token)
@@ -44,7 +45,7 @@ class ImeReplyFiller(private val service:ChatCaptureService) {
             boundEditor.compareAndSet(-1,epoch)
             if(!active() || epoch!=service.editorGeneration()) { done(false,"输入连接已变化，请重新选择回复");return }
             worker.execute {
-                val surrounding=runCatching { c.getSurroundingText(4096,4096,0) }.getOrNull()
+                val surrounding=com.loveadvisor.android.diagnostics.DiagnosticLogs.recover(com.loveadvisor.core.diagnostics.LogStep.FILL_STAGE,diagnosticOperation) { c.getSurroundingText(4096,4096,0) }
                 main.post {
                     if(finished.get())return@post
                     if(!active()) { done(false,"聊天已变化，请重新读取");return@post }
@@ -64,11 +65,11 @@ class ImeReplyFiller(private val service:ChatCaptureService) {
             service.verifyVisualFill(token) finalTitle@{ stillCurrent ->
                 if(!stillCurrent || !active()) { done(false,"当前聊天或输入连接已变化，已保留原稿");return@finalTitle }
                 worker.execute {
-                    val finalDraft=runCatching { c.getSurroundingText(4096,4096,0) }.getOrNull()
+                    val finalDraft=com.loveadvisor.android.diagnostics.DiagnosticLogs.recover(com.loveadvisor.core.diagnostics.LogStep.FILL_STAGE,diagnosticOperation) { c.getSurroundingText(4096,4096,0) }
                     val unchanged=finalDraft!=null && ImeFillPolicy.completeDraft(finalDraft.text.toString(),finalDraft.offset,finalDraft.selectionStart,finalDraft.selectionEnd) && finalDraft.text.toString()==expected && minOf(finalDraft.selectionStart,finalDraft.selectionEnd)==0 && maxOf(finalDraft.selectionStart,finalDraft.selectionEnd)==expected.length
                     main.post {
                         if(finished.get())return@post
-                        val committed=runCatching { if(unchanged && active() && connection()!=null) { c.commitText(text,1,null);true } else false }.getOrDefault(false)
+                        val committed=com.loveadvisor.android.diagnostics.DiagnosticLogs.recover(com.loveadvisor.core.diagnostics.LogStep.FILL_STAGE,diagnosticOperation) { if(unchanged && active() && connection()!=null) { c.commitText(text,1,null);true } else false } ?: false
                         if(committed)verify(0) else done(false,"草稿或输入连接已变化，已保留原稿")
                     }
                 }
@@ -85,12 +86,12 @@ class ImeReplyFiller(private val service:ChatCaptureService) {
                 draft fresh@{ c,actual ->
                     if(actual!=expected) { done(false,"草稿已变化，已保留原稿");return@fresh }
                     worker.execute {
-                        val result=runCatching { if(active()) { c.setSelection(0,expected.length);true } else false }.getOrDefault(false)
+                        val result=com.loveadvisor.android.diagnostics.DiagnosticLogs.recover(com.loveadvisor.core.diagnostics.LogStep.FILL_STAGE,diagnosticOperation) { if(active()) { c.setSelection(0,expected.length);true } else false } ?: false
                         main.post {
                             if(!result || !active()) { done(false,"聊天或输入连接已变化");return@post }
                             // Read back both selection and draft before replacing an existing draft.
                             worker.execute {
-                                val selected=runCatching { c.getSurroundingText(4096,4096,0) }.getOrNull()
+                                val selected=com.loveadvisor.android.diagnostics.DiagnosticLogs.recover(com.loveadvisor.core.diagnostics.LogStep.FILL_STAGE,diagnosticOperation) { c.getSurroundingText(4096,4096,0) }
                                 val safe=selected!=null && ImeFillPolicy.completeDraft(selected.text.toString(),selected.offset,selected.selectionStart,selected.selectionEnd) && selected.text.toString()==expected && minOf(selected.selectionStart,selected.selectionEnd)==0 && maxOf(selected.selectionStart,selected.selectionEnd)==expected.length
                                 main.post selectedPost@{ if(!finished.get()) {
                                     if(!safe || !active()) { done(false,"草稿或输入连接已变化，已保留原稿");return@selectedPost }

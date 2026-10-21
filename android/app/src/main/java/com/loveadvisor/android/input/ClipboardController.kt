@@ -2,5 +2,9 @@ package com.loveadvisor.android.input
 import android.content.*
 import android.widget.Toast
 object ClipboardController {
-    fun copy(context:Context,text:String,notify:Boolean=true) { val clip=ClipData.newPlainText("候选回复",text); if(android.os.Build.VERSION.SDK_INT>=33) clip.description.extras=android.os.PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE,true) }; (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip); if(notify)Toast.makeText(context,"已复制，请核对后粘贴",Toast.LENGTH_SHORT).show() }
+    fun copy(context:Context,text:String,notify:Boolean=true) {
+        val log=com.loveadvisor.android.diagnostics.DiagnosticLogs.begin(com.loveadvisor.core.diagnostics.LogStep.COPY_TAP)
+        try { val clip=ClipData.newPlainText("候选回复",text); if(android.os.Build.VERSION.SDK_INT>=33) clip.description.extras=android.os.PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE,true) }; (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip);com.loveadvisor.android.diagnostics.DiagnosticLogs.end(log,com.loveadvisor.core.diagnostics.LogState.OK); if(notify)Toast.makeText(context,"已复制，请核对后粘贴",Toast.LENGTH_SHORT).show() }
+        catch(error:Exception) { val fault=com.loveadvisor.core.diagnostics.LogFault.capture(error);com.loveadvisor.android.diagnostics.DiagnosticLogs.end(log,com.loveadvisor.core.diagnostics.LogState.FAIL,fault.reason,fault);throw error }
+    }
 }

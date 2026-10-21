@@ -53,7 +53,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         } else title
         header.addView(title,LinearLayout.LayoutParams(0,-1,1f))
         val menu=palette.button("⋯") {}; menu.contentDescription="更多设置"
-        menu.setOnClickListener { onMenu(menu) }
+        menu.setOnClickListener { com.loveadvisor.android.diagnostics.DiagnosticLogs.dispatch("更多设置") { onMenu(menu) } }
         header.addView(menu,LinearLayout.LayoutParams(textRowHeight(28),textRowHeight(28)))
         val close=palette.button("×") { onClose() }; close.contentDescription="收起候选窗"
         header.addView(close,LinearLayout.LayoutParams(textRowHeight(28),textRowHeight(28)).apply { leftMargin=dp(6) })
@@ -127,6 +127,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         dismissMenu();pages.clear();pages.push("reply-style",editor,true,closed)
     }
     fun showPage(id:String,content:View,editable:Boolean=false,closed:()->Unit={}) {
+        com.loveadvisor.android.diagnostics.DiagnosticLogs.event(com.loveadvisor.core.diagnostics.LogStep.PAGE_OPEN,reason=com.loveadvisor.android.diagnostics.DiagnosticLogs.page(id))
         dismissMenu();pages.push(id,content,editable,closed)
     }
     fun popPage()=pages.pop()

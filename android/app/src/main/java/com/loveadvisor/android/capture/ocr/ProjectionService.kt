@@ -59,7 +59,7 @@ class ProjectionService:Service() {
             },main)
             display=projection?.createVirtualDisplay("LoveAdvisorOnce",width,height,resources.displayMetrics.densityDpi,DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,reader.surface,null,main)
             main.postDelayed({ if(!captured) { ChatCaptureService.instance?.notifyUser("未在微信窗口取得截图，可粘贴原文"); stopSelf() } },12000)
-        } catch(_:Exception) { ChatCaptureService.instance?.notifyUser("系统录屏授权不可用，可导入截图或粘贴原文"); stopSelf() }
+        } catch(error:Exception) { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(com.loveadvisor.core.diagnostics.LogStep.SCREENSHOT_RESULT,error);ChatCaptureService.instance?.notifyUser("系统录屏授权不可用，可导入截图或粘贴原文"); stopSelf() }
         return START_NOT_STICKY
     }
     override fun onConfigurationChanged(config:android.content.res.Configuration) { super.onConfigurationChanged(config); lease?.cancel(); cancel.cancel(); stopSelf() }

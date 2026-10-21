@@ -61,8 +61,8 @@ class NativeIslandNotification(private val context:Context) {
             val notification=build(status,lease,if(last==null)0 else 1)
             manager.notify(ID,notification);last=notification;IslandPublishResult.POSTED
         }
-    } catch(_:SecurityException) { IslandPublishResult.FAILED("系统拒绝通知权限") }
-      catch(_:RuntimeException) { IslandPublishResult.FAILED("系统未接受原生岛通知") }
+    } catch(error:SecurityException) { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(com.loveadvisor.core.diagnostics.LogStep.OVERLAY_SHOW,error);IslandPublishResult.FAILED("系统拒绝通知权限") }
+      catch(error:RuntimeException) { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(com.loveadvisor.core.diagnostics.LogStep.OVERLAY_SHOW,error);IslandPublishResult.FAILED("系统未接受原生岛通知") }
     fun active():Boolean=runCatching { manager.activeNotifications.any { it.id==ID } }.getOrDefault(false)
     fun end() {
         last?.let { n -> runCatching {

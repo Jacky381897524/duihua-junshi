@@ -70,7 +70,7 @@ class NodeSnapshotReader(private val service:AccessibilityService) {
         }
         walk(root,"","root",null,0)
         // Some OEM trees omit children yet still expose the focused app input via findFocus.
-        runCatching { root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()?.let { focused ->
+        com.loveadvisor.android.diagnostics.DiagnosticLogs.recover(com.loveadvisor.core.diagnostics.LogStep.FILL_STAGE) { root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }?.let { focused ->
             if(focused.windowId==root.windowId && focused.packageName==root.packageName && isTextTarget(focused)) {
                 val record=record(focused).copy(editable=true)
                 if(editables.none { it.first.id==record.id && it.first.bounds==record.bounds }) { records.add(record);editables.add(record to focused) }

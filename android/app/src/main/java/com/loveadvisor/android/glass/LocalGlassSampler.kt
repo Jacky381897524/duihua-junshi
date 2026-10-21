@@ -39,6 +39,6 @@ class LocalGlassSampler(private val service:AccessibilityService,private val tar
                 } else if(running && !lease.cancelled) { clear();if(!reported) { reported=true;error((result as CaptureImageResult.Failure).message+"；暂用清晰磨砂底色") } }
                 if(running && !lease.cancelled) main.postDelayed(tick,if(result is CaptureImageResult.Success) 750 else 3000)
             }
-        } catch(_:Exception) { if(running) { clear();main.postDelayed(tick,3000) } }
+        } catch(error:Exception) { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(com.loveadvisor.core.diagnostics.LogStep.LOCAL_TASK,error);if(running) { clear();main.postDelayed(tick,3000) } }
     }
 }

@@ -70,7 +70,7 @@ class ReplyStyleActivity:BaseActivity() {
                 try {
                     saveCatalog(catalog().save(name,style.text.toString(),editingKey,platforms[platform.selectedItemPosition]));editingKey=null
                     renderList();toast(if(style.text.toString().isBlank())if(graph.settings.load().globalReplyStyle.isNotBlank())"已删除专属风格，改用全对象风格" else "该对象已恢复正常回复" else "已保存，下次读取或刷新时生效")
-                } catch(error:IllegalArgumentException) { toast(error.message ?: "请检查昵称") }
+                } catch(error:IllegalArgumentException) { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(com.loveadvisor.core.diagnostics.LogStep.CONFIG_SAVE,error);toast(error.message ?: "请检查昵称") }
             }
         })
         val selectedPlatform=platforms[platform.selectedItemPosition]

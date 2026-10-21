@@ -113,7 +113,7 @@ class ReplyStyleEditorView(
                 saveCatalog(updated);catalog=updated
             }
             onClose()
-        } catch(error:IllegalArgumentException) { notice.text=error.message ?: "昵称或风格无效" }
-        catch(_:Exception) { notice.text="未能保存，请重试" }
+        } catch(error:IllegalArgumentException) { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(com.loveadvisor.core.diagnostics.LogStep.CONFIG_SAVE,error);notice.text=error.message ?: "昵称或风格无效" }
+        catch(error:Exception) { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(com.loveadvisor.core.diagnostics.LogStep.CONFIG_SAVE,error);notice.text="未能保存，请重试" }
     }
 }

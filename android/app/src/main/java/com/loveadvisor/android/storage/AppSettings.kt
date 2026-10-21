@@ -11,7 +11,11 @@ class AppSettings(private val documents:AndroidDocumentStore) {
     private val gson=Gson()
     private var cached:SettingsData?=null
     @Synchronized fun load():SettingsData=cached ?: (documents.read("settings")?.let { decode(it) } ?: SettingsData()).also { cached=it }
-    @Synchronized fun save(value:SettingsData) { documents.write("settings",gson.toJson(value)); cached=value }
+    @Synchronized fun save(value:SettingsData) {
+        val op=com.loveadvisor.android.diagnostics.DiagnosticLogs.begin(com.loveadvisor.core.diagnostics.LogStep.CONFIG_SAVE)
+        try { documents.write("settings",gson.toJson(value)); cached=value;com.loveadvisor.android.diagnostics.DiagnosticLogs.end(op,com.loveadvisor.core.diagnostics.LogState.OK) }
+        catch(error:Exception) { com.loveadvisor.android.diagnostics.DiagnosticLogs.end(op,com.loveadvisor.core.diagnostics.LogState.FAIL,com.loveadvisor.core.diagnostics.LogReason.SETTINGS_FAILURE,com.loveadvisor.core.diagnostics.LogFault.capture(error));throw error }
+    }
     @Synchronized fun update(transform:(SettingsData)->SettingsData) { save(transform(load())) }
     fun replyStyleCatalog(kind:com.loveadvisor.core.model.ChatKind=com.loveadvisor.core.model.ChatKind.DIRECT)=load().let {
         if(kind==com.loveadvisor.core.model.ChatKind.GROUP)com.loveadvisor.core.advisor.ReplyStyleCatalog(it.groupReplyStyles,it.groupReplyStyleTitles,it.groupReplyStyleApps,it.groupReplyStyleAliases)

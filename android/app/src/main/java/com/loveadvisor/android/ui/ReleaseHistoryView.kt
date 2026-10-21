@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.4.10 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.4.11 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,12 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.4.11", "持久诊断日志与操作追踪", listOf(
+                "在最新V1.4.10代码上升级，主页连接诊断统一改为诊断日志；各条记录携带实际版本、进程和操作编号。",
+                "串联读取、截图、视觉、判断、生成、复制、填入、设置与服务生命周期，保留错误类别、耗时和脱敏代码位置；取消、过期和未完成分别标记。",
+                "本机滚动保留最多30天、10,000条、4MiB，清除缓存不会删除日志；支持导出完整日志文件，不记录聊天、昵称、密钥或截图。异常退出尽力保留最近一次收据并交回系统原有异常处理。",
+                "系统强杀、断电等可能只留下未完成记录，无法保证每次得到唯一根因；既有OPPO服务、截图限制及覆盖安装问题仍需日志和真机证据。"
+            )),
             Release("V1.4.10", "服务状态刷新与故障诊断", listOf(
                 "诊断页面和导出显示实际军师版本及版本代码，便于区分用户安装包；后台读取本软件最近五条系统进程退出记录。",
                 "区分崩溃、无响应、内存不足、用户终止及安装更新，仅保留时间、PID和原因/状态码；旧记录版本未知，不把进程退出直接当作服务崩溃。",

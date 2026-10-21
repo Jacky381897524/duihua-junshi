@@ -28,7 +28,7 @@ class JudgeSettingsForm(private val context:Context,private val host:SettingsFor
         custom.addView(ui.button("刷新并选择判断模型") {
             val submitted=customProfile();val revision=++directoryRevision
             refreshModels(submitted) { models ->
-                if(provider!="CUSTOM" || submitted!=customProfile() || revision!=directoryRevision)status.text="配置已改变，请重新刷新"
+                if(provider!="CUSTOM" || submitted!=customProfile() || revision!=directoryRevision) { com.loveadvisor.android.diagnostics.DiagnosticLogs.end(com.loveadvisor.android.diagnostics.DiagnosticLogs.parent(),com.loveadvisor.core.diagnostics.LogState.CANCELLED,com.loveadvisor.core.diagnostics.LogReason.RESULT_STALE);status.text="配置已改变，请重新刷新" }
                 else if(models.isEmpty())status.text="目录没有模型，请填写模型 ID"
                 else host.choose("选择判断模型",models.map { it.id },models.indexOfFirst { it.id==model.text.toString() }) { index ->
                     if(provider=="CUSTOM" && revision==directoryRevision && submitted==customProfile())model.setText(models[index].id)

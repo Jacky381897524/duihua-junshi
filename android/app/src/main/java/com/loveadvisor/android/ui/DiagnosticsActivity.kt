@@ -1,36 +1,58 @@
 package com.loveadvisor.android.ui
+
 import android.os.Bundle
 import android.os.Build
 import android.content.Intent
+import android.content.ClipData
 import android.provider.Settings
+import android.widget.TextView
+import androidx.core.content.FileProvider
+import com.loveadvisor.android.BuildConfig
 import com.loveadvisor.android.capture.ChatCaptureService
+import com.loveadvisor.android.diagnostics.DiagnosticLogs as Logs
+import com.loveadvisor.core.diagnostics.*
+import java.io.File
+
 class DiagnosticsActivity:BaseActivity() {
+    private lateinit var timeline:TextView
+    private lateinit var exits:TextView
+    private var exitHistory="系统退出记录正在读取；尚不能据此判断没有故障。"
+    private fun safeDevice(value:String)=value.filter { it.isLetterOrDigit() || it in " ._-" }.take(100)
+    private fun header():String {
+        val config=graph.settings.load()
+        val wechat=try { @Suppress("DEPRECATION") val p=packageManager.getPackageInfo("com.tencent.mm",0);safeDevice(p.versionName.orEmpty())+" / ${p.longVersionCode}" } catch(_:android.content.pm.PackageManager.NameNotFoundException) { "未安装或不可查询" }
+        return "军师版本：${BuildConfig.VERSION_NAME}\n版本代码：${BuildConfig.VERSION_CODE}\n设备：${safeDevice(Build.MANUFACTURER)} ${safeDevice(Build.MODEL)}\nAndroid：${safeDevice(Build.VERSION.RELEASE)}（API ${Build.VERSION.SDK_INT}）\n微信：$wechat\n悬浮窗：${Settings.canDrawOverlays(this)}\n服务连接：${ChatCaptureService.instance!=null}\n回复模型已选择：${!config.profile.selectedModelId.isNullOrBlank()}\n视觉模型已选择：${!config.vision.selectedModelId.isNullOrBlank()}"
+    }
     override fun onCreate(savedInstanceState:Bundle?) {
-        super.onCreate(savedInstanceState); page("连接诊断","仅记录阶段、状态与耗时；不导出密钥、聊天正文或截图。")
-        val wechat=runCatching { @Suppress("DEPRECATION") val p=packageManager.getPackageInfo("com.tencent.mm",0); "${p.versionName} / ${p.longVersionCode}" }.getOrDefault("未读取到")
-        val config=graph.settings.load(); val text="军师版本：${com.loveadvisor.android.BuildConfig.VERSION_NAME}\n版本代码：${com.loveadvisor.android.BuildConfig.VERSION_CODE}\n设备：${Build.MANUFACTURER} ${Build.MODEL}\nAndroid：${Build.VERSION.RELEASE}（API ${Build.VERSION.SDK_INT}）\n微信：$wechat\n悬浮窗：${Settings.canDrawOverlays(this)}\n服务连接：${ChatCaptureService.instance!=null}\n选定模型：${config.profile.selectedModelId ?: "未选择"}\n\n脱敏事件（最近100条）：\n${graph.diagnosticText()}"
-        body.addView(ViewStyles.text(this,text,15f).apply { setTextIsSelectable(true) })
-        body.addView(ViewStyles.text(this,"本次启动：${com.loveadvisor.android.AppStartup.description(this)}",13f,ViewStyles.MUTED))
-        val startupTrace="启动阶段：${com.loveadvisor.android.AppStartupTrace.description()}"
-        body.addView(ViewStyles.text(this,startupTrace,13f,ViewStyles.MUTED).apply { setTextIsSelectable(true) })
-        val service=ChatCaptureService.instance
-        body.addView(ViewStyles.text(this,"入口：${if(config.topCapsuleEnabled) "左上角胶囊（无需通知）" else "普通悬浮球"}",14f))
-        val captureStatus="回复模型：${config.profile.selectedModelId ?: "未选择"}\n视觉模型：${config.vision.selectedModelId ?: "未选择"}\n最近读取：${service?.diagnosticStatus ?: "无障碍服务未连接"}\n最近微信读取：${service?.lastWechatDiagnosticStatus ?: "无障碍服务未连接"}"
-        val fillStatus="最近填入：${service?.lastFillDiagnosticStatus ?: "无障碍服务未连接"}\n输入区域定位：${service?.lastComposerDiagnosticStatus ?: "无障碍服务未连接"}\n填入阶段：${service?.lastFillStages ?: "无障碍服务未连接"}\n前台切换阶段：${service?.lastForegroundStages ?: "无障碍服务未连接"}"
-        val screenshotStatus="最近截图：${service?.lastScreenshotDiagnosticStatus ?: "无障碍服务未连接"}\n这里记录软件的截图接口结果，不能代替手机按键截图的对照测试。"
-        body.addView(ViewStyles.text(this,captureStatus+"\n"+fillStatus+"\n"+screenshotStatus,15f).apply { setTextIsSelectable(true) })
-        var exitHistory="正在读取本软件的系统退出记录…"
-        val exitView=ViewStyles.text(this,"最近进程退出：\n$exitHistory",13f,ViewStyles.MUTED).apply { setTextIsSelectable(true) }
-        body.addView(exitView)
-        val export=ViewStyles.button(this,"导出脱敏诊断") { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,text+"\n"+captureStatus+"\n"+fillStatus+"\n"+screenshotStatus+"\n"+startupTrace+"\n最近进程退出：\n"+exitHistory),"导出诊断")) }
-        body.addView(export)
-        // Export remains usable even if an OEM does not supply this optional query.
-        // Never wait on it before sharing: the report explicitly says when it is pending.
-        work("process_exit_history",{ cancel ->
-            cancel.check();com.loveadvisor.android.diagnostics.ProcessExitHistory.read(applicationContext)
-        },{ result -> exitHistory=result;exitView.text="最近进程退出：\n$exitHistory" },{
-            exitHistory="系统退出记录暂不可用；不能据此判断没有发生故障。"
-            exitView.text="最近进程退出：\n$exitHistory"
+        super.onCreate(savedInstanceState)
+        Logs.event(LogStep.LOG_OPEN,LogState.OK)
+        page("诊断日志","按操作编号串联步骤和结果，记录错误码与代码位置。保存在本机，清除缓存会保留；不记录聊天、昵称、密钥或截图。")
+        body.addView(ViewStyles.text(this,header(),13f).apply { setTextIsSelectable(true) })
+        body.addView(ViewStyles.text(this,"最近记录",17f,bold=true))
+        timeline=ViewStyles.text(this,Logs.text(120),12f).apply { setTextIsSelectable(true) };body.addView(timeline)
+        body.addView(ViewStyles.button(this,"刷新日志") { Logs.event(LogStep.LOG_REFRESH,LogState.OK);timeline.text=Logs.text(120) })
+        body.addView(ViewStyles.button(this,"导出日志文件",true) { export() })
+        body.addView(ViewStyles.text(this,"导出包含保留范围内的全部记录。默认最多30天、10,000条、4MiB，超限会轮换并标明数量。强杀、断电或系统未提供的信息可能只留下未完成记录，不能保证每次直接得出唯一根因。",12f,ViewStyles.MUTED))
+        body.addView(ViewStyles.text(this,"启动阶段：\n${com.loveadvisor.android.AppStartupTrace.description()}",12f,ViewStyles.MUTED).apply { setTextIsSelectable(true) })
+        exits=ViewStyles.text(this,"最近进程退出：\n$exitHistory",12f,ViewStyles.MUTED).apply { setTextIsSelectable(true) };body.addView(exits)
+        work("process_exit_history",{ cancel -> cancel.check();com.loveadvisor.android.diagnostics.ProcessExitHistory.read(applicationContext) },{ result -> exitHistory=result;exits.text="最近进程退出：\n$result" },{
+            exitHistory="系统退出记录暂不可用；不能据此判断没有发生故障。";exits.text=exitHistory
+        })
+    }
+    private fun export() {
+        Logs.event(LogStep.LOG_EXPORT,LogState.START)
+        val metadata=header()+"\n\n启动阶段：\n"+com.loveadvisor.android.AppStartupTrace.description()+"\n\n最近进程退出：\n"+exitHistory
+        work("diagnostic_export",{ cancel ->
+            cancel.check()
+            val folder=File(cacheDir,"diagnostic-exports");check(folder.isDirectory || folder.mkdirs())
+            folder.listFiles()?.filter { it.isFile && it.name.startsWith("diagnostic-") && it.extension=="txt" && it.lastModified()<System.currentTimeMillis()-7*86_400_000L }?.forEach { it.delete() }
+            File(folder,"diagnostic-${BuildConfig.VERSION_NAME}-${System.currentTimeMillis()}.txt").also { it.writeText(metadata+"\n\n"+Logs.text(10_000));cancel.check() }
+        },{ file ->
+            val uri=FileProvider.getUriForFile(this,"$packageName.diagnostics",file)
+            val share=Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            share.clipData=ClipData.newRawUri("诊断日志",uri)
+            try { startActivity(Intent.createChooser(share,"导出诊断日志"));Logs.event(LogStep.LOG_EXPORT,LogState.OK,LogReason.OK_DISPATCHED) }
+            catch(error:Exception) { Logs.failed(LogStep.LOG_EXPORT,error);toast("没有可用的分享应用，请安装后重试") }
         })
     }
 }

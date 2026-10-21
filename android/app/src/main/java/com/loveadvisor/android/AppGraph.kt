@@ -23,27 +23,30 @@ class AppGraph private constructor(val context:Context) {
     val knowledge=AssetKnowledgeStore(context)
     val tracker=SessionTracker(); val gate=RequestGate(tracker)
     val coordinator=BatchCoordinator(tracker,gate)
-    val transport=JdkHttpTransport()
-    val catalog=ModelCatalogClient(transport)
-    val chat=ChatCompletionClient(transport)
+    val transport=com.loveadvisor.android.diagnostics.DiagnosticTransport()
+    val catalog=ModelCatalogClient(com.loveadvisor.android.diagnostics.DiagnosticTransport(step=LogStep.MODEL_CATALOG))
+    val chat=ChatCompletionClient(com.loveadvisor.android.diagnostics.DiagnosticTransport(step=LogStep.REPLY_REQUEST))
     val advisor=UnifiedAdvisor(chat)
-    val judge=JevJudgeClient(transport)
+    val judge=JevJudgeClient(com.loveadvisor.android.diagnostics.DiagnosticTransport(step=LogStep.JUDGMENT_REQUEST))
     val automaticAdvisor=AutomaticAdvisor(chat,judge)
-    val vision=VisionClient(transport)
+    val vision=VisionClient(com.loveadvisor.android.diagnostics.DiagnosticTransport(step=LogStep.VISION_REQUEST))
     val recent=RecentConversationStore(documents)
     val controller=AdvisorController(this)
     var pendingDraft:ConversationDraft?=null
     var currentObjectId:String?=null
     var currentGoal:String=""
     private val diagnostics=ArrayDeque<SafeDiagnosticEvent>()
-    @Synchronized fun record(stage:String,duration:Long,status:Int?,error:String?) { diagnostics.addLast(DiagnosticRedactor.clean(DiagnosticEvent(stage,duration,status,error))); while(diagnostics.size>100) diagnostics.removeFirst() }
-    @Synchronized fun diagnosticText()=Gson().toJson(diagnostics.toList())
-    fun safeError(e:Exception):String=when(e) {
+    @Synchronized fun record(stage:String,duration:Long,status:Int?,error:String?) {
+        diagnostics.addLast(DiagnosticRedactor.clean(DiagnosticEvent(stage,duration,status,error))); while(diagnostics.size>100) diagnostics.removeFirst()
+        com.loveadvisor.android.diagnostics.DiagnosticLogs.event(com.loveadvisor.android.diagnostics.DiagnosticLogs.step(stage),if(error==null)LogState.OK else LogState.FAIL,if(error==null)LogReason.NONE else LogReason.STEP_FAILED,metrics=mapOf(LogMetric.DURATION_MS to duration)+(status?.let { mapOf(LogMetric.HTTP_STATUS to it.toLong()) } ?: emptyMap()))
+    }
+    fun diagnosticText()=com.loveadvisor.android.diagnostics.DiagnosticLogs.text()
+    fun safeError(e:Exception):String { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(LogStep.EXCEPTION,e);return when(e) {
         is ApiException -> e.message.orEmpty().take(400)
         is SecurityException -> "系统权限或本地资料读取失败，请检查权限与设备密钥"
         is IllegalArgumentException -> e.message?.takeIf { it.none { c -> c=='\r' } && !it.contains("Bearer") && !it.contains("http") }?.take(200) ?: "填写内容无效，请检查配置"
         else -> "操作失败，请检查网络或在诊断页面查看阶段"
-    }
+    } }
     fun inputFor(snapshot:ChatSnapshot,goal:String,background:String,objectId:String?):AdvisorInput {
         var config=settings.load()
         if(ChatApps.supported(snapshot.packageName)) {
