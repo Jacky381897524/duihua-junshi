@@ -8,11 +8,28 @@ import android.content.pm.PackageManager
 import com.loveadvisor.android.capture.ChatCaptureService
 import com.loveadvisor.core.capture.ChatApps
 class PermissionsActivity:BaseActivity() {
+    private val statusHandler=android.os.Handler(android.os.Looper.getMainLooper())
+    private var statusView:android.widget.TextView?=null
+    private var resumed=false
+    private val refreshStatus=object:Runnable {
+        override fun run() {
+            if(!resumed)return
+            updateStatus()
+            statusHandler.postDelayed(this,1000)
+        }
+    }
     override fun onCreate(savedInstanceState:Bundle?) { super.onCreate(savedInstanceState); render() }
-    override fun onResume() { super.onResume(); ChatCaptureService.instance?.ensureOverlay(); render() }
+    override fun onResume() {
+        super.onResume(); ChatCaptureService.instance?.ensureOverlay(); render()
+        resumed=true;statusHandler.removeCallbacks(refreshStatus);statusHandler.post(refreshStatus)
+    }
+    override fun onPause() { resumed=false;statusHandler.removeCallbacks(refreshStatus);super.onPause() }
+    override fun onDestroy() { resumed=false;statusHandler.removeCallbacks(refreshStatus);statusView=null;super.onDestroy() }
+    private fun statusText()="悬浮窗：${if(Settings.canDrawOverlays(this)) "已允许" else "未允许"}\n无障碍服务：${AccessibilityConnectionStatus.label(this)}"
+    private fun updateStatus() { val value=statusText();statusView?.let { if(it.text.toString()!=value)it.text=value } }
     private fun render() {
         page("连接聊天应用","开启权限后，在微信、QQ或抖音点击图标，再点读取信息。支持单聊与群聊，发送由你操作。")
-        body.addView(ViewStyles.text(this,"悬浮窗：${if(Settings.canDrawOverlays(this)) "已允许" else "未允许"}\n无障碍服务：${AccessibilityConnectionStatus.label(this)}",18f,bold=true))
+        statusView=ViewStyles.text(this,statusText(),18f,bold=true);body.addView(statusView)
         val settings=SystemSettingsNavigator(this)
         body.addView(ViewStyles.button(this,"允许悬浮窗",true) { if(!settings.overlay())toast("无法打开系统设置，请在手机设置中查找“悬浮窗”或“显示在其他应用上层”") })
         body.addView(ViewStyles.button(this,"打开无障碍设置") { if(!settings.accessibility())toast("无法打开系统设置，请在手机设置中查找“无障碍”并启用对话军师") })

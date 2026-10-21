@@ -2,13 +2,13 @@
 
 <img src="docs/images/logo.png" alt="对话军师 Logo" width="96" />
 
-**一个对话，六种思路。** 海街寺庙整合开发的 Android 聊天助手，最新测试版 **V1.4.9（输入区域定位、混合消息读取与启动诊断）**。
+**一个对话，六种思路。** 海街寺庙整合开发的 Android 聊天助手，最新测试版 **V1.4.10（服务状态刷新与故障诊断）**。
 
 ## 下载与使用
 
-[下载 V1.4.9 测试版 APK](https://github.com/Jacky381897524/duihua-junshi/releases/download/v1.4.9/duihua-junshi-V1.4.9.apk) · [发布说明、源码包与校验文件](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.4.9)
+[下载 V1.4.10 测试版 APK](https://github.com/Jacky381897524/duihua-junshi/releases/download/v1.4.10/duihua-junshi-V1.4.10.apk) · [发布说明、源码包与校验文件](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.4.10)
 
-[所有历史版本](https://github.com/Jacky381897524/duihua-junshi/releases) · [V1.4.5](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.4.5) · [V1.3.10](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.3.10) · [V1.3.09](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.3.09) · [V1.2.12](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.2.12) · [完整更新记录](CHANGELOG.md)
+[所有历史版本](https://github.com/Jacky381897524/duihua-junshi/releases) · [V1.4.9](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.4.9) · [V1.4.5](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.4.5) · [V1.3.10](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.3.10) · [V1.3.09](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.3.09) · [V1.2.12](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.2.12) · [完整更新记录](CHANGELOG.md)
 
 在本仓库的 **Releases** 下载 APK 和 SHA256 校验文件。Android 11+、ARM64。首次安装后开启悬浮窗及无障碍服务，在微信、QQ或抖音的真实单聊或群聊中点击悬浮球／胶囊，再点「读取信息」。本版为测试版，已知截图限制与首次覆盖安装问题见下方验证范围。
 
@@ -32,6 +32,7 @@
 - **判断接口**：默认 OpenRouter `typesafe/jev-1.13`，也可接入自定义判断模型。
 - **已读上下文**：单聊最近50条，群聊默认100条，可选50／100／200；只累计手动读取，不自动翻聊天。后台返回保留本次运行中的已读内容与面板草稿；填入仍核对当前聊天与输入框。
 - **清除缓存**：主页显示缓存大小，后台清理内部与外部临时缓存；保留密钥、模型配置、风格、关系记忆、聊天历史及系统编译缓存。
+- **故障诊断**：页面和导出包含实际版本及版本代码，后台读取本软件最近五条系统进程退出原因；服务恢复后可查看系统仍保留的历史。连接权限页在前台刷新状态，不把用户终止或更新退出直接当作服务崩溃。
 - **屏幕与权限适配**：避让横屏挖孔、刘海、导航栏和键盘；菜单与操作按钮适应窄屏及大字体，底部收起条保持可触达；权限入口提供标准系统备用页面。具体品牌和机型仍需实测。
 
 进入聊天或展开候选面板不会自动调用模型。「读取信息」收集当前内容；「刷新换一批」使用已读取上下文。主动进入「判断分析」后，对可见句子按需请求判断并复用结果。判断、回复和必要的截图会发送到你配置的服务，服务用量由相应平台计费。
@@ -61,11 +62,11 @@ Windows使用 `gradlew.bat`。干净克隆默认生成本地调试签名；自�
 
 ## 验证状态
 
-核心测试389项、配置测试16项通过；应用和Android测试包构建、Lint、签名、45份知识及原生库16KB对齐检查通过，独立代码审查通过。本版没有连接手机或调用真实模型；离线输入框定位样本不能代替真实填入和所有机型的验证。
+核心394项与配置16项测试通过；应用和Android测试包构建、Lint、签名、45份知识及原生库16KB对齐检查通过，独立代码审查通过。新增诊断不能代替真机验收，未连接OPPO执行故障复现或调用真实模型。V1.4.9的输入区域定位和混合消息读取修正继续保留。
 
-**已知待验收问题**：部分OPPO／iQOO设备点击读取后微信无法手动截图，已有受保护窗口错误证据，根因未确认，本版未修改截图接口。安装器点击打开后出现灰色「正在更新」画面也尚未解决；该画面与军师自己的加载页不同，新增当前／上次进程的异步启动阶段记录，以区分进程、Activity、首帧和设置读取。无法凭视频确认画面所属系统组件，不能宣称已修复。具体机型、闲置首次填入和胶囊切换时延仍需实测。
+**已知待验收问题**：OPPO PHY110 / ColorOS16 的V1.4.5偶发无障碍服务故障在重新开关后恢复，恢复后的成功日志没有故障原因；本版补充系统退出记录，尚不能宣称修复该次断开。部分OPPO／iQOO设备点击读取后微信无法手动截图，已有受保护窗口错误证据，根因未确认，本版未修改截图接口。安装器点击打开后出现灰色「正在更新」画面也尚未解决；该画面与军师自己的加载页不同，新增当前／上次进程的异步启动阶段记录，以区分进程、Activity、首帧和设置读取。无法凭视频确认画面所属系统组件，不能宣称已修复。具体机型、闲置首次填入和胶囊切换时延仍需实测。
 
-[本版验证记录](docs/verification/2026-10-20-v1.4.9.md)
+[本版验证记录](docs/verification/2026-10-21-v1.4.10.md) · [V1.4.9验证记录](docs/verification/2026-10-20-v1.4.9.md)
 
 当前模糊半径为12dp、上限36物理像素；不支持时使用清晰底色。程序校验不能保证每次视觉识别和候选语义完全正确，发送前仍由你核对。
 

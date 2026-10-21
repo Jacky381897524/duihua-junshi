@@ -8,7 +8,7 @@ class DiagnosticsActivity:BaseActivity() {
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState); page("连接诊断","仅记录阶段、状态与耗时；不导出密钥、聊天正文或截图。")
         val wechat=runCatching { @Suppress("DEPRECATION") val p=packageManager.getPackageInfo("com.tencent.mm",0); "${p.versionName} / ${p.longVersionCode}" }.getOrDefault("未读取到")
-        val config=graph.settings.load(); val text="军师版本：${com.loveadvisor.android.BuildConfig.VERSION_NAME}\n设备：${Build.MANUFACTURER} ${Build.MODEL}\nAndroid：${Build.VERSION.RELEASE}（API ${Build.VERSION.SDK_INT}）\n微信：$wechat\n悬浮窗：${Settings.canDrawOverlays(this)}\n服务连接：${ChatCaptureService.instance!=null}\n选定模型：${config.profile.selectedModelId ?: "未选择"}\n\n脱敏事件（最近100条）：\n${graph.diagnosticText()}"
+        val config=graph.settings.load(); val text="军师版本：${com.loveadvisor.android.BuildConfig.VERSION_NAME}\n版本代码：${com.loveadvisor.android.BuildConfig.VERSION_CODE}\n设备：${Build.MANUFACTURER} ${Build.MODEL}\nAndroid：${Build.VERSION.RELEASE}（API ${Build.VERSION.SDK_INT}）\n微信：$wechat\n悬浮窗：${Settings.canDrawOverlays(this)}\n服务连接：${ChatCaptureService.instance!=null}\n选定模型：${config.profile.selectedModelId ?: "未选择"}\n\n脱敏事件（最近100条）：\n${graph.diagnosticText()}"
         body.addView(ViewStyles.text(this,text,15f).apply { setTextIsSelectable(true) })
         body.addView(ViewStyles.text(this,"本次启动：${com.loveadvisor.android.AppStartup.description(this)}",13f,ViewStyles.MUTED))
         val startupTrace="启动阶段：${com.loveadvisor.android.AppStartupTrace.description()}"
@@ -19,6 +19,18 @@ class DiagnosticsActivity:BaseActivity() {
         val fillStatus="最近填入：${service?.lastFillDiagnosticStatus ?: "无障碍服务未连接"}\n输入区域定位：${service?.lastComposerDiagnosticStatus ?: "无障碍服务未连接"}\n填入阶段：${service?.lastFillStages ?: "无障碍服务未连接"}\n前台切换阶段：${service?.lastForegroundStages ?: "无障碍服务未连接"}"
         val screenshotStatus="最近截图：${service?.lastScreenshotDiagnosticStatus ?: "无障碍服务未连接"}\n这里记录软件的截图接口结果，不能代替手机按键截图的对照测试。"
         body.addView(ViewStyles.text(this,captureStatus+"\n"+fillStatus+"\n"+screenshotStatus,15f).apply { setTextIsSelectable(true) })
-        body.addView(ViewStyles.button(this,"导出脱敏诊断") { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,text+"\n"+captureStatus+"\n"+fillStatus+"\n"+screenshotStatus+"\n"+startupTrace),"导出诊断")) })
+        var exitHistory="正在读取本软件的系统退出记录…"
+        val exitView=ViewStyles.text(this,"最近进程退出：\n$exitHistory",13f,ViewStyles.MUTED).apply { setTextIsSelectable(true) }
+        body.addView(exitView)
+        val export=ViewStyles.button(this,"导出脱敏诊断") { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,text+"\n"+captureStatus+"\n"+fillStatus+"\n"+screenshotStatus+"\n"+startupTrace+"\n最近进程退出：\n"+exitHistory),"导出诊断")) }
+        body.addView(export)
+        // Export remains usable even if an OEM does not supply this optional query.
+        // Never wait on it before sharing: the report explicitly says when it is pending.
+        work("process_exit_history",{ cancel ->
+            cancel.check();com.loveadvisor.android.diagnostics.ProcessExitHistory.read(applicationContext)
+        },{ result -> exitHistory=result;exitView.text="最近进程退出：\n$exitHistory" },{
+            exitHistory="系统退出记录暂不可用；不能据此判断没有发生故障。"
+            exitView.text="最近进程退出：\n$exitHistory"
+        })
     }
 }

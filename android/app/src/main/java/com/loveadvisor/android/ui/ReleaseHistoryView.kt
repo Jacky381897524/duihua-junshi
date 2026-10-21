@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.4.9 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.4.10 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,11 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.4.10", "服务状态刷新与故障诊断", listOf(
+                "诊断页面和导出显示实际军师版本及版本代码，便于区分用户安装包；后台读取本软件最近五条系统进程退出记录。",
+                "区分崩溃、无响应、内存不足、用户终止及安装更新，仅保留时间、PID和原因/状态码；旧记录版本未知，不把进程退出直接当作服务崩溃。",
+                "连接权限页在前台自动刷新状态；服务尚未就绪时不再误写为等待系统连接。OPPO偶发服务故障、微信截图限制与覆盖安装卡住的原因仍待确认。"
+            )),
             Release("V1.4.9", "输入区域定位与混合消息读取", listOf(
                 "读取时补充原生输入区域与本地空白输入框定位，不增加模型调用；定位不确定时不点击，保留标题、布局、草稿与写入回读核验。",
                 "视觉解析遇到文件卡片、不支持或不完整的单条消息时保留其余完整内容，兼容空字段；拒绝截断或无可用内容的结果，不自动重试接口。",

@@ -13,6 +13,6 @@ object AccessibilityConnectionStatus {
             Settings.Secure.getString(context.contentResolver,Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
                 .orEmpty().split(':').any { ComponentName.unflattenFromString(it)==own }
         }.getOrNull() ?: return "连接状态暂不可用"
-        return if(enabled)"已开启，等待系统连接" else "未开启"
+        return if(enabled)"已开启，服务尚未就绪" else "未开启"
     }
 }
