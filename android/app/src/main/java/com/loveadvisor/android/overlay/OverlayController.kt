@@ -35,6 +35,12 @@ class OverlayController(private val service:ChatCaptureService) {
     private val panelWindow=WindowRegistration()
     private var frostedWindow:FrostedPanelWindow?=null
     private var useFrostedWindow=false
+    private var editorFocus=false
+    private var layoutWindows:List<android.view.accessibility.AccessibilityWindowInfo>?=null
+    private var panelAttachments=0L
+    private var panelDetachments=0L
+    fun hasEditorLease()=editorFocus && panelWindow.registered && panel?.isAttachedToWindow==true
+    fun releaseEditorFocus() { panel?.releaseEditingFocus() }
     private var bubbleParams:WindowManager.LayoutParams?=null; private var panelParams:WindowManager.LayoutParams?=null
     private var anchorX:Int?=null; private var anchorY:Int?=null; private var panelOnLeft:Boolean?=null
     private var state=BatchState(); private var keyboardVisible=false
@@ -217,6 +223,7 @@ class OverlayController(private val service:ChatCaptureService) {
                     service.notifyUser("当前系统未能启用毛玻璃，已使用清晰面板")
                 }
             } else manager.addView(view,p)
+            panelAttachments++;Logs.event(LogStep.OVERLAY_SHOW,LogState.OK,metrics=mapOf(LogMetric.ATTEMPT to panelAttachments))
         }
     }
     private fun editReplyStyle() {
@@ -252,13 +259,16 @@ class OverlayController(private val service:ChatCaptureService) {
     private fun panelEditingFocus(editing:Boolean) {
         val view=panel ?: return
         val p=panelParams ?: return
+        val changed=editorFocus!=editing
+        editorFocus=editing
         if(!editing) {
             view.clearFocus()
             service.getSystemService(android.view.inputmethod.InputMethodManager::class.java)?.hideSoftInputFromWindow(view.windowToken,0)
         }
         p.flags=if(editing)p.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv() else p.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         p.softInputMode=WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
-        if(panelWindow.registered) {
+        if(changed)Logs.event(LogStep.EDITOR_FOCUS,LogState.OK,metrics=mapOf(LogMetric.ENABLED to if(editing)1L else 0L))
+        if(changed && panelWindow.registered) {
             if(android.os.Build.VERSION.SDK_INT>=31 && frostedWindow!=null)frostedWindow?.update(p) else manager.updateViewLayout(view,p)
         }
         layout()
@@ -291,6 +301,7 @@ class OverlayController(private val service:ChatCaptureService) {
         panelWindow.detach {
             val host=frostedWindow
             if(host!=null && android.os.Build.VERSION.SDK_INT>=31)host.hide() else manager.removeViewImmediate(view)
+            panelDetachments++;Logs.event(LogStep.OVERLAY_HIDE,LogState.OK,metrics=mapOf(LogMetric.ATTEMPT to panelDetachments))
         }
     }
     private fun readSnapshot()=service.currentChatSnapshot?.takeIf { graph.tracker.currentToken!=null && graph.tracker.lastSnapshot==it }
@@ -331,7 +342,7 @@ class OverlayController(private val service:ChatCaptureService) {
         if(panelWindow.registered || bubbleWindow.registered || capsuleWindow.registered)Logs.event(LogStep.OVERLAY_HIDE,LogState.OK)
         main.removeCallbacks(autoHide);idle.pause();stopEdgeMotion();dragging=false
         cancelFill?.invoke();cancelFill=null;filling=false;confirmation?.close();confirmation=null
-        panel?.let { it.stopAnimations();detachPanel(it) }
+        panel?.let { it.releaseEditingFocus();it.stopAnimations();detachPanel(it) }
         bubble?.let { bubbleWindow.detach { manager.removeViewImmediate(it) } }
         capsule?.let { OverlayAnimator.stop(it);capsuleWindow.detach { manager.removeViewImmediate(it) } }
     }
@@ -398,13 +409,12 @@ class OverlayController(private val service:ChatCaptureService) {
         edgeAnimator=animation;animation.start()
     }
     fun resize() {
-        val ime=service.windows.any { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
-        keyboardVisible=ime; layout()
+        layout()
     }
     private fun available():RectI {
         val metrics=manager.maximumWindowMetrics; val r=metrics.bounds; val inset=metrics.windowInsets.getInsets(WindowInsets.Type.systemBars())
         val cutout=metrics.windowInsets.getInsets(WindowInsets.Type.displayCutout())
-        val windowIme=service.windows.firstOrNull { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }?.let { val b=Rect(); it.getBoundsInScreen(b); b.top }?.takeIf { it>r.top+r.height()*.25 && it<r.bottom }
+        val windowIme=(layoutWindows ?: service.windowMetadata()).firstOrNull { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }?.let { val b=Rect(); it.getBoundsInScreen(b); b.top }?.takeIf { it>r.top+r.height()*.25 && it<r.bottom }
         val insetIme=imeInsetBottom.takeIf { it>0 }?.let { r.bottom-it }
         val ime=listOfNotNull(windowIme,insetIme).minOrNull()
         val top=if(entryMode==OverlayEntryMode.TOP_CAPSULE)maxOf(inset.top,metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars()).top) else inset.top
@@ -413,6 +423,12 @@ class OverlayController(private val service:ChatCaptureService) {
     }
     private fun physicalDisplay():RectI=manager.maximumWindowMetrics.bounds.let { RectI(it.left,it.top,it.right,it.bottom) }
     private fun layout() {
+        val previous=layoutWindows
+        if(previous==null)layoutWindows=service.windowMetadata()
+        try { layoutWithWindows() } finally { layoutWindows=previous }
+    }
+    private fun layoutWithWindows() {
+        keyboardVisible=layoutWindows.orEmpty().any { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
         val icon=bubble ?: return; val bp=bubbleParams ?: return
         val a=available()
         if(lastAvailable!=null && lastAvailable!=a) stopEdgeMotion()
@@ -444,6 +460,7 @@ class OverlayController(private val service:ChatCaptureService) {
         fun position(view:View,p:WindowManager.LayoutParams,b:PanelBounds,window:WindowRegistration) {
             val changed=p.x!=b.leftPx || p.y!=b.topPx || p.width!=b.widthPx || p.height!=b.heightPx
             p.x=b.leftPx; p.y=b.topPx; p.width=b.widthPx; p.height=b.heightPx
+            if(changed && window===panelWindow)Logs.event(LogStep.OVERLAY_LAYOUT,LogState.OK,metrics=mapOf(LogMetric.LEFT to p.x.toLong(),LogMetric.TOP to p.y.toLong(),LogMetric.WIDTH to p.width.toLong(),LogMetric.HEIGHT to p.height.toLong(),LogMetric.EDITOR_ACTIVE to if(editorFocus)1L else 0L))
             if(changed && window.registered) {
                 val host=frostedWindow
                 if(window===panelWindow && host!=null && android.os.Build.VERSION.SDK_INT>=31)host.update(p) else manager.updateViewLayout(view,p)

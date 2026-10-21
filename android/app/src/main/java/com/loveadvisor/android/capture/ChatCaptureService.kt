@@ -49,6 +49,10 @@ class ChatCaptureService:AccessibilityService() {
     private var foregroundWindowId:Int?=null
     private var wechatForeground=false
     private var foregroundPackage:String?=null
+    private var eventWindowMetadata:List<AccessibilityWindowInfo>?=null
+    private var lastSupplementalMetadataAt=0L
+    /** One OS snapshot is reused throughout this main-thread event/layout pass. */
+    fun windowMetadata():List<AccessibilityWindowInfo> = if(Looper.myLooper()==Looper.getMainLooper())eventWindowMetadata ?: windows else windows
     private lateinit var island:com.loveadvisor.android.island.NativeIslandCoordinator
     val islandDiagnostic get()=if(::island.isInitialized)island.diagnostic else "无障碍服务未连接"
     fun islandScope():com.loveadvisor.android.island.IslandLease? {
@@ -144,15 +148,26 @@ class ChatCaptureService:AccessibilityService() {
     override fun onAccessibilityEvent(event:AccessibilityEvent?) {
         if(event==null || !::reader.isInitialized) return
         val pkg=event.packageName?.toString()
-        if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED && event.windowChanges and AccessibilityEvent.WINDOWS_CHANGE_REMOVED!=0) reader.forgetWindow(event.windowId)
+        if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED && event.windowChanges and (AccessibilityEvent.WINDOWS_CHANGE_REMOVED or AccessibilityEvent.WINDOWS_CHANGE_ADDED)!=0) reader.forgetWindow(event.windowId)
         val structural=event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED || event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         if(ChatApps.supported(pkg) && event.eventType==AccessibilityEvent.TYPE_VIEW_SCROLLED && manualRead.active!=null) {
             cancelScreenRead("读取期间屏幕已滚动，本次读取已取消；已保留上次内容")
         }
-        // Content/text/scroll events do not collect chat nodes, take screenshots, or start requests.
-        if(!structural)return
+        // Some apps/OEMs expose a new application's content/focus before its
+        // structural event. Inspect window metadata only, never its text/nodes.
+        val supplemental=event.eventType in setOf(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,AccessibilityEvent.TYPE_VIEW_FOCUSED) && pkg!=null && pkg!=packageName && pkg!="com.android.systemui" && pkg !in imePackages && event.windowId!=foregroundWindowId && (wechatForeground || ChatApps.supported(pkg))
+        if(!structural && !supplemental)return
+        if(!structural) {
+            val now=SystemClock.uptimeMillis()
+            if(now-lastSupplementalMetadataAt<16)return
+            lastSupplementalMetadataAt=now
+        }
+        val previous=eventWindowMetadata
+        val snapshot=windows;eventWindowMetadata=snapshot
+        try { inspectForegroundEvent(event,pkg,snapshot) } finally { eventWindowMetadata=previous }
+    }
+    private fun inspectForegroundEvent(event:AccessibilityEvent,pkg:String?,currentWindows:List<AccessibilityWindowInfo>) {
         foregroundStage(if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED)"windows-event" else "state-event")
-        val currentWindows=windows
         val transientWindow=currentWindows.any { it.id==event.windowId && it.type in setOf(android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD,android.view.accessibility.AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) }
         // Event class names describe views as well as Activities. Resolve actual foreground
         // windows before hiding anything; an editor/IME event is not proof of an app switch.
@@ -165,8 +180,12 @@ class ChatCaptureService:AccessibilityService() {
             }
         }
         val apps=currentWindows.filter { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
-        val signal=CaptureEventPolicy.confirmedForeground(pkg,event.windowId,apps.map { AppWindow(it.id,it.isFocused,it.isActive,it.layer) })
+        val appMetadata=apps.map { AppWindow(it.id,it.isFocused,it.isActive,it.layer) }
+        // WINDOWS_CHANGED does not promise a packageName. A validated mapping
+        // by focused window ID removes the remote application-root dependency.
+        val signal=reader.foregroundSignal(appMetadata,event.windowId,pkg,event.eventType!=AccessibilityEvent.TYPE_WINDOWS_CHANGED && !transientWindow)
         val externalFocused=currentWindows.any { it.isFocused && it.type !in setOf(AccessibilityWindowInfo.TYPE_APPLICATION,AccessibilityWindowInfo.TYPE_INPUT_METHOD,AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) }
+        Logs.event(LogStep.WINDOW_EVENT,metrics=mapOf(LogMetric.EVENT_TYPE to event.eventType.toLong(),LogMetric.WINDOW_CHANGES to if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED)event.windowChanges.toLong() else 0L,LogMetric.EVENT_AGE_MS to (SystemClock.uptimeMillis()-event.eventTime).coerceAtLeast(0),LogMetric.WINDOW_COUNT to currentWindows.size.toLong(),LogMetric.EXTERNAL_FOCUSED to if(externalFocused)1L else 0L,LogMetric.EDITOR_ACTIVE to if(::overlay.isInitialized && overlay.hasEditorLease())1L else 0L)+(appMetadata.filter { it.focused }.maxByOrNull { it.layer }?.let { mapOf(LogMetric.FOCUSED_APP_ID to it.id.toLong()) } ?: emptyMap()))
         if(signal!=null && !externalFocused) {
             // No app-root IPC and no wait behind a conversation read. Only OS window metadata.
             foregroundGate.invalidate();main.removeCallbacks(debounced)
@@ -175,7 +194,7 @@ class ChatCaptureService:AccessibilityService() {
             if(!canObserve())leaveForeground()
             else if(!ChatApps.supported(signal.packageName) || !frame.isEmpty) {
                 foregroundRetries=0
-                if(!wechatForeground || foregroundPackage!=next.packageName || foregroundWindowId!=next.windowId || lastForegroundWindow?.viewport!=next.viewport)updateForeground(next)
+                if(!wechatForeground || foregroundPackage!=next.packageName || foregroundWindowId!=next.windowId || lastForegroundWindow?.viewport!=next.viewport)updateForeground(next,currentWindows)
             } else if(!main.hasCallbacks(debounced))main.post(debounced)
         } else {
             // Even an IME/overlay event can coincide with the app losing foreground.
@@ -183,7 +202,7 @@ class ChatCaptureService:AccessibilityService() {
             val known=knownForeground(currentWindows)
             if(known!=null && canObserve()) {
                 foregroundGate.invalidate();main.removeCallbacks(debounced);foregroundRetries=0
-                if(lastForegroundWindow?.viewport!=known.viewport)updateForeground(known)
+                if(lastForegroundWindow?.viewport!=known.viewport)updateForeground(known,currentWindows)
                 else if(transientWindow)overlay.resize()
             } else {
                 foregroundStage("window-proof-missing")
@@ -196,7 +215,7 @@ class ChatCaptureService:AccessibilityService() {
         val apps=currentWindows.filter { it.type==AccessibilityWindowInfo.TYPE_APPLICATION }.map { AppWindow(it.id,it.isFocused,it.isActive,it.layer) }
         val transientFocused=currentWindows.any { it.isFocused && it.type in setOf(AccessibilityWindowInfo.TYPE_INPUT_METHOD,AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) }
         val externalFocused=currentWindows.any { it.isFocused && it.type !in setOf(AccessibilityWindowInfo.TYPE_APPLICATION,AccessibilityWindowInfo.TYPE_INPUT_METHOD,AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) }
-        return ForegroundVisibility.canRetain(windowId,apps,transientFocused,externalFocused)
+        return ForegroundVisibility.canRetain(windowId,apps,transientFocused,externalFocused,windowId==foregroundWindowId && ::overlay.isInitialized && overlay.hasEditorLease())
     }
     private fun knownForeground(currentWindows:List<AccessibilityWindowInfo>):WindowSnapshot? {
         val pkg=foregroundPackage ?: return null
@@ -211,6 +230,15 @@ class ChatCaptureService:AccessibilityService() {
     private fun canObserve()=!stopping && CapturePolicy.overlayVisible(graph.settings.load().overlayEnabled,locked(),projecting)
     private fun checkForeground() {
         if(!canObserve()) { leaveForeground(); return }
+        val snapshot=windowMetadata()
+        val apps=snapshot.filter { it.type==AccessibilityWindowInfo.TYPE_APPLICATION }.map { AppWindow(it.id,it.isFocused,it.isActive,it.layer) }
+        val signal=reader.foregroundSignal(apps,-1,null,false)
+        if(signal!=null) {
+            val frame=android.graphics.Rect().apply { snapshot.first { it.id==signal.windowId }.getBoundsInScreen(this) }
+            updateForeground(WindowSnapshot(signal.packageName,signal.windowId,RectI(frame.left,frame.top,frame.right,frame.bottom),emptyList()),snapshot);return
+        }
+        knownForeground(snapshot)?.let { updateForeground(it,snapshot);return }
+        if(wechatForeground)leaveForeground("前台归属已变化；已保留已读内容")
         val lease=foregroundGate.begin() ?: return
         foregroundStage("verify-start")
         foregroundWorker.execute {
@@ -223,8 +251,7 @@ class ChatCaptureService:AccessibilityService() {
         }
     }
     /** True only when this exact snapshot is accepted, independently of retaining known UI. */
-    private fun updateForeground(window:WindowSnapshot?):Boolean {
-        val currentWindows=windows
+    private fun updateForeground(window:WindowSnapshot?,currentWindows:List<AccessibilityWindowInfo> = windowMetadata()):Boolean {
         val accepted=window!=null && (!ChatApps.supported(window.packageName) || hasForegroundProof(window.windowId,currentWindows))
         if(window!=null && !accepted)foregroundStage("late-window-rejected")
         val current=if(accepted)window else knownForeground(currentWindows)
@@ -242,7 +269,12 @@ class ChatCaptureService:AccessibilityService() {
             if(lastForegroundWindow?.viewport==current.viewport)return false
         }
         if(!ChatApps.supported(current.packageName)) { diagnosticStatus="当前前台应用不是微信、QQ或抖音"; leaveForeground(); return false }
-        if(foregroundWindowId!=null && (foregroundWindowId!=current.windowId || foregroundPackage!=current.packageName)) cancelScreenRead("本次屏幕读取已取消；已保留上次内容")
+        if(foregroundWindowId!=null && (foregroundWindowId!=current.windowId || foregroundPackage!=current.packageName)) {
+            // Switching directly between supported split panes must not transfer
+            // the old editor's keyboard lease to the newly focused application.
+            overlay.releaseEditorFocus()
+            cancelScreenRead("本次屏幕读取已取消；已保留上次内容")
+        }
         val entering=!wechatForeground
         foregroundWindowId=current.windowId;foregroundPackage=current.packageName; wechatForeground=true
         lastForegroundWindow=current

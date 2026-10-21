@@ -132,6 +132,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     }
     fun popPage()=pages.pop()
     fun closeStyleEditor() { pages.clear() }
+    fun releaseEditingFocus() { pages.releaseEditingFocus() }
     private fun installEditorBack() {
         if(!pages.hasPages) { removeEditorBack?.invoke();removeEditorBack=null;return }
         if(android.os.Build.VERSION.SDK_INT>=33 && removeEditorBack==null) {

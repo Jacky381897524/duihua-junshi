@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.4.11 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.5.0 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,12 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.5.0", "编辑焦点、前台切换与互惠回复", listOf(
+                "编辑页仅在点击输入框时获取键盘焦点；焦点短暂变化保留原面板，切换窗口释放编辑焦点，返回保留草稿并等待再次点击。",
+                "微信、QQ、抖音共用窗口编号与前台元数据快路径，减少等待应用节点查询；另有应用或系统获得焦点时撤下入口，不自动读取聊天或调用模型。具体时延仍需机型验收。",
+                "三套知识与生成、判断准则同步升级：更多具体接话、幽默、自己的态度与互相投入；普通工作、严肃和拒绝场景不强制恋爱邀约。知识增至46份，保留固定提交和完整MIT许可。",
+                "保留V1.4.11持久诊断，新增窗口事件、编辑焦点、实际挂载和布局数字记录。指定目标与群聊契约加强，模型评分来源和调用预算不变。"
+            )),
             Release("V1.4.11", "持久诊断日志与操作追踪", listOf(
                 "在最新V1.4.10代码上升级，主页连接诊断统一改为诊断日志；各条记录携带实际版本、进程和操作编号。",
                 "串联读取、截图、视觉、判断、生成、复制、填入、设置与服务生命周期，保留错误类别、耗时和脱敏代码位置；取消、过期和未完成分别标记。",

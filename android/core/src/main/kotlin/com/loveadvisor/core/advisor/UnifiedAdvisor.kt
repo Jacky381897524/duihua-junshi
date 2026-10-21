@@ -13,8 +13,9 @@ class UnifiedAdvisor(private val client:ChatCompletionClient) {
             val raw=client.complete(input.profile,messages,cancel)
             val parsed=codec.parse(raw)
             if(parsed!=null) {
-                val batch=parsed.copy(analysis=common ?: parsed.analysis,knowledgeIds=input.knowledge.map { it.id })
+                val batch=parsed.copy(analysis=common ?: parsed.analysis,knowledgeIds=input.knowledge.map { it.id },kind=input.snapshot.identity?.kind ?: com.loveadvisor.core.model.ChatKind.DIRECT)
                 problems=validator.validate(batch).errors
+                if(!ReplyTargets.valid(input,batch.replies)) problems=problems+"六条候选未对应选中原话或已读目标"
                 if(previous.isNotEmpty() && batch.replies.all { plan -> previous.any { AdvisorValidator.normalize(it)==AdvisorValidator.normalize(plan.text) } }) problems=problems+"六条全部重复历史候选，必须换新的表达或行动"
                 if(problems.isEmpty()) return batch
             } else problems=listOf("缺少字段或不是要求的 JSON 格式")

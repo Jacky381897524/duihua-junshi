@@ -1,7 +1,8 @@
 package com.loveadvisor.core.knowledge
 class KnowledgeRouter {
     fun unified(query:KnowledgeQuery,documents:List<KnowledgeDocument>):List<KnowledgeExcerpt> {
-        val fixed=documents.filter { it.id in setOf("jev-copilot.md","romance-master.md") }.map { KnowledgeExcerpt(it.id,it.title,it.path,it.source,excerpt(it.text,setOf("expression","invite")).take(1000)) }
+        val topics=topics(query)
+        val fixed=documents.filter { it.id in setOf("jev-copilot.md","romance-master.md") }.map { KnowledgeExcerpt(it.id,it.title,it.path,it.source,excerpt(it.text,topics.keys).take(1000)) }
         val relevant=select(query,documents.filterNot { it.id in setOf("jev-copilot.md","romance-master.md") }).take(1).map { it.copy(text=it.text.take(1200)) }
         return fixed+relevant
     }
@@ -12,6 +13,8 @@ class KnowledgeRouter {
         "invite" to listOf("约","见面","吃饭","周末","咖啡","电影","邀请"),
         "work" to listOf("办事","同事","工作","资料","领导"),
         "expression" to listOf("聊天","接话","夸","调侃","润色","幽默","尴尬"),
+        "humor" to listOf("幽默","接梗","玩笑","有趣","好笑","逗","哈哈"),
+        "reciprocity" to listOf("互惠","有来有回","讨好","迎合","敷衍","只回","总是我","投入","主动","接话口"),
         "personality" to listOf("mbti","依恋","人格","性格"),
         "family" to listOf("婚姻","家庭","育儿","家务","结婚","金钱","父母"),
         "evidence" to listOf("证据","论文","书单","科学"),
@@ -20,12 +23,15 @@ class KnowledgeRouter {
         "safety" to listOf("法律","危机","安全","求助"),
         "memory" to listOf("长期记忆","关系档案","背景")
     )
+    private fun topics(query:KnowledgeQuery):Map<String,Int> {
+        val input=(query.text+" "+query.goal).lowercase()
+        return terms.mapValues { (_,words)->words.count { input.contains(it) } }.filterValues { it>0 }.ifEmpty { mapOf("expression" to 1) }
+    }
     fun select(query:KnowledgeQuery,documents:List<KnowledgeDocument>):List<KnowledgeExcerpt> {
         val input=(query.text+" "+query.goal).lowercase()
-        val matched=terms.mapValues { (_,words)->words.count { input.contains(it) } }.filterValues { it>0 }.toMutableMap()
-        if(matched.isEmpty()) matched["expression"]=1
+        val matched=topics(query)
         val scored=(query.notes+documents).distinctBy { it.id }.map { doc ->
-            var score=doc.tags.sumOf { tag -> (matched[tag]?:0) * if(tag=="boundary") 120 else 50 }
+            var score=doc.tags.sumOf { tag -> (matched[tag]?:0) * when(tag) { "boundary" -> 120; "reciprocity","humor" -> 75; else -> 50 } }
             for((_,words) in terms) for(word in words) if(input.contains(word) && doc.title.contains(word)) score+=10
             val tokenWords=Regex("[a-zA-Z]{3,}|[\\u4e00-\\u9fff]{2,6}").findAll(query.goal).map { it.value }.toList()
             score+=tokenWords.count { doc.text.contains(it,true) }*4

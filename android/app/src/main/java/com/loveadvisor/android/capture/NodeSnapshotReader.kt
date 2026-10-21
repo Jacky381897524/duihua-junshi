@@ -8,10 +8,15 @@ import com.loveadvisor.core.capture.AppWindow
 import com.loveadvisor.core.capture.ForegroundWindowSelector
 import com.loveadvisor.core.capture.CapturePolicy
 import android.os.SystemClock
+import com.loveadvisor.core.capture.WindowPackageCache
+import com.loveadvisor.android.diagnostics.DiagnosticLogs as Logs
+import com.loveadvisor.core.diagnostics.*
 class NodeSnapshotReader(private val service:AccessibilityService) {
     private val windowClasses=linkedMapOf<Int,String>()
+    private val packages=WindowPackageCache()
     @Synchronized fun recordWindowClass(id:Int,name:String) { if(id>=0) { windowClasses[id]=name; while(windowClasses.size>32) windowClasses.remove(windowClasses.keys.first()) } }
-    @Synchronized fun forgetWindow(id:Int) { windowClasses.remove(id) }
+    @Synchronized fun forgetWindow(id:Int) { windowClasses.remove(id);packages.forget(id) }
+    fun foregroundSignal(apps:List<AppWindow>,eventWindowId:Int,eventPackage:String?,validatedPackageEvent:Boolean)=packages.signal(apps,eventWindowId,eventPackage,validatedPackageEvent)
     @Synchronized private fun windowClass(id:Int)=windowClasses[id]
     data class WindowRead(val window:WindowSnapshot,val editables:List<Pair<NodeRecord,AccessibilityNodeInfo>>)
     private fun applicationWindow():android.view.accessibility.AccessibilityWindowInfo? {
@@ -24,9 +29,16 @@ class NodeSnapshotReader(private val service:AccessibilityService) {
     /** Passive foreground detection reads package/window metadata only, never message nodes. */
     fun foreground():WindowSnapshot? {
         val application=applicationWindow() ?: return null
-        val pkg=application.root?.packageName?.toString() ?: return null
-        val frame=Rect(); application.getBoundsInScreen(frame)
-        return WindowSnapshot(pkg,application.id,RectI(frame.left,frame.top,frame.right,frame.bottom),emptyList(),windowClassName=windowClass(application.id))
+        val cached=packages.packageFor(application.id)
+        val log=Logs.begin(LogStep.WINDOW_LOOKUP,metrics=mapOf(LogMetric.CACHED to if(cached!=null)1L else 0L,LogMetric.WINDOW_ID to application.id.toLong()))
+        try {
+            val pkg=cached ?: application.root?.packageName?.toString()
+            if(pkg==null) { Logs.end(log,LogState.FAIL,LogReason.NO_NODES);return null }
+            packages.remember(application.id,pkg)
+            val frame=Rect(); application.getBoundsInScreen(frame)
+            Logs.end(log,LogState.OK)
+            return WindowSnapshot(pkg,application.id,RectI(frame.left,frame.top,frame.right,frame.bottom),emptyList(),windowClassName=windowClass(application.id))
+        } catch(error:Exception) { val fault=LogFault.capture(error);Logs.end(log,LogState.FAIL,fault.reason,fault);throw error }
     }
     fun read(identity:ConversationIdentity?=null,expectedPackage:String?=null):WindowSnapshot?=readWithTargets(identity,expectedPackage)?.window
     fun readWithTargets(identity:ConversationIdentity?=null,expectedPackage:String?=null):WindowRead? {
@@ -34,6 +46,7 @@ class NodeSnapshotReader(private val service:AccessibilityService) {
         val frame=Rect(); application.getBoundsInScreen(frame)
         val viewport=RectI(frame.left,frame.top,frame.right,frame.bottom)
         val root=application.root ?: return null
+        root.packageName?.toString()?.let { packages.remember(application.id,it) }
         if(expectedPackage!=null && root.packageName?.toString()!=expectedPackage) {
             val r=Rect(); root.getBoundsInScreen(r)
             return WindowRead(WindowSnapshot(root.packageName?.toString().orEmpty(),application.id,CapturePolicy.viewport(viewport,RectI(r.left,r.top,r.right,r.bottom)),emptyList()),emptyList())

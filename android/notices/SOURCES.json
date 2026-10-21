@@ -438,10 +438,12 @@
       "tags": [
         "work",
         "comfort",
-        "expression"
+        "expression",
+        "reciprocity",
+        "humor"
       ],
       "source": "Jev v1.3 转译",
-      "date": "2026-10-02"
+      "date": "2026-10-22"
     },
     {
       "id": "romance-master.md",
@@ -452,10 +454,72 @@
         "conflict",
         "comfort",
         "boundary",
-        "expression"
+        "expression",
+        "reciprocity",
+        "humor"
       ],
       "source": "本项目原创",
-      "date": "2026-10-02"
+      "date": "2026-10-22"
+    },
+    {
+      "id": "conversation-reciprocity.md",
+      "title": "有来有回：自信接话、幽默与轻选择",
+      "path": "knowledge/conversation-reciprocity.md",
+      "tags": [
+        "expression",
+        "reciprocity",
+        "humor"
+      ],
+      "source": "本项目原创 / hinge-profile-optimizer@55575ff 改写",
+      "date": "2026-10-22"
+    }
+  ],
+  "researchedAt": "2026-10-22",
+  "reusedSources": [
+    {
+      "name": "jev-chat-jarvis",
+      "commit": "23b5ca56930960cfac470815ae582cd713eda95a",
+      "url": "https://github.com/jev-chat/jev-chat-jarvis/tree/23b5ca56930960cfac470815ae582cd713eda95a",
+      "license": "MIT",
+      "notice": "notices/Jev-MIT.txt",
+      "scope": "原先收录的参考源码与jev-copilot.md基础转译，保留原固定版本"
+    },
+    {
+      "name": "goutoujunshi",
+      "commit": "6db7354a4002dc7c448a9c87ffdad8132570c9d3",
+      "url": "https://github.com/shengjidaguai-china/goutoujunshi/tree/6db7354a4002dc7c448a9c87ffdad8132570c9d3",
+      "license": "MIT",
+      "notice": "notices/Goutou-MIT.txt",
+      "scope": "原先收录的43份文档，本次不复制替换上游内容"
+    },
+    {
+      "name": "hinge-profile-optimizer",
+      "commit": "55575ffbc257b3e8a753086ea11f3b89796ff4d6",
+      "url": "https://github.com/b1rdmania/hinge-profile-optimizer/blob/55575ffbc257b3e8a753086ea11f3b89796ff4d6/references/copy-principles.md",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/b1rdmania/hinge-profile-optimizer/blob/55575ffbc257b3e8a753086ea11f3b89796ff4d6/LICENSE",
+      "notice": "notices/HingeProfileOptimizer-MIT.txt",
+      "scope": "conversation-reciprocity.md中具体表达、接话口、个性与温暖的设计启发；中文例句原创，不迁移研究效果数字"
+    }
+  ],
+  "reviewedUpstream": [
+    {
+      "name": "jev-chat/jev-chat-jarvis",
+      "commit": "bd3fe42eebd04b58b2b1d4a7f5310fddfb0bb91b",
+      "license": "MIT",
+      "decision": "查阅最新cn/判断问题与版本差异；不整体移植全球版、采集或UI，不改原引入版本号"
+    },
+    {
+      "name": "shengjidaguai-china/goutoujunshi",
+      "commit": "6db7354a4002dc7c448a9c87ffdad8132570c9d3",
+      "license": "MIT",
+      "decision": "当前已是最新提交；改进检索和策略接入，未伪称上游更新"
+    },
+    {
+      "name": "shengjidaguai-china/goutoujunshi-jev-chat",
+      "commit": "12ee1d6582a9270bd44b71a519d21f387542e8e0",
+      "license": "MIT",
+      "decision": "调研整合架构与边界，未新增复制内容"
     }
   ]
 }

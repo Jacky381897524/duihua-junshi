@@ -435,10 +435,12 @@
     "tags": [
       "work",
       "comfort",
-      "expression"
+      "expression",
+      "reciprocity",
+      "humor"
     ],
     "source": "Jev v1.3 转译",
-    "date": "2026-10-02"
+    "date": "2026-10-22"
   },
   {
     "id": "romance-master.md",
@@ -449,9 +451,23 @@
       "conflict",
       "comfort",
       "boundary",
-      "expression"
+      "expression",
+      "reciprocity",
+      "humor"
     ],
     "source": "本项目原创",
-    "date": "2026-10-02"
+    "date": "2026-10-22"
+  },
+  {
+    "id": "conversation-reciprocity.md",
+    "title": "有来有回：自信接话、幽默与轻选择",
+    "path": "knowledge/conversation-reciprocity.md",
+    "tags": [
+      "expression",
+      "reciprocity",
+      "humor"
+    ],
+    "source": "本项目原创 / hinge-profile-optimizer@55575ff 改写",
+    "date": "2026-10-22"
   }
 ]

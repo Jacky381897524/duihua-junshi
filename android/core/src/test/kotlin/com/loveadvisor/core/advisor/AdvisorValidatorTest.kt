@@ -3,7 +3,7 @@ import org.junit.Assert.*
 import org.junit.Test
 class AdvisorValidatorTest {
     private val validator=AdvisorValidator()
-    @Test fun requiresExactlySixAndRomanceCoverage() {
+    @Test fun requiresExactlySixAndDistinctDirectStrategies() {
         val valid=AdvisorFixtures.valid(); assertTrue(validator.validate(valid).valid)
         assertFalse(validator.validate(valid.copy(replies=valid.replies.take(5))).valid)
         assertFalse(validator.validate(valid.copy(replies=valid.replies+valid.replies.first())).valid)

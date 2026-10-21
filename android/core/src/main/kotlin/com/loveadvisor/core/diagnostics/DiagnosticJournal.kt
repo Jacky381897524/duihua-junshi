@@ -358,11 +358,13 @@ class DiagnosticJournal(
         private fun counter(obj:JsonObject,key:String)=number(obj[key]).also { require(it>=0) }
         private fun add(a:Long,b:Long)=if(Long.MAX_VALUE-a<b) Long.MAX_VALUE else a+b
         private fun metric(key:LogMetric,value:Long):Long=when(key) {
-            LogMetric.HAS_INPUT,LogMetric.HAS_DRAFT,LogMetric.CACHED,LogMetric.ENABLED,LogMetric.READY -> value.coerceIn(0,1)
+            LogMetric.HAS_INPUT,LogMetric.HAS_DRAFT,LogMetric.CACHED,LogMetric.ENABLED,LogMetric.READY,LogMetric.TRANSIENT_FOCUSED,LogMetric.EXTERNAL_FOCUSED,LogMetric.EDITOR_ACTIVE -> value.coerceIn(0,1)
             LogMetric.DURATION_MS -> value.coerceIn(0,86_400_000)
             LogMetric.WIDTH,LogMetric.HEIGHT -> value.coerceIn(0,32768)
             LogMetric.HTTP_STATUS -> value.coerceIn(0,599)
             LogMetric.SCREENSHOT_CODE -> value.coerceIn(-1,1_000_000_000)
+            LogMetric.EVENT_AGE_MS -> value.coerceIn(0,86_400_000)
+            LogMetric.LEFT,LogMetric.TOP -> value.coerceIn(-32768,32768)
             else -> value.coerceIn(0,1_000_000_000)
         }
     }
