@@ -4,6 +4,8 @@ import android.os.Looper
 import com.loveadvisor.android.AppGraph
 import com.loveadvisor.android.settings.SettingsWorkScope
 import com.loveadvisor.core.analysis.*
+import com.loveadvisor.core.advisor.ConversationTimePolicy
+import com.loveadvisor.core.model.ReplyTarget
 import com.loveadvisor.core.model.ChatSnapshot
 import com.google.gson.Gson
 import java.security.MessageDigest
@@ -23,8 +25,9 @@ class MessageAnalysisController(private val graph:AppGraph) {
         Logs.end(operation,LogState.CANCELLED,LogReason.USER_CANCELLED)
         val log=Logs.begin(LogStep.JUDGMENT_REQUEST,metrics=mapOf(LogMetric.MESSAGE_COUNT to snapshot.messages.size.toLong()));operation=log
         val profile=graph.settings.load().judgeProfile()
-        val key=JudgmentKey(session,targetId,revision());val ticket=gate.begin(key)
-        fun valid()=gate.accept(key,ticket) && graph.tracker.isCurrent(session) && revision()==key.judgeRevision
+        fun contextRevision()=revision()+":"+ConversationTimePolicy.scopeKey(snapshot,ReplyTarget(targetId))
+        val key=JudgmentKey(session,targetId,contextRevision());val ticket=gate.begin(key)
+        fun valid()=gate.accept(key,ticket) && graph.tracker.isCurrent(session) && contextRevision()==key.judgeRevision
         val hit=cache.get(key)
         Logs.event(LogStep.JUDGMENT_CACHE,LogState.OK,operation=log,metrics=mapOf(LogMetric.CACHED to if(hit!=null)1L else 0L))
         if(hit!=null)Handler(Looper.getMainLooper()).post { if(valid()) { Logs.end(log,LogState.OK);onResult(hit,null) } else Logs.end(log,LogState.CANCELLED,LogReason.RESULT_STALE) }

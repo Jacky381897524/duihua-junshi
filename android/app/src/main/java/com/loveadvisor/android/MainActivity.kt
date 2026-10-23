@@ -69,7 +69,7 @@ class MainActivity : BaseActivity() {
         hero.addView(ViewStyles.button(this,"完整咨询 / 润色草稿") { open(ConsultationActivity::class.java) })
         val config=graph.settings.load(); val model=ViewStyles.card(this); body.addView(model); model.addView(ViewStyles.text(this,"你的模型",19f,bold=true)); model.addView(ViewStyles.text(this,config.profile.selectedModelId ?: "填写服务地址与密钥，刷新选择模型",14f,ViewStyles.MUTED)); model.addView(ViewStyles.button(this,"模型与连接设置") { open(SettingsActivity::class.java) })
         body.addView(ViewStyles.switch(this,"启用聊天悬浮窗",config.overlayEnabled) { enabled -> graph.settings.update { it.copy(overlayEnabled=enabled) }; if(!enabled && com.loveadvisor.core.capture.CapturePolicy.invalidateForDisabledCapture(graph.tracker.currentToken)) graph.controller.invalidate(); ChatCaptureService.instance?.settingsChanged() })
-        body.addView(ViewStyles.button(this,"悬浮窗设置 · " + if(config.topCapsuleEnabled) "左上角胶囊" else "${config.bubbleAutoHideSeconds}秒后隐藏") { open(OverlaySettingsActivity::class.java) })
+        body.addView(ViewStyles.button(this,"悬浮窗设置 · " + if(config.topCapsuleEnabled) "顶部胶囊" else "${config.bubbleAutoHideSeconds}秒后隐藏") { open(OverlaySettingsActivity::class.java) })
         body.addView(ViewStyles.text(this,"微信 · QQ · 抖音单聊与群聊按需读取 · 私聊50条 / 群聊默认100条\n点击悬浮图标展开，再点读取信息；刷新使用已读取上下文，复制后收起，填入后由你发送。",14f,ViewStyles.MUTED))
         body.addView(ViewStyles.switch(this,"减少动效",config.reducedMotion) { enabled -> graph.settings.update { it.copy(reducedMotion=enabled) } })
         body.addView(ViewStyles.button(this,"融合知识库与我的笔记") { open(KnowledgeActivity::class.java) })

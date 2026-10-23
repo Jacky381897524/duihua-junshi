@@ -32,7 +32,8 @@ class AutomaticConversation {
         require(identity.kind in setOf(ChatKind.DIRECT,ChatKind.GROUP) && snapshot.messages.none { it.speaker==Speaker.UNKNOWN })
         val previous=current?.takeIf { it.packageName==snapshot.packageName && it.identity?.id==identity.id && it.identity?.kind==identity.kind }
         val existing=previous?.messages.orEmpty()
-        val visible=snapshot.messages
+        val capturedAt=snapshot.readAtMillis
+        val visible=snapshot.messages.map { if(it.observedAtMillis>0 || capturedAt<=0)it else it.copy(observedAtMillis=capturedAt) }
         fun same(a:ChatMessage,b:ChatMessage)=ConversationContextPolicy.same(a,b)
         val observedAt=if(visible.isNotEmpty() && existing.size>=visible.size)
             (existing.size-visible.size downTo 0).firstOrNull { start -> visible.indices.all { same(existing[start+it],visible[it]) } }
@@ -45,10 +46,13 @@ class AutomaticConversation {
         val added=if(alreadyObserved) emptyList() else visible.drop(overlap)
         // A manually reread older viewport ends at what is actually visible.
         // Cached later rows must not determine the speaker we are continuing.
-        val context=when { observedAt!=null -> existing.take(observedAt)+visible.mapIndexed { i,m -> m.copy(id=existing[observedAt+i].id) };entered && overlap==0 -> visible;else -> existing+added }
+        val context=when { observedAt!=null -> existing.take(observedAt)+visible.mapIndexed { i,m ->
+            val stored=existing[observedAt+i]
+            m.copy(id=stored.id,time=m.time?.takeIf { it.epochMillis!=null } ?: stored.time ?: m.time,observedAtMillis=stored.observedAtMillis.takeIf { it>0 } ?: m.observedAtMillis)
+        };entered && overlap==0 -> visible;else -> existing+added }
         val used=mutableSetOf<String>()
         val unique=context.map { m -> if(used.add(m.id))m else m.copy(id=java.util.UUID.randomUUID().toString()).also { used.add(it.id) } }
-        current=snapshot.copy(messages=unique.takeLast(ConversationContextPolicy.forSnapshot(snapshot)))
+        current=snapshot.copy(messages=unique.takeLast(ConversationContextPolicy.forSnapshot(snapshot)),readAtMillis=capturedAt)
         updatedAt=now
         return current!!.messages.isNotEmpty() && (entered || added.isNotEmpty() && added.last().speaker==Speaker.OTHER)
     }

@@ -22,6 +22,7 @@ class MessageJudgmentView(context:Context,message:ChatMessage,index:Int,group:Bo
         val type=when(message.kind) { MessageKind.IMAGE->"图片";MessageKind.STICKER->"表情包";MessageKind.VOICE->"语音/转写";else->"文字" }
         original.addView(palette.text("${index+1} · ${if(group)(message.sender ?: "成员（昵称未知）")+" · " else ""}$type",11f,palette.muted))
         original.addView(palette.text(message.text,14f,bold=true).apply { setTextIsSelectable(true) },LayoutParams(-1,-2).apply { topMargin=dp(5) })
+        message.time?.let { original.addView(palette.text("时间：${it.label}（读取时）",10.5f,palette.muted),LayoutParams(-1,-2).apply { topMargin=dp(4) }) }
         header.addView(original,LayoutParams(0,-2,1f))
         header.addView(palette.button("指定回复",true,onReply).apply {
             textSize=11f;minimumHeight=dp(34);setPadding(dp(10),dp(7),dp(10),dp(7))
@@ -33,8 +34,9 @@ class MessageJudgmentView(context:Context,message:ChatMessage,index:Int,group:Bo
         addView(retry,LayoutParams(-2,dp(32)).apply { topMargin=dp(7) })
         show(null,"显示后自动判断")
     }
-    fun show(result:MessageJudgment?,status:String?=null,failed:Boolean=false) {
+    fun show(result:MessageJudgment?,status:String?=null,failed:Boolean=false,retryLabel:String="重试判断") {
         resultColumn.removeAllViews();retry.visibility=if(failed)View.VISIBLE else View.GONE
+        retry.text=retryLabel
         fun line(label:String,value:String,color:Int=palette.ink) {
             val row=LinearLayout(context).apply { orientation=HORIZONTAL;gravity=Gravity.TOP }
             row.addView(palette.text(label,11f,palette.blue,true),LayoutParams(dp(62),-2))

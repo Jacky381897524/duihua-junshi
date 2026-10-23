@@ -5,15 +5,17 @@ import android.graphics.Rect
 import android.widget.*
 import com.loveadvisor.android.ui.ViewStyles
 import com.loveadvisor.core.analysis.MessageJudgment
+import com.loveadvisor.core.advisor.ConversationTimePolicy
 import com.loveadvisor.core.model.*
 
-class MessageAnalysisListView(context:Context,snapshot:ChatSnapshot,onReply:(ChatMessage)->Unit,onBack:()->Unit,onAutomatic:(()->Unit)?=null,
+class MessageAnalysisListView(context:Context,private val snapshot:ChatSnapshot,onReply:(ChatMessage)->Unit,onBack:()->Unit,onAutomatic:(()->Unit)?=null,
     private val onAnalyze:(ChatMessage,(MessageJudgment?,String?)->Unit)->(()->Unit)):LinearLayout(context),PanelViewportPage {
     override val preferredViewportHeightDp=540
     private val viewport=ScrollView(context)
     private val rows=snapshot.messages.filter { it.speaker==Speaker.OTHER }
     private val cards=linkedMapOf<String,MessageJudgmentView>()
     private val attempted=mutableSetOf<String>()
+    private val requested=mutableSetOf<String>()
     private var active:String?=null
     private var cancelActive:(()->Unit)?=null
     private var epoch=0L
@@ -24,13 +26,15 @@ class MessageAnalysisListView(context:Context,snapshot:ChatSnapshot,onReply:(Cha
     init {
         orientation=VERTICAL;val palette=PanelPalette(context)
         addView(palette.text("判断分析 · 选句回复",17f,bold=true))
-        addView(palette.text("结合全部已读对话；判断为模型推测，权重不代表统计准确率。",11f,palette.muted),LayoutParams(-1,-2).apply { topMargin=dp(5);bottomMargin=dp(10) })
+        addView(palette.text("自动判断近24小时话题；旧消息可指定回复。判断为模型推测。",11f,palette.muted),LayoutParams(-1,-2).apply { topMargin=dp(5);bottomMargin=dp(10) })
         val content=LinearLayout(context).apply { orientation=VERTICAL }
+        val current=currentIds()
         rows.forEachIndexed { index,message ->
             val card=MessageJudgmentView(context,message,index,snapshot.identity?.kind==ChatKind.GROUP,{ onReply(message) },{
-                attempted.remove(message.id);schedule()
+                requested.add(message.id);attempted.remove(message.id);schedule()
             })
             cards[message.id]=card
+            if(message.id !in current)card.show(null,"旧话题 · 不自动判断，可指定回复或手动判断这句",true,"判断旧消息")
             content.addView(card,LayoutParams(-1,-2).apply { bottomMargin=dp(9) })
         }
         if(rows.isEmpty())content.addView(palette.text("本次没有读到可判断的对方消息",13f))
@@ -56,9 +60,13 @@ class MessageAnalysisListView(context:Context,snapshot:ChatSnapshot,onReply:(Cha
         }
     }
     private fun schedule() { removeCallbacks(next);if(!closed && ready)post(next) }
+    private fun currentIds()=ConversationTimePolicy.currentMessages(snapshot).map { it.id }.toSet()
     private fun startVisible() {
         if(closed || !ready || active!=null || !isAttachedToWindow || !isShown)return
-        val message=rows.asReversed().firstOrNull { it.id !in attempted && cards[it.id]?.getGlobalVisibleRect(Rect())==true } ?: return
+        val current=currentIds()
+        rows.filter { it.id !in current && it.id !in attempted && it.id !in requested }.forEach { cards[it.id]?.show(null,"旧话题 · 不自动判断，可指定回复或手动判断这句",true,"判断旧消息") }
+        val message=rows.asReversed().firstOrNull { it.id !in attempted && (it.id in current || it.id in requested) && cards[it.id]?.getGlobalVisibleRect(Rect())==true } ?: return
+        requested.remove(message.id)
         val card=cards.getValue(message.id);val requestEpoch=epoch
         active=message.id;card.show(null,"正在判断…")
         val cancellation=onAnalyze(message) { result,error ->

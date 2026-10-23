@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.5.2 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.5.3 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,11 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.5.3", "按聊天时间判断 · 顶部胶囊", listOf(
+                "读取可见聊天时间，超过24小时的话题不再参与自动接话；去AI味开关两种模式均适用。",
+                "保留旧消息，支持指定回复历史消息；整段过期时提示手动选择或重新读取，不自动调用模型。",
+                "诊断记录时间筛选数量与过期原因，入口统一命名为顶部胶囊。"
+            )),
             Release("V1.5.2", "去AI味结果显示修复", listOf(
                 "修复开启去AI味后，已生成候选被最后显示校验拦截，面板停留在分析中或正在刷新六条的问题。",
                 "每批候选沿用生成时的规则；关闭开关时仍按原版规则校验，不影响已经显示的候选。",
@@ -187,7 +192,7 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
                 "加强左侧为对方、右侧为我的区分；最后一句是我时，候选继续我的表达。",
                 "填入失败明确提示，复制备用时说明失败；回复风格设置移到主页和菜单顶部，移除权限页重复的悬浮球开启按钮。"
             )),
-            Release("V1.2.15", "左上角常驻胶囊", listOf(
+            Release("V1.2.15", "顶部常驻胶囊", listOf(
                 "新增时钟右侧、摄像头左侧的应用胶囊入口，无需等待系统通知即可显示。",
                 "仅在微信、QQ、抖音前台显示，点击打开面板，长按可拖动；开启后替代普通悬浮球，关闭后恢复。",
                 "面板仅通过顶部三点拖动；修正屏幕边界限制后再次拖动的起点。"

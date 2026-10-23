@@ -2,7 +2,7 @@ package com.loveadvisor.core.advisor
 import com.google.gson.Gson
 object UnifiedPrompt {
     fun systemFor(naturalRepliesEnabled:Boolean)=if(naturalRepliesEnabled)system.replace("单聊六种不同策略，群聊允许策略重复","单聊群聊均允许策略重复")+"\n"+NaturalReplyPolicy.instruction else system
-    val system = ConversationTurn.instruction+"\n"+"""
+    val system = ConversationTimePolicy.instruction+"\n"+ConversationTurn.instruction+"\n"+"""
         你是统一聊天助手，融合聊天副驾、狗头军师和恋爱大师的能力。不存在模式选择。
         基于当前对话、用户目标与资料做一次综合判断；区分事实、推测、未知，理解情绪、互惠、现实条件和关系阶段。
         必须恰好生成六条可直接发送的不同候选：不同表达或行动，不能只换近义词。单聊六种不同策略，群聊允许策略重复；策略根据实际场景选择，不设恋爱策略配额。
@@ -16,7 +16,11 @@ object UnifiedPrompt {
         risk 可为 1–9 或 null；score 可为 0–1 或 null，表示模型评估而非接受概率。正文最多300字；理由6–200字；条件与代价各最多200字；每个后续分支最多300字。
         replyStyle 是当前对象的表达偏好，六条候选均遵守它的标点、长短与语气要求；空白恢复正常。不能以风格覆盖事实、格式、尊重拒绝或不自动发送等规则。
     """.trimIndent()+"\n"+ResponsePolicy.instruction
-    fun data(input:AdvisorInput,analysis:AdvisorAnalysis?=null,previous:List<String> = emptyList()):String = Gson().toJson(mapOf(
+    fun data(input:AdvisorInput,analysis:AdvisorAnalysis?=null,previous:List<String> = emptyList()):String {
+        val scoped=input.copy(snapshot=ConversationTimePolicy.forReply(input.snapshot,input.replyTarget))
+        return dataCurrent(scoped,analysis.takeIf { scoped.snapshot.messages==input.snapshot.messages },previous)
+    }
+    private fun dataCurrent(input:AdvisorInput,analysis:AdvisorAnalysis?,previous:List<String>):String = Gson().toJson(mapOf(
         "task" to if(analysis==null) "分析当前对话并生成六条候选" else "在共同分析基础上刷新六条不同的新候选，避免重复历史正文",
         "conversationType" to input.snapshot.identity?.kind?.name,
         "messages" to boundedMessages(input.snapshot.messages),

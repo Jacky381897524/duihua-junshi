@@ -32,7 +32,9 @@ class AdvisorController(private val graph:AppGraph) {
         worker.execute {
             try {
                 val batch=Logs.within(log) {
-                    val input=graph.inputFor(snapshot,goal,background,objectId).copy(replyTarget=replyTarget)
+                    val currentRows=ConversationTimePolicy.currentMessages(snapshot)
+                    Logs.event(LogStep.TIME_CONTEXT,LogState.OK,metrics=mapOf(LogMetric.MESSAGE_COUNT to snapshot.messages.size.toLong(),LogMetric.EXPIRED_MESSAGE_COUNT to (snapshot.messages.size-currentRows.size).toLong(),LogMetric.ENABLED to if(replyTarget==null)1L else 0L))
+                    val input=graph.inputFor(snapshot,goal,background,objectId,replyTarget)
                     Logs.event(LogStep.REPLY_REQUEST,metrics=mapOf(LogMetric.ENABLED to if(input.naturalRepliesEnabled)1L else 0L))
                     graph.generate(input,pending.analysis,pending.previous,current)
                 }; current.check()
@@ -41,6 +43,9 @@ class AdvisorController(private val graph:AppGraph) {
                     when(graph.coordinator.completeResult(pending.requestTicket,batch)) {
                         BatchCompletion.ACCEPTED -> {
                             Logs.event(LogStep.REPLY_RESULT,LogState.OK,operation=log,metrics=mapOf(LogMetric.RESULT_COUNT to batch.replies.size.toLong()));Logs.end(log,LogState.OK)
+                            val currentIds=ConversationTimePolicy.currentMessages(snapshot).map { it.id }.toSet()
+                            if(replyTarget!=null && replyTarget.messageId !in currentIds)graph.coordinator.status("正在回复历史消息 · 按当前时间重提话题")
+                            else if(currentIds.size<snapshot.messages.size)graph.coordinator.status("已排除${snapshot.messages.size-currentIds.size}条旧消息 · 按近24小时话题判断")
                             publish()
                             worker.execute {
                                 try { graph.profiles.withExisting(objectId) { target ->

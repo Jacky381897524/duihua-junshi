@@ -167,7 +167,7 @@ class OverlayController(private val service:ChatCaptureService) {
             } catch(error:RuntimeException) {
                 Logs.failed(LogStep.OVERLAY_SHOW,error)
                 graph.settings.update { it.copy(topCapsuleEnabled=false) };setEntryMode(OverlayEntryMode.BUBBLE)
-                service.notifyUser("未能显示左上角胶囊，已恢复悬浮球")
+                service.notifyUser("未能显示顶部胶囊，已恢复悬浮球")
             }
         } else capsule?.let { capsuleWindow.detach { manager.removeViewImmediate(it) } }
         panel?.let { attachPanel(it) }

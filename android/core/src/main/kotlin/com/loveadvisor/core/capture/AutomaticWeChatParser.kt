@@ -6,7 +6,7 @@ import kotlin.math.abs
 
 /** Reads geometry and original text; uncertain layouts go to vision, never a confirmation screen. */
 class AutomaticWeChatParser {
-    fun extract(window:WindowSnapshot):CaptureResult {
+    fun extract(window:WindowSnapshot,readAtMillis:Long=System.currentTimeMillis()):CaptureResult {
         val v=window.viewport
         val page=WeChatPageClassifier.classify(window)
         if(page==WeChatPageKind.GROUP)return CaptureResult.NeedsImage("核对当前聊天类型与群成员归属")
@@ -40,11 +40,11 @@ class AutomaticWeChatParser {
                 }
             }.distinct()
             val speaker=if(sides.size==1) sides.single() else if(sides.size>1) Speaker.UNKNOWN else TextSceneParser.speaker(node.containerBounds ?: node.bounds,v)
-            ChatMessage("node-$index",speaker,null,node.text!!.trim())
+            ChatMessage("node-$index",speaker,null,node.text!!.trim(),time=MessageTimeParser.before(nodes,node.bounds,v,readAtMillis))
         }
         if(messages.any { it.speaker==Speaker.UNKNOWN }) return CaptureResult.NeedsImage("正在自动识别消息左右归属")
         val identity=window.confirmedIdentity?.takeIf { it.displayTitle==title && it.kind==ChatKind.DIRECT }
             ?: ConversationIdentity("wechat-${UUID.randomUUID()}",title,ChatKind.DIRECT,true)
-        return CaptureResult.Readable(ChatSnapshot(window.packageName,window.windowId,identity,messages))
+        return CaptureResult.Readable(ChatSnapshot(window.packageName,window.windowId,identity,messages,readAtMillis=readAtMillis))
     }
 }

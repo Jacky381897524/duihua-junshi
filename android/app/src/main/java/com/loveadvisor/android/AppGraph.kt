@@ -47,7 +47,8 @@ class AppGraph private constructor(val context:Context) {
         is IllegalArgumentException -> e.message?.takeIf { it.none { c -> c=='\r' } && !it.contains("Bearer") && !it.contains("http") }?.take(200) ?: "填写内容无效，请检查配置"
         else -> "操作失败，请检查网络或在诊断页面查看阶段"
     } }
-    fun inputFor(snapshot:ChatSnapshot,goal:String,background:String,objectId:String?):AdvisorInput {
+    fun inputFor(snapshot:ChatSnapshot,goal:String,background:String,objectId:String?,replyTarget:ReplyTarget?=null):AdvisorInput {
+        val scoped=ConversationTimePolicy.forReply(snapshot,replyTarget)
         var config=settings.load()
         if(ChatApps.supported(snapshot.packageName)) {
             val kind=snapshot.identity?.kind ?: ChatKind.DIRECT
@@ -59,9 +60,9 @@ class AppGraph private constructor(val context:Context) {
         val context=if(target!=null) memory.context(target.id) else null
         val history=if(config.historyEnabled && target!=null) data.history.filter { it.objectId==target.id }.map { it.messages } else emptyList()
         val extra=BackgroundBuilder.build(data.self,target,context,history,background)
-        val query=KnowledgeQuery(snapshot.messages.takeLast(80).joinToString("\n") { it.text },goal,data.notes)
+        val query=KnowledgeQuery(scoped.messages.takeLast(80).joinToString("\n") { it.text },goal,data.notes)
         val selected=if(ChatApps.supported(snapshot.packageName)) KnowledgeRouter().unified(query,knowledge.documents) else KnowledgeRouter().select(query,knowledge.documents)
-        return AdvisorInput(config.profile,snapshot,goal,extra,selected,GroupReplyStyle.resolve(snapshot,settings.replyStyleCatalog(ChatKind.DIRECT),config.globalReplyStyle,settings.replyStyleCatalog(ChatKind.GROUP),config.globalGroupReplyStyle),naturalRepliesEnabled=config.naturalRepliesEnabled)
+        return AdvisorInput(config.profile,scoped,goal,extra,selected,GroupReplyStyle.resolve(snapshot,settings.replyStyleCatalog(ChatKind.DIRECT),config.globalReplyStyle,settings.replyStyleCatalog(ChatKind.GROUP),config.globalGroupReplyStyle),replyTarget=replyTarget,naturalRepliesEnabled=config.naturalRepliesEnabled)
     }
     fun generate(input:AdvisorInput,common:AdvisorAnalysis?,previous:List<String>,cancel:Cancellation):AdvisorBatch {
         val config=settings.load()

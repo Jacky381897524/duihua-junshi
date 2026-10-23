@@ -14,6 +14,7 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
     private val history=ReplyHistory()
     private var historySession:SessionToken?=null
     private var target:ReplyTarget?=null
+    private var timeScope:String?=null
     @Synchronized fun targetFor(snapshot:ChatSnapshot):ReplyTarget?=target.takeIf { snapshot.identity?.kind in setOf(ChatKind.DIRECT,ChatKind.GROUP) && tracker.lastSnapshot==snapshot && historySession==tracker.currentToken }
     @Synchronized fun observe(snapshot:ChatSnapshot,message:String?=null) {
         val before=tracker.currentToken
@@ -35,9 +36,11 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
     @Synchronized fun begin(snapshot:ChatSnapshot,replyTarget:ReplyTarget?=null):RefreshRequest? {
         val token=tracker.update(snapshot) ?: run { invalidate(); return null }
         if(state.loading && active?.session==token && target==replyTarget) return null
-        val changed=target!=replyTarget
+        val scope=ConversationTimePolicy.scopeKey(snapshot,replyTarget)
+        val changed=target!=replyTarget || timeScope!=scope
         if(historySession!=token || changed) { history.clear(); historySession=token }
         target=replyTarget
+        timeScope=scope
         val previous=state.current?.takeIf { it.ticket.session==token && !changed }
         val ticket=gate.begin(token); active=ticket
         state=state.copy(current=state.current?.takeIf { tracker.sameConversation(it.ticket.session) },loading=true,error=null,isFailure=false)
@@ -60,6 +63,6 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
     }
     @Synchronized fun invalidate() {
         gate.cancel(); tracker.invalidate("capture-invalidated"); active=null
-        history.clear(); historySession=null; state=BatchState()
+        history.clear(); historySession=null; timeScope=null; state=BatchState()
     }
 }

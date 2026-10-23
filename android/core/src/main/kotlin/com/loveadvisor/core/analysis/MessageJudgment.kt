@@ -7,6 +7,6 @@ object MessageJudgmentService {
         require(snapshot.messages.count { it.id==targetId }==1) { "目标消息已变化，请重新读取" }
         val at=snapshot.messages.indexOfFirst { it.id==targetId }
         require(snapshot.messages[at].speaker==Speaker.OTHER) { "请选择对方的消息" }
-        return snapshot
+        return com.loveadvisor.core.advisor.ConversationTimePolicy.forReply(snapshot,ReplyTarget(targetId))
     }
 }

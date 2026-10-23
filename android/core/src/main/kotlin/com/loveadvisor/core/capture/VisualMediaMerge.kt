@@ -12,7 +12,12 @@ object VisualMediaMerge {
         }
     }
     /** Native text wins; vision contributes media only, aligned to the nearest native text rows. */
-    fun merge(native:ChatSnapshot,visual:VisionConversation,window:WindowSnapshot?=null):ChatSnapshot {
+    fun merge(original:ChatSnapshot,visual:VisionConversation,window:WindowSnapshot?=null):ChatSnapshot {
+        var last=-1
+        val native=original.copy(readAtMillis=visual.readAtMillis.takeIf { it>0 } ?: original.readAtMillis,messages=original.messages.map { message ->
+            val at=(last+1 until visual.messages.size).firstOrNull { visual.messages[it].speaker==message.speaker && visual.messages[it].text==message.text }
+            if(at==null)message else { last=at;message.copy(time=message.time?.takeIf { it.epochMillis!=null } ?: visual.messages[at].time ?: message.time) }
+        })
         require(native.identity?.displayTitle==visual.title)
         if(window!=null && visual.mediaIds.all { it in visual.positions }) {
             val used=mutableSetOf<Int>()

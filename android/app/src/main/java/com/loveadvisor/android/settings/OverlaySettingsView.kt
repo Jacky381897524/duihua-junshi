@@ -28,7 +28,7 @@ class OverlaySettingsView(context:Context,private val graph:AppGraph,private val
         addView(palette.text("悬浮窗设置",if(compact)17f else 19f,bold=true),row())
         heading("外观与入口")
         toggle("使用轻毛玻璃",frosted) { frosted=it }
-        toggle("使用左上角胶囊",capsule) { capsule=it }
+        toggle("使用顶部胶囊",capsule) { capsule=it }
         toggle("减少动效",reduced) { reduced=it }
         toggle("锁定胶囊位置",locked) { locked=it }
         val scaleLabel=palette.text("胶囊大小 · ${(scale*100).toInt()}%",13f);addView(scaleLabel,row())

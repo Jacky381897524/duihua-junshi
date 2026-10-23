@@ -82,6 +82,7 @@ object DiagnosticLogs {
     }
     /** Classify known local feedback, but NEVER retain the supplied string. */
     fun reason(value:String)=when {
+        value.contains("已超过24小时")->LogReason.TOPIC_EXPIRED
         value.contains("草稿") && (value.contains("变化") || value.contains("保留") || value.contains("已有"))->LogReason.DRAFT_CHANGED
         value.contains("取消")->LogReason.USER_CANCELLED
         value.contains("超时")->LogReason.FILL_TIMEOUT
