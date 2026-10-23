@@ -4,10 +4,16 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun realityDefaultsOnAndSavedOffSurvivesUpgrade() {
+        fun real(raw:String)=Gson().toJsonTree(AppSettings.decode(raw)).asJsonObject["realisticRepliesEnabled"]?.asBoolean
+        assertEquals(true,real("{}"))
+        assertFalse(AppSettings.decode("""{"naturalRepliesEnabled":true}""").naturalRepliesEnabled)
+        assertEquals(false,real(Gson().toJson(AppSettings.decode("""{"realisticRepliesEnabled":false,"naturalRepliesEnabled":true}"""))))
+    }
     @Test fun naturalRepliesAreOptInAndSurviveSettingsRoundTrip() {
         fun enabled(raw:String)=Gson().toJsonTree(AppSettings.decode(raw)).asJsonObject["naturalRepliesEnabled"]?.asBoolean
         assertEquals(false,enabled("{}"))
-        val raw="""{"naturalRepliesEnabled":true,"globalReplyStyle":"简短","profile":{"apiKey":"fake"}}"""
+        val raw="""{"realisticRepliesEnabled":false,"naturalRepliesEnabled":true,"globalReplyStyle":"简短","profile":{"apiKey":"fake"}}"""
         val saved=AppSettings.decode(raw)
         assertEquals(true,enabled(Gson().toJson(saved)))
         assertEquals("简短",saved.globalReplyStyle)
@@ -15,7 +21,7 @@ class AutomaticSettingsTest {
         assertEquals(false,enabled("""{"naturalRepliesEnabled":false}"""))
     }
     @Test fun savingOtherSettingDraftsDoesNotResetNaturalReplyMode() {
-        val current=AppSettings.decode("""{"naturalRepliesEnabled":true,"globalReplyStyle":"原口吻"}""")
+        val current=AppSettings.decode("""{"realisticRepliesEnabled":false,"naturalRepliesEnabled":true,"globalReplyStyle":"原口吻"}""")
         val draft=SettingsData(profile=ProviderPresets.OPENROUTER.reply("fake"),vision=ProviderPresets.OPENROUTER.vision("fake"))
         val applied=com.loveadvisor.android.settings.ModelSettingsDraft(draft).applyTo(current)
         assertEquals(true,Gson().toJsonTree(applied).asJsonObject["naturalRepliesEnabled"]?.asBoolean)

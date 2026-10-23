@@ -7,7 +7,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import com.loveadvisor.core.storage.CipherDocumentStore
 class AndroidDocumentStore(context:Context,directory:String="private-data") {
-    private val store=CipherDocumentStore(context.filesDir.resolve(directory)) { obtainKey() }
+    private val store=CipherDocumentStore(context.filesDir.resolve(directory),limits=mapOf("personal-memory-v1" to 24*1024*1024)) { obtainKey() }
     fun read(name:String)=store.read(name)
     fun write(name:String,text:String)=store.write(name,text)
     companion object {

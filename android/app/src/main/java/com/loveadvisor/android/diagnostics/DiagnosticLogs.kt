@@ -63,7 +63,7 @@ object DiagnosticLogs {
     fun begin(step:LogStep,parent:LogOperation?=context.get(),metrics:Map<LogMetric,Long> = emptyMap()):LogOperation?=journal?.begin(step,parent,metrics)
     fun end(operation:LogOperation?,state:LogState,reason:LogReason=LogReason.NONE,fault:LogFault?=null,metrics:Map<LogMetric,Long> = emptyMap()) { journal?.end(operation,state,reason,fault,metrics) }
     fun failed(step:LogStep,error:Exception,operation:LogOperation?=context.get()) { val fault=LogFault.capture(error);event(step,LogState.FAIL,fault.reason,operation,fault=fault) }
-    fun text(limit:Int=200)=(journal?.text(limit) ?: "诊断日志尚未初始化，不能据此判断没有故障。")+"\n"+fatalSummary+"\n启动步骤 COUNT 编号："+com.loveadvisor.core.startup.StartupStage.entries.joinToString { "${it.ordinal}=${it.name}" }+"\n平台 PLATFORM：0=未知，1=微信，2=QQ，3=抖音；CHAT_KIND：1=单聊，2=群聊。候选请求 REPLY_REQUEST 的 ENABLED：1=去AI味，0=原版规则。"
+    fun text(limit:Int=200)=(journal?.text(limit) ?: "诊断日志尚未初始化，不能据此判断没有故障。")+"\n"+fatalSummary+"\n启动步骤 COUNT 编号："+com.loveadvisor.core.startup.StartupStage.entries.joinToString { "${it.ordinal}=${it.name}" }+"\n平台 PLATFORM：0=未知，1=微信，2=QQ，3=抖音；CHAT_KIND：1=单聊，2=群聊。候选请求 REPLY_REQUEST 的 ENABLED：2=真人感（优先），1=去AI味，0=原版规则；MEMORY_READ的COUNT为新增去重消息数，MEMORY_RETRIEVE的COUNT为本次检索资料数；后台记忆分类有25秒总时限，前台生成优先。。"
     fun flush() { journal?.flush() }
     fun step(id:String)=when {
         id.startsWith("test-")->LogStep.MODEL_TEST
@@ -78,6 +78,7 @@ object DiagnosticLogs {
         id=="process_exit_history"->LogStep.PROCESS_EXIT
         id=="config"->LogStep.CONFIG_SAVE
         id=="diagnostic_export"->LogStep.LOG_EXPORT
+        id=="memory"->LogStep.MEMORY_EDIT
         else->LogStep.LOCAL_TASK
     }
     /** Classify known local feedback, but NEVER retain the supplied string. */

@@ -20,14 +20,14 @@ class ReplyNaturalnessSwitch(context:Context,private val settings:AppSettings,co
     init {
         orientation=VERTICAL
         addView(toggle,LayoutParams(-1,-2))
-        addView(ViewStyles.text(context,if(compact)"下次生成或刷新生效" else "默认关闭，保留原版规则。开启后，新候选按聊天习惯自然表达；不自动读取或刷新。",if(compact)11f else 12f,muted),LayoutParams(-1,-2))
+        addView(ViewStyles.text(context,if(compact)"真人感开启时优先使用真人感" else "默认关闭。真人感关闭时可单独使用，两个开关都关则恢复原版规则。",if(compact)11f else 12f,muted),LayoutParams(-1,-2))
         renderSavedValue()
         toggle.setOnCheckedChangeListener { _,enabled ->
             if(!updating) {
                 try {
                     settings.update { it.copy(naturalRepliesEnabled=enabled) }
                     DiagnosticLogs.event(LogStep.SETTING_CHANGE,LogState.OK,LogReason.UI_NATURAL_REPLIES,metrics=mapOf(LogMetric.ENABLED to if(enabled)1L else 0L))
-                    Toast.makeText(context,if(enabled)"去AI味已开启，下次生成或刷新生效" else "去AI味已关闭，下次生成或刷新使用原版规则",Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context,if(enabled)"去AI味已开启，真人感开启时优先使用真人感" else "去AI味已关闭；真人感关闭时使用原版规则",Toast.LENGTH_SHORT).show()
                 } catch(error:Exception) {
                     DiagnosticLogs.failed(LogStep.CONFIG_SAVE,error)
                     renderSavedValue()

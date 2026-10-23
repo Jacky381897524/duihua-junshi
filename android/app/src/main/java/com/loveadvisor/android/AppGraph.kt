@@ -20,6 +20,7 @@ class AppGraph private constructor(val context:Context) {
     val settings=AppSettings(documents)
     val profiles=ProfileStore(documents)
     val memory=MemoryRepository(EncryptedMemoryPersistence(documents))
+    val personalMemory=PersonalMemoryService(settings,documents)
     val knowledge=AssetKnowledgeStore(context)
     val tracker=SessionTracker(); val gate=RequestGate(tracker)
     val coordinator=BatchCoordinator(tracker,gate)
@@ -58,11 +59,11 @@ class AppGraph private constructor(val context:Context) {
         }
         val data=profiles.load(); val target=data.objects.find { it.id==objectId }
         val context=if(target!=null) memory.context(target.id) else null
-        val history=if(config.historyEnabled && target!=null) data.history.filter { it.objectId==target.id }.map { it.messages } else emptyList()
+        val history=if(config.historyEnabled && target!=null) data.history.filter { it.objectId==target.id }.map { saved -> saved.messages.map { message -> if(message.observedAtMillis>0)message else message.copy(observedAtMillis=saved.createdAt) } } else emptyList()
         val extra=BackgroundBuilder.build(data.self,target,context,history,background)
         val query=KnowledgeQuery(scoped.messages.takeLast(80).joinToString("\n") { it.text },goal,data.notes)
         val selected=if(ChatApps.supported(snapshot.packageName)) KnowledgeRouter().unified(query,knowledge.documents) else KnowledgeRouter().select(query,knowledge.documents)
-        return AdvisorInput(config.profile,scoped,goal,extra,selected,GroupReplyStyle.resolve(snapshot,settings.replyStyleCatalog(ChatKind.DIRECT),config.globalReplyStyle,settings.replyStyleCatalog(ChatKind.GROUP),config.globalGroupReplyStyle),replyTarget=replyTarget,naturalRepliesEnabled=config.naturalRepliesEnabled)
+        return AdvisorInput(config.profile,scoped,goal,extra,selected,GroupReplyStyle.resolve(snapshot,settings.replyStyleCatalog(ChatKind.DIRECT),config.globalReplyStyle,settings.replyStyleCatalog(ChatKind.GROUP),config.globalGroupReplyStyle),replyTarget=replyTarget,naturalRepliesEnabled=config.naturalRepliesEnabled,realisticRepliesEnabled=config.realisticRepliesEnabled,personalContext=if(config.realisticRepliesEnabled)personalMemory.context(scoped,replyTarget) else null)
     }
     fun generate(input:AdvisorInput,common:AdvisorAnalysis?,previous:List<String>,cancel:Cancellation):AdvisorBatch {
         val config=settings.load()

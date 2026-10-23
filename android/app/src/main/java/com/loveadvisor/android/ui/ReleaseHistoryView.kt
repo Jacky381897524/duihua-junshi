@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.5.3 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.6 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,12 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.6", "真人感 · 本人与对象的持久记忆", listOf(
+                "真人感默认开启，去AI味默认关闭；同时开启时真人感优先，原开关保留。",
+                "手动读取或确认导入后增量整理本人原话、对象喜好、习惯、边界及关系依据；按平台和群成员隔离，支持来源检查、纠正、删除和撤销。",
+                "本地口吻统计与实际修改帮助生成更贴近你的说法；好感度为互动趋势估计，重复材料不累计，同类递减并设每日上限。",
+                "候选先生成，后台分类可抢占且有超时。旧事件保留日期，不重新带入当前话题；清除缓存保留加密记忆。"
+            )),
             Release("V1.5.3", "按聊天时间判断 · 顶部胶囊", listOf(
                 "读取可见聊天时间，超过24小时的话题不再参与自动接话；去AI味开关两种模式均适用。",
                 "保留旧消息，支持指定回复历史消息；整段过期时提示手动选择或重新读取，不自动调用模型。",

@@ -16,6 +16,7 @@ class MessageAnalysisController(private val graph:AppGraph) {
     private val scope=SettingsWorkScope(graph)
     private val cache=JudgmentCache<MessageJudgment>()
     private var operation:LogOperation?=null
+    private var releaseLearning:(()->Unit)?=null
     fun revision():String=MessageDigest.getInstance("SHA-256").digest(Gson().toJson(graph.settings.load().judgeProfile()).toByteArray()).joinToString("") { "%02x".format(it) }
     fun analyze(snapshot:ChatSnapshot,targetId:String,onResult:(MessageJudgment?,String?)->Unit):()->Unit {
         Logs.event(LogStep.JUDGMENT_TAP)
@@ -25,19 +26,28 @@ class MessageAnalysisController(private val graph:AppGraph) {
         Logs.end(operation,LogState.CANCELLED,LogReason.USER_CANCELLED)
         val log=Logs.begin(LogStep.JUDGMENT_REQUEST,metrics=mapOf(LogMetric.MESSAGE_COUNT to snapshot.messages.size.toLong()));operation=log
         val profile=graph.settings.load().judgeProfile()
-        fun contextRevision()=revision()+":"+ConversationTimePolicy.scopeKey(snapshot,ReplyTarget(targetId))
+        val real=graph.settings.load().realisticRepliesEnabled
+        val memoryRevision=if(real)graph.personalMemory.repository.cachedRevision() else null
+        fun contextRevision()=revision()+":"+ConversationTimePolicy.scopeKey(snapshot,ReplyTarget(targetId))+":"+graph.settings.load().realisticRepliesEnabled+":"+(if(memoryRevision!=null)graph.personalMemory.repository.cachedRevision() else 0)
         val key=JudgmentKey(session,targetId,contextRevision());val ticket=gate.begin(key)
         fun valid()=gate.accept(key,ticket) && graph.tracker.isCurrent(session) && contextRevision()==key.judgeRevision
         val hit=cache.get(key)
         Logs.event(LogStep.JUDGMENT_CACHE,LogState.OK,operation=log,metrics=mapOf(LogMetric.CACHED to if(hit!=null)1L else 0L))
         if(hit!=null)Handler(Looper.getMainLooper()).post { if(valid()) { Logs.end(log,LogState.OK);onResult(hit,null) } else Logs.end(log,LogState.CANCELLED,LogReason.RESULT_STALE) }
-        else scope.work("judgment",{ cancel -> Logs.within(log) { graph.judge.inspect(profile,context,"",cancel,targetId) } },{ result ->
+        else {
+            releaseLearning?.invoke()
+            val release=graph.personalMemory.beginForeground();releaseLearning=release
+            scope.work("judgment",{ cancel -> try { Logs.within(log) {
+                val personal=if(real)graph.personalMemory.context(context,ReplyTarget(targetId)) else null
+                graph.judge.inspect(profile,context,"",cancel,targetId,personal)
+            } } finally { release() } },{ result ->
             if(valid()) { Logs.end(log,LogState.OK);cache.put(key,result);onResult(result,null) }
             else { Logs.end(log,LogState.CANCELLED,LogReason.RESULT_STALE);if(gate.accept(key,ticket))onResult(null,"对话或判断模型已变化，请重新选择") }
         },{ error -> Logs.end(log,LogState.FAIL,LogReason.STEP_FAILED);if(gate.accept(key,ticket))onResult(null,if(valid())error else "对话或模型已变化，请重新读取") })
-        return { Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED);gate.invalidate();scope.cancel("judgment") }
+        }
+        return { Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED);gate.invalidate();scope.cancel("judgment");releaseLearning?.invoke();releaseLearning=null }
     }
-    fun cancel() { Logs.end(operation,LogState.CANCELLED,LogReason.USER_CANCELLED);operation=null;gate.invalidate();scope.cancel("judgment") }
+    fun cancel() { Logs.end(operation,LogState.CANCELLED,LogReason.USER_CANCELLED);operation=null;gate.invalidate();scope.cancel("judgment");releaseLearning?.invoke();releaseLearning=null }
     fun invalidate() { cancel();cache.clear() }
     fun close() { invalidate();scope.close() }
 }

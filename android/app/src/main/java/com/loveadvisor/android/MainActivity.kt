@@ -73,6 +73,7 @@ class MainActivity : BaseActivity() {
         body.addView(ViewStyles.text(this,"微信 · QQ · 抖音单聊与群聊按需读取 · 私聊50条 / 群聊默认100条\n点击悬浮图标展开，再点读取信息；刷新使用已读取上下文，复制后收起，填入后由你发送。",14f,ViewStyles.MUTED))
         body.addView(ViewStyles.switch(this,"减少动效",config.reducedMotion) { enabled -> graph.settings.update { it.copy(reducedMotion=enabled) } })
         body.addView(ViewStyles.button(this,"融合知识库与我的笔记") { open(KnowledgeActivity::class.java) })
+        body.addView(ViewStyles.button(this,"真人感与记忆") { open(com.loveadvisor.android.memory.PersonalMemoryActivity::class.java) })
         body.addView(ViewStyles.button(this,"关系资料、记忆与历史") { open(ProfilesActivity::class.java) })
         body.addView(ViewStyles.button(this,"逐轮模拟练习") { open(PracticeActivity::class.java) })
         body.addView(ViewStyles.button(this,"导入聊天 / 本地截图识别") { open(ImportActivity::class.java) })

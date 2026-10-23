@@ -19,6 +19,7 @@
         <activity android:name=".knowledge.KnowledgeActivity" android:exported="false"/>
         <activity android:name=".memory.ProfilesActivity" android:exported="false"/>
         <activity android:name=".memory.MemoryActivity" android:exported="false"/>
+        <activity android:name=".memory.PersonalMemoryActivity" android:exported="false"/>
         <activity android:name=".advisor.ConsultationActivity" android:exported="false"/>
         <activity android:name=".advisor.PracticeActivity" android:exported="false"/>
         <activity android:name=".advisor.ImportActivity" android:exported="false"/>

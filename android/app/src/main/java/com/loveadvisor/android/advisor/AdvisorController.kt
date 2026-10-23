@@ -28,14 +28,16 @@ class AdvisorController(private val graph:AppGraph) {
         lastContext=Context(snapshot,goal,background,objectId,replyTarget)
         cancelOperation();val log=Logs.begin(LogStep.REPLY_REQUEST,diagnosticParent,metrics=mapOf(LogMetric.MESSAGE_COUNT to snapshot.messages.size.toLong(),LogMetric.CHAT_KIND to if(snapshot.identity?.kind==ChatKind.GROUP)2L else 1L));operation=log
         val current=Cancellation(); cancel=current; publish()
+        val releaseLearning=graph.personalMemory.beginForeground()
 
         worker.execute {
             try {
                 val batch=Logs.within(log) {
+                    graph.personalMemory.observe(snapshot)
                     val currentRows=ConversationTimePolicy.currentMessages(snapshot)
                     Logs.event(LogStep.TIME_CONTEXT,LogState.OK,metrics=mapOf(LogMetric.MESSAGE_COUNT to snapshot.messages.size.toLong(),LogMetric.EXPIRED_MESSAGE_COUNT to (snapshot.messages.size-currentRows.size).toLong(),LogMetric.ENABLED to if(replyTarget==null)1L else 0L))
                     val input=graph.inputFor(snapshot,goal,background,objectId,replyTarget)
-                    Logs.event(LogStep.REPLY_REQUEST,metrics=mapOf(LogMetric.ENABLED to if(input.naturalRepliesEnabled)1L else 0L))
+                    Logs.event(LogStep.REPLY_REQUEST,metrics=mapOf(LogMetric.ENABLED to if(input.realisticRepliesEnabled)2L else if(input.naturalRepliesEnabled)1L else 0L))
                     graph.generate(input,pending.analysis,pending.previous,current)
                 }; current.check()
                 main.post {
@@ -64,6 +66,7 @@ class AdvisorController(private val graph:AppGraph) {
                 }
             } catch(_:java.util.concurrent.CancellationException) { Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED) }
             catch(e:Exception) { val fault=LogFault.capture(e);Logs.end(log,LogState.FAIL,fault.reason,fault);main.post { if(!current.cancelled) { graph.coordinator.fail(pending.requestTicket,graph.safeError(e)); publish() } } }
+            finally { releaseLearning() }
         }
     }
     fun refreshIndependent():Boolean { val context=lastContext ?: return false; if(context.snapshot.packageName!=graph.context.packageName || graph.tracker.lastSnapshot!=context.snapshot) return false; analyze(context.snapshot,context.goal,context.background,context.objectId,context.replyTarget); return true }

@@ -2,7 +2,7 @@ package com.loveadvisor.core.advisor
 import java.text.Normalizer
 import java.util.Locale
 class AdvisorValidator {
-    fun validate(batch:AdvisorBatch,allowRepeatedStrategies:Boolean=batch.naturalRepliesEnabled):ValidationResult {
+    fun validate(batch:AdvisorBatch,allowRepeatedStrategies:Boolean=batch.naturalRepliesEnabled || batch.realisticRepliesEnabled):ValidationResult {
         val errors=mutableListOf<String>()
         if(batch.replies.size!=6) errors.add("必须恰好六条候选回复")
         if(batch.kind==com.loveadvisor.core.model.ChatKind.GROUP) {

@@ -6,7 +6,8 @@ import javax.crypto.spec.GCMParameterSpec
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.io.FileOutputStream
-class CipherDocumentStore(private val directory:File,private val cipherFactory:()->Cipher={ Cipher.getInstance("AES/GCM/NoPadding") },private val key:()->SecretKey) {
+class CipherDocumentStore(private val directory:File,private val cipherFactory:()->Cipher={ Cipher.getInstance("AES/GCM/NoPadding") },private val limits:Map<String,Int> = emptyMap(),private val key:()->SecretKey) {
+    private fun limit(name:String)=(limits[name] ?: (3*1024*1024)).also { require(it in 1..32*1024*1024) }
     private fun path(name:String,suffix:String):File {
         require(Regex("[a-z0-9_-]{1,40}").matches(name)) { "本地文档名无效" }
         return File(directory,name+suffix)
@@ -14,7 +15,7 @@ class CipherDocumentStore(private val directory:File,private val cipherFactory:(
     @Synchronized fun read(name:String):String? {
         val file=path(name,".enc"); if(!file.exists()) return null
         return try {
-            require(file.length() in 30..4*1024*1024)
+            require(file.length() in 29..(limit(name).toLong()+29))
             val data=file.readBytes(); require(data[0]==1.toByte())
             val cipher=cipherFactory(); cipher.init(Cipher.DECRYPT_MODE,key(),GCMParameterSpec(128,data.copyOfRange(1,13)))
             cipher.updateAAD(name.toByteArray(Charsets.UTF_8))
@@ -22,7 +23,7 @@ class CipherDocumentStore(private val directory:File,private val cipherFactory:(
         } catch(_:Exception) { throw SecurityException("本地资料无法解密，请检查设备密钥或在设置中重置资料") }
     }
     @Synchronized fun write(name:String,text:String) {
-        require(text.toByteArray(Charsets.UTF_8).size<=3*1024*1024) { "本地资料超过存储限制" }
+        require(text.toByteArray(Charsets.UTF_8).size<=limit(name)) { "本地资料超过存储限制" }
         directory.mkdirs()
         val target=path(name,".enc"); val pending=path(name,".pending")
         val cipher=cipherFactory(); cipher.init(Cipher.ENCRYPT_MODE,key()); val iv=cipher.iv

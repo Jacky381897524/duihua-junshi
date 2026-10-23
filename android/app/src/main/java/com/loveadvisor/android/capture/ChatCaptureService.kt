@@ -41,6 +41,7 @@ class ChatCaptureService:AccessibilityService() {
     private val readGate=CaptureReadGate()
     private val manualRead=ManualReadGate()
     private var readLog:LogOperation?=null
+    private var releaseReadLearning:(()->Unit)?=null
     private var fillLog:LogOperation?=null
     private val parser=AutomaticChatParser()
     private val conversation=AutomaticConversation()
@@ -465,6 +466,7 @@ class ChatCaptureService:AccessibilityService() {
     }
     private fun finishRead(ticket:ManualReadGate.Ticket,message:String?=null) {
         if(!manualRead.finish(ticket)) return
+        releaseReadLearning?.invoke();releaseReadLearning=null
         Logs.event(LogStep.READ_FINISH,if(message==null)LogState.OK else LogState.FAIL,if(message==null)LogReason.NONE else Logs.reason(message),readLog)
         Logs.end(readLog,if(message==null)LogState.OK else LogState.FAIL,if(message==null)LogReason.NONE else Logs.reason(message));readLog=null
         visualCancel?.cancel(); visualCancel=null; pendingVision=null; main.removeCallbacks(readPending)
@@ -491,6 +493,7 @@ class ChatCaptureService:AccessibilityService() {
         if(!overlayAllowed()) { notifyUser("请打开微信、QQ或抖音聊天后点击读取信息"); return }
         if(manualRead.active!=null || graph.coordinator.state.loading) { Logs.event(LogStep.READ_TAP,LogState.SKIP,LogReason.BUSY);return }
         readLog=Logs.begin(LogStep.READ_TAP,metrics=mapOf(LogMetric.PLATFORM to platform(foregroundPackage)))
+        releaseReadLearning?.invoke();releaseReadLearning=graph.personalMemory.beginForeground()
         manualRead.begin(); overlay.setReading(true); graph.controller.status("正在读取当前聊天屏幕…"); observe()
     }
     fun captureImage() { captureNow() }
@@ -579,10 +582,12 @@ class ChatCaptureService:AccessibilityService() {
         val snapshot=conversation.current ?: return callback(null,"请先读取当前聊天")
         if(!graph.tracker.isCurrent(token))return callback(null,"聊天已变化，请重新读取")
         val cancel=Cancellation()
+        val sourceBatch=graph.coordinator.state.current?.batch
+        val releaseLearning=graph.personalMemory.beginForeground()
         val log=Logs.begin(LogStep.ADVICE_REQUEST)
         worker.execute {
             var error:Exception?=null
-            val detail=try { Logs.within(log) { graph.automaticAdvisor.detail(graph.inputFor(snapshot,"","",null,plan.targetMessageId?.let(::ReplyTarget)),plan,cancel) } } catch(e:Exception) { error=e;Logs.failed(LogStep.ADVICE_RESULT,e,log);null }
+            val detail=try { Logs.within(log) { graph.automaticAdvisor.detail(graph.inputFor(snapshot,"","",null,plan.targetMessageId?.let(::ReplyTarget)).let { input -> if(sourceBatch==null)input else input.copy(naturalRepliesEnabled=sourceBatch.naturalRepliesEnabled,realisticRepliesEnabled=sourceBatch.realisticRepliesEnabled,personalContext=sourceBatch.personalContext) },plan,cancel) } } catch(e:Exception) { error=e;Logs.failed(LogStep.ADVICE_RESULT,e,log);null } finally { releaseLearning() }
             main.post {
                 if(graph.tracker.isCurrent(token) && graph.coordinator.state.current?.batch?.replies?.any { it===plan }==true) { Logs.end(log,if(detail!=null)LogState.OK else LogState.FAIL,if(detail!=null)LogReason.NONE else LogReason.STEP_FAILED);callback(detail,error?.let { graph.safeError(it) }) }
                 else Logs.end(log,LogState.CANCELLED,LogReason.RESULT_STALE)
@@ -687,6 +692,7 @@ class ChatCaptureService:AccessibilityService() {
     fun previewOcr(draft:ConversationDraft) { graph.controller.status("请返回微信，点击读取信息获取当前聊天") }
     fun notifyUser(text:String) { if(text.contains("失败") || text.contains("请") || text.contains("未能"))Logs.feedback(text);Toast.makeText(this,text,Toast.LENGTH_SHORT).show() }
     private fun cancelScreenRead(message:String="本次读取已取消；已保留上次内容") {
+        releaseReadLearning?.invoke();releaseReadLearning=null
         val interrupted=manualRead.active!=null
         if(interrupted) { Logs.end(readLog,LogState.CANCELLED,Logs.reason(message));readLog=null }
         manualRead.cancel(); main.removeCallbacks(readPending)

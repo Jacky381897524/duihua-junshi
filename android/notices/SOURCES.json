@@ -529,5 +529,34 @@
       "license": "MIT",
       "decision": "调研整合架构与边界，未新增复制内容"
     }
-  ]
+  ],
+  "realityMemory": {
+    "version": "V1.6",
+    "implementation": "Independent Kotlin implementation; no third-party runtime code bundled",
+    "references": [
+      {
+        "name": "huashu-nuwa",
+        "version": "1.0.0",
+        "url": "https://github.com/alchaincyf/nuwa-skill",
+        "license": "MIT",
+        "sourceSha256": "218d2d2b0003255d152772f46586a39874d94d0df3480b5a6f51a274ef2249fd"
+      },
+      {
+        "name": "XiYu AI",
+        "version": "1.22.0",
+        "license": "MIT",
+        "sourceSha256": "53b1d8f3ff0a07b29e2fb253b2359b85d5057ff3db26e22452137d1451f15b5d"
+      },
+      {
+        "name": "Humanizer-zh",
+        "license": "MIT",
+        "source": "Existing pinned reference retained"
+      },
+      {
+        "name": "wechatbot-new",
+        "license": "GPL-3.0-or-later",
+        "use": "General architecture ideas only; no code or prompts copied"
+      }
+    ]
+  }
 }

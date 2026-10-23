@@ -25,6 +25,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private val analyze:Button
     private var analysisAvailable=false
     private var readContextTitle:String?=null
+    private var personalStatus=""
     private var statusMessage="等待点击读取；聊天变化不会自动请求模型"
     val currentPageId get()=pages.currentId
     private val cards:LinearLayout; private val refresh:Button; private val read:Button; private val count:TextView
@@ -120,7 +121,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     fun setAnalysisAvailable(value:Boolean) { analysisAvailable=value;updateButtons() }
     fun setReadContext(title:String?) { readContextTitle=title;renderStatus() }
     fun setFilling(value:Boolean) { filling=value; updateButtons() }
-    private fun renderStatus() { status.text=readContextTitle?.let { "已读：$it\n$statusMessage" } ?: statusMessage;invalidateHeight() }
+    private fun renderStatus() { status.text=readContextTitle?.let { "已读：$it${personalStatus}\n$statusMessage" } ?: statusMessage;invalidateHeight() }
     fun fillResult(message:String) { statusMessage=message;renderStatus() }
     fun release() { dismissMenu();closeStyleEditor();stopAnimations() }
     fun showStyleEditor(editor:View,closed:()->Unit) {
@@ -259,6 +260,12 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         invalidateHeight()
         loading=state.loading
         val visible=state.current
+        personalStatus=visible?.batch?.takeIf { it.realisticRepliesEnabled }?.personalContext?.let { personal ->
+            val contact=personal.contacts.singleOrNull()
+            val trend=personal.interaction.singleOrNull()?.takeIf { it.evidenceCount>0 }
+            val relation=contact?.takeIf { it.relationshipConfirmed }?.let { " · ${it.relationship}" }.orEmpty()
+            relation+(trend?.let { " · 好感估计${it.estimate.toInt()}/100" }.orEmpty())
+        }.orEmpty()
         statusMessage=state.error ?: when {
             state.loading && visible!=null -> "保留上一轮 · 正在生成新候选"
             state.loading -> "正在生成并由判断模型排序六条…"
