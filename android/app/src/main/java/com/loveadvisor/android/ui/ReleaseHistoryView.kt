@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.5.1 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.5.2 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,11 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.5.2", "去AI味结果显示修复", listOf(
+                "修复开启去AI味后，已生成候选被最后显示校验拦截，面板停留在分析中或正在刷新六条的问题。",
+                "每批候选沿用生成时的规则；关闭开关时仍按原版规则校验，不影响已经显示的候选。",
+                "最终校验失败会结束等待、显示失败原因并保留上一批候选；诊断日志区分格式失败和过期结果，并记录本次生成是否开启去AI味。"
+            )),
             Release("V1.5.1", "可选去AI味", listOf(
                 "新增默认关闭的去AI味开关，关闭时保留V1.5.0原有回复与策略规则。",
                 "回复风格设置和面板菜单可同步切换并记住选择，切换不读取聊天或自动请求模型，下次生成或刷新生效。",

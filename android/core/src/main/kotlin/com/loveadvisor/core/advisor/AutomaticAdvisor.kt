@@ -35,7 +35,7 @@ class AutomaticAdvisor(private val client:ChatCompletionClient,private val judge
                 }
             } catch(_:Exception) { null }
             if(parsed!=null) {
-                val preliminary=AdvisorBatch(AdvisorAnalysis(emptyList(),emptyList(),emptyList(),"待判断",null,"待判断"),parsed,compact=true,kind=if(group)ChatKind.GROUP else ChatKind.DIRECT)
+                val preliminary=AdvisorBatch(AdvisorAnalysis(emptyList(),emptyList(),emptyList(),"待判断",null,"待判断"),parsed,compact=true,kind=if(group)ChatKind.GROUP else ChatKind.DIRECT,naturalRepliesEnabled=input.naturalRepliesEnabled)
                 val validation=AdvisorValidator().validate(preliminary,input.naturalRepliesEnabled)
                 val validTargets=ReplyTargets.valid(input,parsed)
                 val repeats=previous.isNotEmpty() && parsed.all { r -> previous.any { AdvisorValidator.normalize(it)==AdvisorValidator.normalize(r.text) } }

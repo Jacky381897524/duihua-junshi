@@ -43,15 +43,16 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
         state=state.copy(current=state.current?.takeIf { tracker.sameConversation(it.ticket.session) },loading=true,error=null,isFailure=false)
         return RefreshRequest(ticket,previous==null,history.previousTexts,previous?.batch?.analysis)
     }
-    @Synchronized fun complete(ticket:RequestTicket,batch:AdvisorBatch):Boolean {
-        if(active!=ticket || !gate.accept(ticket)) return false
+    fun complete(ticket:RequestTicket,batch:AdvisorBatch):Boolean=completeResult(ticket,batch)==BatchCompletion.ACCEPTED
+    @Synchronized fun completeResult(ticket:RequestTicket,batch:AdvisorBatch):BatchCompletion {
+        if(active!=ticket || !gate.accept(ticket)) return BatchCompletion.STALE
         val error=when {
             !AdvisorValidator().validate(batch).valid -> "候选回复格式不完整，请重新生成"
             history.previousTexts.isNotEmpty() && batch.replies.all { r -> history.previousTexts.any { AdvisorValidator.normalize(it)==AdvisorValidator.normalize(r.text) } } -> "未生成新的候选，请重试"
             else -> null
         }
-        if(error!=null) { fail(ticket,error); return false }
-        state=BatchState(VisibleBatch(ticket,batch)); active=null; history.add(batch); return true
+        if(error!=null) { fail(ticket,error); return BatchCompletion.REJECTED }
+        state=BatchState(VisibleBatch(ticket,batch)); active=null; history.add(batch); return BatchCompletion.ACCEPTED
     }
     @Synchronized fun fail(ticket:RequestTicket,message:String) {
         if(active!=ticket || !gate.accept(ticket)) return

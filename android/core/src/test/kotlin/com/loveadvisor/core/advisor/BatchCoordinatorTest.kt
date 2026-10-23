@@ -88,4 +88,23 @@ class BatchCoordinatorTest {
         val old=show(); val p=c.begin(chat)!!
         assertFalse(c.complete(p.requestTicket,old.batch)); assertEquals(old,c.state.current); assertFalse(c.state.loading)
     }
+    @Test fun malformedNaturalResultIsRejectedWithFeedbackAndCanBeRetried() {
+        val old=show();val request=c.begin(chat)!!
+        val invalid=AdvisorFixtures.valid().copy(naturalRepliesEnabled=true,replies=AdvisorFixtures.valid().replies.take(4))
+        assertEquals(BatchCompletion.REJECTED,c.completeResult(request.requestTicket,invalid))
+        assertFalse(c.state.loading);assertTrue(c.state.isFailure)
+        assertFalse(c.state.error.isNullOrBlank());assertEquals(old,c.state.current)
+        val retry=c.begin(chat)!!
+        val valid=AdvisorFixtures.valid().copy(naturalRepliesEnabled=true,replies=AdvisorFixtures.valid().replies.map { it.copy(strategy=Strategy.ACKNOWLEDGE,text=it.text+"换个说法") })
+        assertEquals(BatchCompletion.ACCEPTED,c.completeResult(retry.requestTicket,valid))
+        assertFalse(c.state.loading);assertFalse(c.state.isFailure);assertNull(c.state.error)
+    }
+    @Test fun staleMalformedResultDoesNotClearLoadingOrReportFailureForNewRequest() {
+        val first=c.begin(chat)!!
+        val second=c.begin(chat.copy(identity=chat.identity!!.copy(id="new-contact")))!!
+        val invalid=AdvisorFixtures.valid().copy(replies=emptyList(),naturalRepliesEnabled=true)
+        assertEquals(BatchCompletion.STALE,c.completeResult(first.requestTicket,invalid))
+        assertTrue(c.state.loading);assertFalse(c.state.isFailure);assertNull(c.state.error)
+        assertEquals(BatchCompletion.ACCEPTED,c.completeResult(second.requestTicket,AdvisorFixtures.valid()))
+    }
 }

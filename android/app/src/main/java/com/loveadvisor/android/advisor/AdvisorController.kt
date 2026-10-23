@@ -31,19 +31,31 @@ class AdvisorController(private val graph:AppGraph) {
 
         worker.execute {
             try {
-                val batch=Logs.within(log) { val input=graph.inputFor(snapshot,goal,background,objectId).copy(replyTarget=replyTarget);graph.generate(input,pending.analysis,pending.previous,current) }; current.check()
+                val batch=Logs.within(log) {
+                    val input=graph.inputFor(snapshot,goal,background,objectId).copy(replyTarget=replyTarget)
+                    Logs.event(LogStep.REPLY_REQUEST,metrics=mapOf(LogMetric.ENABLED to if(input.naturalRepliesEnabled)1L else 0L))
+                    graph.generate(input,pending.analysis,pending.previous,current)
+                }; current.check()
                 main.post {
-                    if(!current.cancelled && graph.coordinator.complete(pending.requestTicket,batch)) {
-                        Logs.event(LogStep.REPLY_RESULT,LogState.OK,operation=log,metrics=mapOf(LogMetric.RESULT_COUNT to batch.replies.size.toLong()));Logs.end(log,LogState.OK)
-                        publish()
-                        worker.execute {
-                            try { graph.profiles.withExisting(objectId) { target ->
-                                if(current.cancelled || !graph.tracker.isCurrent(pending.requestTicket.session)) return@withExisting
-                                if(graph.settings.load().historyEnabled) graph.profiles.rememberChat(target.id,snapshot)
+                    if(current.cancelled) { Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED);return@post }
+                    when(graph.coordinator.completeResult(pending.requestTicket,batch)) {
+                        BatchCompletion.ACCEPTED -> {
+                            Logs.event(LogStep.REPLY_RESULT,LogState.OK,operation=log,metrics=mapOf(LogMetric.RESULT_COUNT to batch.replies.size.toLong()));Logs.end(log,LogState.OK)
+                            publish()
+                            worker.execute {
+                                try { graph.profiles.withExisting(objectId) { target ->
+                                    if(current.cancelled || !graph.tracker.isCurrent(pending.requestTicket.session)) return@withExisting
+                                    if(graph.settings.load().historyEnabled) graph.profiles.rememberChat(target.id,snapshot)
 
-                            } } catch(error:Exception) { Logs.failed(LogStep.LOCAL_TASK,error,log) }
+                                } } catch(error:Exception) { Logs.failed(LogStep.LOCAL_TASK,error,log) }
+                            }
                         }
-                    } else Logs.end(log,LogState.CANCELLED,LogReason.RESULT_STALE)
+                        BatchCompletion.REJECTED -> {
+                            Logs.end(log,LogState.FAIL,LogReason.INVALID_RESPONSE)
+                            publish()
+                        }
+                        BatchCompletion.STALE -> Logs.end(log,LogState.CANCELLED,LogReason.RESULT_STALE)
+                    }
                 }
             } catch(_:java.util.concurrent.CancellationException) { Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED) }
             catch(e:Exception) { val fault=LogFault.capture(e);Logs.end(log,LogState.FAIL,fault.reason,fault);main.post { if(!current.cancelled) { graph.coordinator.fail(pending.requestTicket,graph.safeError(e)); publish() } } }
