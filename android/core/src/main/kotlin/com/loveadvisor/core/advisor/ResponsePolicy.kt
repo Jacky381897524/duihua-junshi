@@ -2,6 +2,8 @@ package com.loveadvisor.core.advisor
 
 /** Shared quality contract for drafting and the existing single judging request. */
 object ResponsePolicy {
+    fun dataFor(naturalRepliesEnabled:Boolean)=if(naturalRepliesEnabled)NaturalReplyPolicy.data else data
+    fun judgingInstructionFor(naturalRepliesEnabled:Boolean)=judgingInstruction+if(naturalRepliesEnabled)NaturalReplyPolicy.judgingInstruction else ""
     val data:Map<String,Any> = mapOf(
         "objective" to "有来有回、自然具体、有自己的表达，让对方容易接话；不以讨好换回应",
         "dimensions" to linkedMapOf(

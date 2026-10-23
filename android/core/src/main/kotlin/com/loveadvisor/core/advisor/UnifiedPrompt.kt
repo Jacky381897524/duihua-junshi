@@ -1,6 +1,7 @@
 package com.loveadvisor.core.advisor
 import com.google.gson.Gson
 object UnifiedPrompt {
+    fun systemFor(naturalRepliesEnabled:Boolean)=if(naturalRepliesEnabled)system.replace("单聊六种不同策略，群聊允许策略重复","单聊群聊均允许策略重复")+"\n"+NaturalReplyPolicy.instruction else system
     val system = ConversationTurn.instruction+"\n"+"""
         你是统一聊天助手，融合聊天副驾、狗头军师和恋爱大师的能力。不存在模式选择。
         基于当前对话、用户目标与资料做一次综合判断；区分事实、推测、未知，理解情绪、互惠、现实条件和关系阶段。
@@ -20,7 +21,7 @@ object UnifiedPrompt {
         "conversationType" to input.snapshot.identity?.kind?.name,
         "messages" to boundedMessages(input.snapshot.messages),
         "userGoal" to input.goal.take(1000),"backgroundData" to input.background.take(6000),
-        "knowledgeData" to input.knowledge,"replyStyle" to input.replyStyle.orEmpty().take(1500),"responsePolicy" to ResponsePolicy.data,"commonAnalysis" to analysis,"previousReplies" to previous.takeLast(18)
+        "knowledgeData" to input.knowledge,"replyStyle" to input.replyStyle.orEmpty().take(1500),"responsePolicy" to ResponsePolicy.dataFor(input.naturalRepliesEnabled),"commonAnalysis" to analysis,"previousReplies" to previous.takeLast(18)
     )+ConversationTurn.data(input.snapshot,input.replyTarget))
     private fun boundedMessages(messages:List<com.loveadvisor.core.model.ChatMessage>):List<com.loveadvisor.core.model.ChatMessage> {
         var budget=24000

@@ -500,6 +500,14 @@
       "licenseUrl": "https://github.com/b1rdmania/hinge-profile-optimizer/blob/55575ffbc257b3e8a753086ea11f3b89796ff4d6/LICENSE",
       "notice": "notices/HingeProfileOptimizer-MIT.txt",
       "scope": "conversation-reciprocity.md中具体表达、接话口、个性与温暖的设计启发；中文例句原创，不迁移研究效果数字"
+    },
+    {
+      "name": "Humanizer-zh",
+      "commit": "f4518a8eab97b8bfebc66a89d34320a89bef6930",
+      "url": "https://github.com/op7418/Humanizer-zh/tree/f4518a8eab97b8bfebc66a89d34320a89bef6930",
+      "license": "MIT",
+      "notice": "notices/HumanizerZh-MIT.txt",
+      "scope": "NaturalReplyPolicy opt-in expression guidance; disabled path and indexed knowledge corpus unchanged; Chinese chat examples original."
     }
   ],
   "reviewedUpstream": [

@@ -2,12 +2,12 @@ package com.loveadvisor.core.advisor
 import java.text.Normalizer
 import java.util.Locale
 class AdvisorValidator {
-    fun validate(batch:AdvisorBatch):ValidationResult {
+    fun validate(batch:AdvisorBatch,allowRepeatedStrategies:Boolean=false):ValidationResult {
         val errors=mutableListOf<String>()
         if(batch.replies.size!=6) errors.add("必须恰好六条候选回复")
         if(batch.kind==com.loveadvisor.core.model.ChatKind.GROUP) {
             if(batch.replies.any { it.targetMessageId.isNullOrBlank() || it.topic.isNullOrBlank() }) errors.add("群聊候选缺少对应话题或目标消息")
-        } else if(batch.replies.map { it.strategy }.distinct().size<6) errors.add("六条需使用不同策略")
+        } else if(!allowRepeatedStrategies && batch.replies.map { it.strategy }.distinct().size<6) errors.add("六条需使用不同策略")
         if(batch.replies.map { normalize(it.text) }.distinct().size!=batch.replies.size) errors.add("候选正文重复，需改为不同表达或行动")
         if(batch.replies.map { it.id }.distinct().size!=batch.replies.size) errors.add("候选 id 重复")
         if(batch.analysis.risk!=null && batch.analysis.risk !in 1..9) errors.add("风险等级须为 1–9 或 null")

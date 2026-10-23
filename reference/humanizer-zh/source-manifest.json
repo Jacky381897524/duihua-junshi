@@ -1,0 +1,15 @@
+{
+  "url": "https://github.com/op7418/Humanizer-zh",
+  "commit": "f4518a8eab97b8bfebc66a89d34320a89bef6930",
+  "files": [
+    {
+      "path": "SKILL.md",
+      "sha256": "95627fd4437d886f98032ccc62d79136e6310f1fc04e354bb86431795ff206df"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "aa00e74769e1b9d8e7fa7094dbfcca9b129a0ded6dce1cf4da050b99146d2fa7"
+    }
+  ],
+  "scope": "Curated optional chat-expression guidance; no skill scripts executed."
+}

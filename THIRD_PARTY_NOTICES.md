@@ -14,3 +14,5 @@
 Android安装包包含上游许可文件，应用「关于与许可」页面可查看。构建依赖的许可由各依赖项目声明；上游许可不等于原作者对本整合版的背书。
 
 V1.5.0的检索、使用范围及未采用项目见[知识调研记录](docs/research/2026-10-22-knowledge-upgrade.md)。未安装或执行外部Skill；不把资料文案研究结果当成聊天效果保证。
+
+V1.5.1可选去AI味规则参考[Humanizer-zh](https://github.com/op7418/Humanizer-zh/tree/f4518a8eab97b8bfebc66a89d34320a89bef6930)，固定提交`f4518a8eab97b8bfebc66a89d34320a89bef6930`；[完整MIT许可](android/app/src/main/assets/notices/HumanizerZh-MIT.txt)。仅提取适合聊天的表达原则，默认关闭；源文件和哈希保留于[reference/humanizer-zh](reference/humanizer-zh/)。用户提供的五张图作为参考，不作为必须补细节、提问或语气词的指令。

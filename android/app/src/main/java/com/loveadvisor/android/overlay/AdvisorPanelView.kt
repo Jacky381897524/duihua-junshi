@@ -152,7 +152,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         return super.dispatchKeyEvent(event)
     }
     /** An in-panel menu stays in the accessibility overlay and creates no application popup window. */
-    fun toggleMenu(items:List<Pair<String,()->Unit>>,capsule:CapsuleMenuControls?=null) {
+    fun toggleMenu(items:List<Pair<String,()->Unit>>,capsule:CapsuleMenuControls?=null,shortcut:View?=null) {
         if(menuLayer!=null) { dismissMenu();return }
         val layer=FrameLayout(context).apply { contentDescription="悬浮窗设置菜单";setOnClickListener { dismissMenu() } }
         val menu=ViewStyles.column(context,8).apply { background=ViewStyles.shape(context,palette.surface,16f,palette.border);elevation=dp(4).toFloat();setOnClickListener {} }
@@ -160,6 +160,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             minimumHeight=textRowHeight(34);setPadding(dp(10),dp(5),dp(10),dp(5))
         },LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(4) }) }
         items.firstOrNull()?.let { item(it) }
+        shortcut?.let { menu.addView(it,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(7) }) }
         if(capsule!=null) {
             val lock=palette.button("") {}
             fun showLock(locked:Boolean) {

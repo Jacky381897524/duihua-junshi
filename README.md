@@ -4,6 +4,8 @@
 
 **一个对话，六种思路。** 海街寺庙整合开发的 Android 聊天助手，最新测试版 **V1.5.0（编辑焦点、前台切换与互惠回复）**。
 
+源码另有 **V1.5.1 本地测试版**：新增默认关闭的「去AI味」开关，入口为回复风格设置和面板菜单；关闭时沿用V1.5.0原规则，开启后在下次生成或刷新时生效。公开下载仍为下方V1.5.0。
+
 ## 下载与使用
 
 [下载 V1.5.0 测试版 APK](https://github.com/Jacky381897524/duihua-junshi/releases/download/v1.5.0/duihua-junshi-V1.5.0.apk) · [发布说明、源码包与校验文件](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.5.0)

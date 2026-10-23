@@ -4,6 +4,23 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun naturalRepliesAreOptInAndSurviveSettingsRoundTrip() {
+        fun enabled(raw:String)=Gson().toJsonTree(AppSettings.decode(raw)).asJsonObject["naturalRepliesEnabled"]?.asBoolean
+        assertEquals(false,enabled("{}"))
+        val raw="""{"naturalRepliesEnabled":true,"globalReplyStyle":"简短","profile":{"apiKey":"fake"}}"""
+        val saved=AppSettings.decode(raw)
+        assertEquals(true,enabled(Gson().toJson(saved)))
+        assertEquals("简短",saved.globalReplyStyle)
+        assertEquals("fake",saved.profile.apiKey)
+        assertEquals(false,enabled("""{"naturalRepliesEnabled":false}"""))
+    }
+    @Test fun savingOtherSettingDraftsDoesNotResetNaturalReplyMode() {
+        val current=AppSettings.decode("""{"naturalRepliesEnabled":true,"globalReplyStyle":"原口吻"}""")
+        val draft=SettingsData(profile=ProviderPresets.OPENROUTER.reply("fake"),vision=ProviderPresets.OPENROUTER.vision("fake"))
+        val applied=com.loveadvisor.android.settings.ModelSettingsDraft(draft).applyTo(current)
+        assertEquals(true,Gson().toJsonTree(applied).asJsonObject["naturalRepliesEnabled"]?.asBoolean)
+        assertEquals("原口吻",applied.globalReplyStyle)
+    }
     @Test fun groupStylesAreSeparateAndSurviveReopening() {
         val original=SettingsData(replyStyles=mapOf("same" to "私聊"),groupReplyStyles=mapOf("same" to "群聊"),globalReplyStyle="私聊全部",globalGroupReplyStyle="群聊全部",groupReplyStyleAliases=mapOf("alias" to "same"))
         val loaded=AppSettings.decode(Gson().toJson(original))

@@ -6,7 +6,7 @@ class UnifiedAdvisor(private val client:ChatCompletionClient) {
     fun analyze(input:AdvisorInput,cancel:Cancellation):AdvisorBatch = generate(input,null,emptyList(),cancel)
     fun alternatives(input:AdvisorInput,analysis:AdvisorAnalysis,previous:List<String>,cancel:Cancellation):AdvisorBatch = generate(input,analysis,previous,cancel)
     private fun generate(input:AdvisorInput,common:AdvisorAnalysis?,previous:List<String>,cancel:Cancellation):AdvisorBatch {
-        val messages=mutableListOf(PromptMessage("system",UnifiedPrompt.system),PromptMessage("user",UnifiedPrompt.data(input,common,previous)))
+        val messages=mutableListOf(PromptMessage("system",UnifiedPrompt.systemFor(input.naturalRepliesEnabled)),PromptMessage("user",UnifiedPrompt.data(input,common,previous)))
         var problems=listOf("格式无效")
         repeat(2) { attempt ->
             cancel.check()
@@ -14,7 +14,7 @@ class UnifiedAdvisor(private val client:ChatCompletionClient) {
             val parsed=codec.parse(raw)
             if(parsed!=null) {
                 val batch=parsed.copy(analysis=common ?: parsed.analysis,knowledgeIds=input.knowledge.map { it.id },kind=input.snapshot.identity?.kind ?: com.loveadvisor.core.model.ChatKind.DIRECT)
-                problems=validator.validate(batch).errors
+                problems=validator.validate(batch,input.naturalRepliesEnabled).errors
                 if(!ReplyTargets.valid(input,batch.replies)) problems=problems+"六条候选未对应选中原话或已读目标"
                 if(previous.isNotEmpty() && batch.replies.all { plan -> previous.any { AdvisorValidator.normalize(it)==AdvisorValidator.normalize(plan.text) } }) problems=problems+"六条全部重复历史候选，必须换新的表达或行动"
                 if(problems.isEmpty()) return batch

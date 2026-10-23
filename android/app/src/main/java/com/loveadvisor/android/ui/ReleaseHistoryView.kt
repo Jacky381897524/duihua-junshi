@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.5.0 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.5.1 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,11 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.5.1", "可选去AI味", listOf(
+                "新增默认关闭的去AI味开关，关闭时保留V1.5.0原有回复与策略规则。",
+                "回复风格设置和面板菜单可同步切换并记住选择，切换不读取聊天或自动请求模型，下次生成或刷新生效。",
+                "开启后按实际场景与本人已读口吻组织六条候选，不凑字数或六种策略，不固定加语气词、提问及生活细节。"
+            )),
             Release("V1.5.0", "编辑焦点、前台切换与互惠回复", listOf(
                 "编辑页仅在点击输入框时获取键盘焦点；焦点短暂变化保留原面板，切换窗口释放编辑焦点，返回保留草稿并等待再次点击。",
                 "微信、QQ、抖音共用窗口编号与前台元数据快路径，减少等待应用节点查询；另有应用或系统获得焦点时撤下入口，不自动读取聊天或调用模型。具体时延仍需机型验收。",

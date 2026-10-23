@@ -21,7 +21,7 @@ with ZipFile(Path(sys.argv[1]) if len(sys.argv)>1 else root/'output/love-advisor
         body=apk.read(entries['assets/'+row['path']])
         assert body.decode('utf-8').strip(), row['path']
         assert body==(assets/row['path']).read_bytes(), row['path']
-    for name in ('Jev-MIT.txt','Goutou-MIT.txt','HingeProfileOptimizer-MIT.txt','LiquidGlass-MIT.txt'):
+    for name in ('Jev-MIT.txt','Goutou-MIT.txt','HingeProfileOptimizer-MIT.txt','LiquidGlass-MIT.txt','HumanizerZh-MIT.txt'):
         assert 'Permission is hereby granted' in apk.read('assets/notices/'+name).decode('utf-8')
         assert apk.read('assets/notices/'+name)==(assets/'notices'/name).read_bytes()
     sources=apk.read('assets/notices/SOURCES.json').decode('utf-8')

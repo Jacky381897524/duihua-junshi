@@ -10,5 +10,5 @@ data class ReplyPlan(val id:String,val strategy:Strategy,val text:String,val rea
 data class AdvisorAnalysis(val facts:List<String>,val inferences:List<String>,val unknowns:List<String>,val intent:String,val risk:Int?,val action:String,val strategies:List<Strategy> = emptyList())
 data class AdvisorBatch(val analysis:AdvisorAnalysis,val replies:List<ReplyPlan>,val knowledgeIds:List<String> = emptyList(),val compact:Boolean=false,val kind:ChatKind=ChatKind.DIRECT)
 data class VisibleBatch(val ticket:RequestTicket,val batch:AdvisorBatch)
-data class AdvisorInput(val profile:ApiProfile,val snapshot:ChatSnapshot,val goal:String="",val background:String="",val knowledge:List<KnowledgeExcerpt> = emptyList(),val replyStyle:String="",val replyTarget:ReplyTarget?=null)
+data class AdvisorInput(val profile:ApiProfile,val snapshot:ChatSnapshot,val goal:String="",val background:String="",val knowledge:List<KnowledgeExcerpt> = emptyList(),val replyStyle:String="",val replyTarget:ReplyTarget?=null,val naturalRepliesEnabled:Boolean=false)
 data class ValidationResult(val valid:Boolean,val errors:List<String> = emptyList())
