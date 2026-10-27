@@ -37,4 +37,3 @@ class BilingualReplyTest {
         assertEquals("foreign",BilingualPolicy.language(snapshot("คุณเป็นอย่างไรบ้าง")))
     }
 }
-
