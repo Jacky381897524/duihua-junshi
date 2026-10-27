@@ -14,6 +14,7 @@ class AdvisorValidator {
         if(batch.analysis.intent.isBlank() || batch.analysis.action.isBlank()) errors.add("缺少意图推测或具体行动")
         batch.replies.forEach { reply ->
             if(reply.id.isBlank() || reply.text.isBlank() || length(reply.text)>300) errors.add("回复正文须为 1–300 字")
+            if(reply.translationZh!=null && (reply.translationZh.isBlank() || length(reply.translationZh)>600))errors.add("中文释义须为1–600字")
             if(!batch.compact) {
                 if(length(reply.reason)<6 || length(reply.reason)>200 || reply.reason.trim() in listOf("恋爱大师",reply.strategy.label)) errors.add("每条须有具体选择理由，不能只有策略标签")
                 if(reply.suitableWhen.isBlank() || length(reply.suitableWhen)>200 || reply.cost.isBlank() || length(reply.cost)>200) errors.add("适用条件及代价须为 1–200 字")

@@ -24,7 +24,7 @@ object AppStartup {
             val graph=try { AppGraph.get(app) } catch(error:Exception) { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(com.loveadvisor.core.diagnostics.LogStep.STARTUP,error);throw error }
             AppStartupTrace.mark(StartupStage.GRAPH_READY)
             stage="读取本地加密设置";AppStartupTrace.mark(StartupStage.SETTINGS_READ_BEGIN)
-            try { graph.settings.load() } catch(error:Exception) { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(com.loveadvisor.core.diagnostics.LogStep.STARTUP,error);throw error };AppStartupTrace.mark(StartupStage.SETTINGS_READ_READY)
+            try { com.loveadvisor.core.capture.ChatApps.configureAdditional(graph.settings.load().additionalChatApps) } catch(error:Exception) { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(com.loveadvisor.core.diagnostics.LogStep.STARTUP,error);throw error };AppStartupTrace.mark(StartupStage.SETTINGS_READ_READY)
             stage="本地设置就绪"
             graph.record("startup",SystemClock.elapsedRealtime()-began,null,null)
             Log.i("AdvisorStartup","ready ${SystemClock.elapsedRealtime()-began}ms")

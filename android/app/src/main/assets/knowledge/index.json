@@ -469,5 +469,34 @@
     ],
     "source": "本项目原创 / hinge-profile-optimizer@55575ff 改写",
     "date": "2026-10-22"
+  },
+  {
+    "id": "social-balance-v1.7.md",
+    "title": "温暖、分寸与互惠：全知识整合",
+    "path": "knowledge/social-balance-v1.7.md",
+    "tags": [
+      "expression",
+      "comfort",
+      "humor",
+      "reciprocity",
+      "boundary",
+      "family",
+      "work"
+    ],
+    "source": "对话军师原创整合 V1.7",
+    "date": "2026-10-27"
+  },
+  {
+    "id": "memes-and-language-v1.7.md",
+    "title": "网络梗识别与跨语言自然交流",
+    "path": "knowledge/memes-and-language-v1.7.md",
+    "tags": [
+      "meme",
+      "humor",
+      "language",
+      "expression"
+    ],
+    "source": "对话军师原创整合 V1.7",
+    "date": "2026-10-27"
   }
 ]

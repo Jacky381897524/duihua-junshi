@@ -31,14 +31,8 @@ class OverlaySettingsView(context:Context,private val graph:AppGraph,private val
         toggle("使用顶部胶囊",capsule) { capsule=it }
         toggle("减少动效",reduced) { reduced=it }
         toggle("锁定胶囊位置",locked) { locked=it }
-        val scaleLabel=palette.text("胶囊大小 · ${(scale*100).toInt()}%",13f);addView(scaleLabel,row())
-        val slider=SeekBar(context).apply { max=1300;progress=((scale-.7f)*1000).toInt().coerceIn(0,1300);minimumHeight=dp(if(compact)30 else 44) }
-        slider.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(view:SeekBar,progress:Int,fromUser:Boolean) { if(fromUser) { scale=.7f+progress/1000f;scaleLabel.text="胶囊大小 · ${(scale*100).toInt()}%" } }
-            override fun onStartTrackingTouch(view:SeekBar) {}
-            override fun onStopTrackingTouch(view:SeekBar) {}
-        });addView(slider,row())
-        val position=button("重置胶囊位置",heightDp=44) { resetPosition=true;scaleLabel.text="保存后恢复默认胶囊位置 · ${(scale*100).toInt()}%" };addView(position,row())
+        addView(com.loveadvisor.android.ui.CapsuleScaleControl(context,scale) { value,_ -> scale=value },row())
+        val position=button("重置胶囊位置",heightDp=44) { resetPosition=true };addView(position,row())
         heading("普通悬浮球")
         addView(palette.text("无操作后贴边，露出约三分之一；胶囊不使用此计时。",12f,palette.muted),row())
         val seconds=EditText(context).apply {

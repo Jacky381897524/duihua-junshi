@@ -12,13 +12,14 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class PersonalMemoryPersistence(private val documents:AndroidDocumentStore):RealityPersistence {
-    private val gson=Gson()
-    override fun load():RealityMemoryState?=documents.read("personal-memory-v1")?.let { gson.fromJson(it,RealityMemoryState::class.java).also { value -> require(value.schema==1) { "记忆数据版本不受支持" } } }
-    override fun save(state:RealityMemoryState) {
-        val json=gson.toJson(state)
-        require(json.toByteArray(Charsets.UTF_8).size<=24*1024*1024) { "本地记忆已达容量上限，请在真人感与记忆中管理资料" }
-        documents.write("personal-memory-v1",json)
-    }
+    private val contacts=ContactMemoryPersistence(object:PersonalDocumentStore {
+        override fun read(name:String)=documents.read(name)
+        override fun write(name:String,text:String)=documents.write(name,text)
+        override fun remove(name:String)=documents.remove(name)
+        override fun names()=documents.names()
+    },{ error -> Logs.failed(LogStep.MEMORY_DELETE,error) })
+    override fun load()=contacts.load()
+    override fun save(state:RealityMemoryState)=contacts.save(state)
 }
 
 /** Foreground generation always takes priority. Learning is optional and bounded, not part of its completion path. */
@@ -32,17 +33,32 @@ class PersonalMemoryService(private val settings:AppSettings,documents:AndroidDo
     private var scheduled:java.util.concurrent.ScheduledFuture<*>?=null
     @Volatile var status="尚未学习聊天";private set
     // Settings listeners run while the settings store is locked; never take our lock inline there.
-    init { settings.subscribe { timer.execute { if(!settings.load().realisticRepliesEnabled)cancelLearning() } } }
+    init {
+        settings.subscribe { timer.execute { if(!settings.load().realisticRepliesEnabled)cancelLearning() else worker.execute { upgradeExisting() } } }
+        // Defer migration/backfill until after startup drawing; no new screen read is performed.
+        timer.schedule({ worker.execute { upgradeExisting() } },2,TimeUnit.SECONDS)
+    }
+    private fun upgradeExisting() {
+        if(!settings.load().realisticRepliesEnabled)return
+        try {
+            if(repository.upgradeLearning()) {
+                Logs.event(LogStep.MEMORY_SAVE,LogState.OK,metrics=mapOf(LogMetric.COUNT to repository.pending(Int.MAX_VALUE).evidence.size.toLong()))
+                synchronized(this) { dirty=true;status="旧版原话已重新整理，稍后补充关系和资料分类";schedule() }
+            }
+        } catch(error:Exception) { status="旧资料整理暂未完成，请查看诊断日志";Logs.failed(LogStep.MEMORY_SAVE,error) }
+    }
     @Synchronized fun beginForeground():()->Unit {
-        val release=priority.enterForeground();scheduled?.cancel(false);scheduled=null;dirty=false
+        val release=priority.enterForeground();scheduled?.cancel(false);scheduled=null
         return { release();synchronized(this) { schedule() } }
     }
     @Synchronized fun cancelLearning() { scheduled?.cancel(false);scheduled=null;priority.cancel();dirty=false }
     /** Called on the advisor worker, never from passive accessibility events. */
     fun observe(snapshot:ChatSnapshot) {
         if(!settings.load().realisticRepliesEnabled || !com.loveadvisor.core.capture.ChatApps.supported(snapshot.packageName))return
+        if(snapshot.source==CaptureSource.PASTE)return
+        upgradeExisting()
         val receipt=try { repository.ingest(snapshot) } catch(error:Exception) { status="本地记忆暂未保存，请查看诊断日志；候选仍可生成";Logs.failed(LogStep.MEMORY_SAVE,error);return }
-        Logs.event(LogStep.MEMORY_READ,LogState.OK,metrics=mapOf(LogMetric.COUNT to receipt.added.toLong()))
+        Logs.event(LogStep.MEMORY_READ,LogState.OK,metrics=mapOf(LogMetric.COUNT to receipt.added.toLong(),LogMetric.ME_MESSAGE_COUNT to snapshot.messages.count { it.speaker==Speaker.ME }.toLong(),LogMetric.OTHER_MESSAGE_COUNT to snapshot.messages.count { it.speaker==Speaker.OTHER }.toLong()))
         if(receipt.added>0) synchronized(this) { dirty=true;status="本地已整理${receipt.added}条新消息；候选完成后补充分类";schedule() }
     }
     @Synchronized private fun schedule() {
@@ -56,6 +72,7 @@ class PersonalMemoryService(private val settings:AppSettings,documents:AndroidDo
         worker.execute {
             val log=Logs.begin(LogStep.MEMORY_LEARN)
             val deadline=timer.schedule({ cancel.cancel() },25,TimeUnit.SECONDS)
+            var continueLearning=false
             try {
                 cancel.check()
                 val config=settings.load();val slice=repository.pending()
@@ -65,14 +82,15 @@ class PersonalMemoryService(private val settings:AppSettings,documents:AndroidDo
                 // Never hold the foreground-priority monitor across encrypted disk I/O.
                 if(!priority.current(ticket) || !settings.load().realisticRepliesEnabled)throw java.util.concurrent.CancellationException()
                 val saved=repository.apply(slice,proposals)
-                status=if(saved)"新消息分类完成；尚有${repository.pending(Int.MAX_VALUE).evidence.size}条原话未分类，下次读取或手动重试可继续" else "资料已被编辑，本次后台结果已丢弃"
+                continueLearning=saved && repository.pending(1).evidence.isNotEmpty()
+                status=if(saved)if(continueLearning)"本批分类完成，稍后继续整理未分类原话" else "全部新原话已分类整理" else "资料已被编辑，本次后台结果已丢弃"
                 Logs.event(LogStep.MEMORY_SAVE,if(saved)LogState.OK else LogState.SKIP,if(saved)LogReason.NONE else LogReason.RESULT_STALE,metrics=mapOf(LogMetric.COUNT to proposals.size.toLong()))
                 Logs.end(log,LogState.OK)
             } catch(_:java.util.concurrent.CancellationException) { status="后台学习已让出或超时；已保留本地原文";Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED) }
             catch(error:Exception) { status="后台分类未完成；已保留本地原文，可在记忆页重试";Logs.failed(LogStep.MEMORY_LEARN,error,log);Logs.end(log,LogState.FAIL,LogReason.STEP_FAILED) }
             finally {
                 deadline.cancel(false)
-                synchronized(this) { if(priority.finish(ticket))dirty=false }
+                synchronized(this) { if(priority.finish(ticket)) { dirty=continueLearning;schedule() } }
             }
         }
     }

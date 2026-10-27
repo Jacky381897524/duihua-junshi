@@ -81,7 +81,8 @@ class ChatCaptureService:AccessibilityService() {
             }
         }
     }
-    val currentChatSnapshot get()=conversation.current
+    private var pastedSnapshot:ChatSnapshot?=null
+    val currentChatSnapshot get()=pastedSnapshot?.takeIf { graph.tracker.lastSnapshot==it } ?: conversation.current
     val glassWindow get()=lastForegroundWindow?.takeIf { overlayAllowed() }
     private var lastForegroundWindow:WindowSnapshot?=null
     private var projecting=false
@@ -122,7 +123,7 @@ class ChatCaptureService:AccessibilityService() {
     private val receiver=object:BroadcastReceiver() { override fun onReceive(context:Context?,intent:Intent?) {
         when(intent?.action) { Intent.ACTION_SCREEN_OFF -> leaveForeground(); Intent.ACTION_USER_PRESENT -> checkForeground() }
     } }
-    private fun platform(pkg:String?)=when(pkg) { ChatApps.WECHAT->1L;"com.tencent.mobileqq"->2L;"com.ss.android.ugc.aweme"->3L;else->0L }
+    private fun platform(pkg:String?)=when(pkg) { ChatApps.WECHAT->1L;"com.tencent.mobileqq"->2L;"com.ss.android.ugc.aweme"->3L;else->if(ChatApps.supported(pkg))4L else 0L }
     override fun onCreate() { super.onCreate();Logs.event(LogStep.SERVICE_CREATE,LogState.OK) }
     override fun onUnbind(intent:Intent?):Boolean { Logs.event(LogStep.SERVICE_UNBIND,LogState.WARN);Logs.flush();return super.onUnbind(intent) }
     override fun onServiceConnected() {
@@ -269,7 +270,7 @@ class ChatCaptureService:AccessibilityService() {
             foregroundStage("root-missing-focus-kept")
             if(lastForegroundWindow?.viewport==current.viewport)return false
         }
-        if(!ChatApps.supported(current.packageName)) { diagnosticStatus="当前前台应用不是微信、QQ或抖音"; leaveForeground(); return false }
+        if(!ChatApps.supported(current.packageName)) { diagnosticStatus="当前前台应用不在已启用的聊天应用范围"; leaveForeground(); return false }
         if(foregroundWindowId!=null && (foregroundWindowId!=current.windowId || foregroundPackage!=current.packageName)) {
             // Switching directly between supported split panes must not transfer
             // the old editor's keyboard lease to the newly focused application.
@@ -299,7 +300,7 @@ class ChatCaptureService:AccessibilityService() {
                 val completion=readGate.complete(lease)
                 if(completion.accept && manualRead.accepts(ticket) && submittedNavigation==navigation && canObserve()) {
                     Logs.end(log,if(w==null)LogState.FAIL else LogState.OK,if(w==null)LogReason.NO_NODES else LogReason.NONE,metrics=mapOf(LogMetric.NODE_COUNT to (w?.nodes?.size ?: 0).toLong()))
-                    if(w==null) finishRead(ticket,"系统未返回微信窗口，请重新点击读取信息")
+                    if(w==null) finishRead(ticket,"系统未返回聊天窗口，请重新点击读取信息")
                     else {
                         if(!updateForeground(w)) {
                             finishRead(ticket,"当前窗口已变化，本次读取已取消；已保留上次内容")
@@ -396,7 +397,7 @@ class ChatCaptureService:AccessibilityService() {
                         } else null
                         val bytes=ByteArrayOutputStream(); scaled.compress(Bitmap.CompressFormat.JPEG,90,bytes)
                         if(scaled!==original) scaled.recycle(); original.recycle()
-                        val readVisual=Logs.within(visionLog) { graph.vision.read(config.vision.copy(apiKey=key),"data:image/jpeg;base64,"+Base64.encodeToString(bytes.toByteArray(),Base64.NO_WRAP),cancel,w.packageName,config.groupContextLimit) }
+                        val readVisual=Logs.within(visionLog) { graph.vision.read(config.vision.copy(apiKey=key),"data:image/jpeg;base64,"+Base64.encodeToString(bytes.toByteArray(),Base64.NO_WRAP),cancel,w.packageName,config.groupContextLimit,selfDisplayName=config.socialSelfNames[w.packageName]) }
                         val modelInput=readVisual.composer?.let { r -> RectI(w.viewport.left+(r.left*positionScale).toInt(),w.viewport.top+(r.top*positionScale).toInt(),w.viewport.left+(r.right*positionScale).toInt(),w.viewport.top+(r.bottom*positionScale).toInt()) }?.takeIf { ImeFillPolicy.composerAllowed(it,w.viewport) }
                         val input=nativeInput ?: localInput ?: modelInput
                         val visual=readVisual.copy(positions=readVisual.positions.mapValues { (_,y)->w.viewport.top+y*positionScale })
@@ -452,7 +453,7 @@ class ChatCaptureService:AccessibilityService() {
         attempt=Runnable {
             if(completed)return@Runnable
             if(SystemClock.elapsedRealtime()>=deadline) { finish(CaptureImageResult.Failure(-1,"窗口截图超时，请重试"));return@Runnable }
-            if(cancel.cancelled || !overlayAllowed())finish(CaptureImageResult.Failure(-1,"微信前台已变化"))
+            if(cancel.cancelled || !overlayAllowed())finish(CaptureImageResult.Failure(-1,"聊天应用前台已变化"))
             else {
                 val actualNow=SystemClock.elapsedRealtime()
                 val remaining=CaptureTiming.delay(lastActualCaptureStart,actualNow,false)
@@ -477,7 +478,7 @@ class ChatCaptureService:AccessibilityService() {
     fun readConfirmedWindow()=reader.read(identity)
     fun readFillWindow()=reader.readWithTargets(identity)
     fun currentForFill(window:WindowSnapshot):ChatSnapshot? {
-        val current=conversation.current ?: return null
+        val current=currentChatSnapshot ?: return null
         if(!ChatApps.supported(window.packageName) || window.packageName!=current.packageName || window.windowId!=current.windowId || window.confirmedIdentity?.id!=current.identity?.id) return null
         val title=current.identity?.displayTitle
         if(title.isNullOrBlank() || NativeReplyStyleTitle.read(window)!=title) return null
@@ -486,11 +487,12 @@ class ChatCaptureService:AccessibilityService() {
             // Keep the manually read/media-enriched snapshot; verification must not erase media or mutate its token.
             return current
         }
-        return if(current.source==CaptureSource.OCR && overlayAllowed() && (window.packageName!=ChatApps.WECHAT || WeChatPageClassifier.classify(window) in setOf(WeChatPageKind.CHAT_OR_UNKNOWN,WeChatPageKind.GROUP))) current else null
+        return if((current.source==CaptureSource.OCR || current.source==CaptureSource.PASTE && conversation.current?.source==CaptureSource.OCR) && overlayAllowed() && (window.packageName!=ChatApps.WECHAT || WeChatPageClassifier.classify(window) in setOf(WeChatPageKind.CHAT_OR_UNKNOWN,WeChatPageKind.GROUP))) current else null
     }
     fun captureNow() {
+        pastedSnapshot=null
         Logs.event(LogStep.READ_TAP)
-        if(!overlayAllowed()) { notifyUser("请打开微信、QQ或抖音聊天后点击读取信息"); return }
+        if(!overlayAllowed()) { notifyUser("请打开已支持的聊天应用聊天后点击读取信息"); return }
         if(manualRead.active!=null || graph.coordinator.state.loading) { Logs.event(LogStep.READ_TAP,LogState.SKIP,LogReason.BUSY);return }
         readLog=Logs.begin(LogStep.READ_TAP,metrics=mapOf(LogMetric.PLATFORM to platform(foregroundPackage)))
         releaseReadLearning?.invoke();releaseReadLearning=graph.personalMemory.beginForeground()
@@ -563,9 +565,17 @@ class ChatCaptureService:AccessibilityService() {
         }
         return { cancel.cancel();Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED) }
     }
+    fun analyzePasted(text:String) {
+        if(!overlayAllowed() || manualRead.active!=null || graph.coordinator.state.loading) { notifyUser("请等待当前操作完成，并保持聊天应用前台");return }
+        val base=conversation.current?.takeIf { it.packageName==foregroundPackage && it.windowId==foregroundWindowId && it.identity?.id==identity?.id }
+        val snapshot=try { PastedConversation.create(text,packageName,base) } catch(error:IllegalArgumentException) { notifyUser(error.message.orEmpty());return }
+        Logs.event(LogStep.PASTE_REPLY_TAP,metrics=mapOf(LogMetric.COUNT to text.length.toLong(),LogMetric.CACHED to if(base!=null)1L else 0L))
+        pastedSnapshot=snapshot
+        graph.controller.analyze(snapshot,goal="回复用户粘贴的这句原话。没有读取完整对话，不假造语境或称呼，不把它当作已确认的真实聊天记录。",objectId=null)
+    }
     fun refresh() {
         Logs.event(LogStep.REFRESH_TAP)
-        val snapshot=conversation.current
+        val snapshot=currentChatSnapshot
         val token=graph.tracker.currentToken
         if(!overlayAllowed() || snapshot==null || token==null || graph.tracker.lastSnapshot!=snapshot || token.packageName!=snapshot.packageName || token.conversationId!=snapshot.identity?.id) { graph.controller.status("请先点击读取信息，再刷新候选"); return }
         if(manualRead.active!=null || graph.coordinator.state.loading) return
@@ -579,7 +589,7 @@ class ChatCaptureService:AccessibilityService() {
         graph.controller.analyze(snapshot,objectId=null,replyTarget=target)
     }
     fun describe(plan:ReplyPlan,token:SessionToken,callback:(com.loveadvisor.core.advisor.ReplyDetail?,String?)->Unit) {
-        val snapshot=conversation.current ?: return callback(null,"请先读取当前聊天")
+        val snapshot=currentChatSnapshot ?: return callback(null,"请先读取当前聊天")
         if(!graph.tracker.isCurrent(token))return callback(null,"聊天已变化，请重新读取")
         val cancel=Cancellation()
         val sourceBatch=graph.coordinator.state.current?.batch
@@ -689,7 +699,7 @@ class ChatCaptureService:AccessibilityService() {
     }
     fun beginProjectionCapture() { projecting=true; leaveForeground() }
     fun endProjectionCapture() { projecting=false; checkForeground() }
-    fun previewOcr(draft:ConversationDraft) { graph.controller.status("请返回微信，点击读取信息获取当前聊天") }
+    fun previewOcr(draft:ConversationDraft) { graph.controller.status("请返回聊天应用，点击读取信息获取当前聊天") }
     fun notifyUser(text:String) { if(text.contains("失败") || text.contains("请") || text.contains("未能"))Logs.feedback(text);Toast.makeText(this,text,Toast.LENGTH_SHORT).show() }
     private fun cancelScreenRead(message:String="本次读取已取消；已保留上次内容") {
         releaseReadLearning?.invoke();releaseReadLearning=null

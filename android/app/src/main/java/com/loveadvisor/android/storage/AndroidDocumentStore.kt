@@ -7,9 +7,11 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import com.loveadvisor.core.storage.CipherDocumentStore
 class AndroidDocumentStore(context:Context,directory:String="private-data") {
-    private val store=CipherDocumentStore(context.filesDir.resolve(directory),limits=mapOf("personal-memory-v1" to 24*1024*1024)) { obtainKey() }
+    private val store=CipherDocumentStore(context.filesDir.resolve(directory),limits=mapOf("personal-memory-v1" to 24*1024*1024,"personal-memory-index" to 24*1024*1024,"pm-*" to 24*1024*1024)) { obtainKey() }
     fun read(name:String)=store.read(name)
     fun write(name:String,text:String)=store.write(name,text)
+    fun remove(name:String)=store.remove(name)
+    fun names()=store.names()
     companion object {
         @Synchronized private fun obtainKey():SecretKey {
             val alias="love-advisor-aes-v1"

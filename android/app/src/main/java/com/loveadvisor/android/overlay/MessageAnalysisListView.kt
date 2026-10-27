@@ -8,7 +8,7 @@ import com.loveadvisor.core.analysis.MessageJudgment
 import com.loveadvisor.core.advisor.ConversationTimePolicy
 import com.loveadvisor.core.model.*
 
-class MessageAnalysisListView(context:Context,private val snapshot:ChatSnapshot,onReply:(ChatMessage)->Unit,onBack:()->Unit,onAutomatic:(()->Unit)?=null,
+class MessageAnalysisListView(context:Context,private val snapshot:ChatSnapshot,onReply:(ChatMessage)->Unit,onBack:()->Unit,
     private val onAnalyze:(ChatMessage,(MessageJudgment?,String?)->Unit)->(()->Unit)):LinearLayout(context),PanelViewportPage {
     override val preferredViewportHeightDp=540
     private val viewport=ScrollView(context)
@@ -25,7 +25,7 @@ class MessageAnalysisListView(context:Context,private val snapshot:ChatSnapshot,
     private val next=Runnable { startVisible() }
     init {
         orientation=VERTICAL;val palette=PanelPalette(context)
-        addView(palette.text("判断分析 · 选句回复",17f,bold=true))
+        addView(palette.text("选句指定回复",17f,bold=true))
         addView(palette.text("自动判断近24小时话题；旧消息可指定回复。判断为模型推测。",11f,palette.muted),LayoutParams(-1,-2).apply { topMargin=dp(5);bottomMargin=dp(10) })
         val content=LinearLayout(context).apply { orientation=VERTICAL }
         val current=currentIds()
@@ -44,7 +44,6 @@ class MessageAnalysisListView(context:Context,private val snapshot:ChatSnapshot,
         content.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_->initializeScroll();schedule() }
         addView(viewport,LayoutParams(-1,0,1f))
         val footer=LinearLayout(context).apply { orientation=HORIZONTAL }
-        onAutomatic?.let { footer.addView(palette.button("恢复自动接话",action=it).apply { minimumHeight=dp(36) },LayoutParams(0,-2,1f).apply { rightMargin=dp(8) }) }
         footer.addView(palette.button("返回候选面板",action=onBack).apply { minimumHeight=dp(36) },LayoutParams(0,-2,1f))
         addView(footer,LayoutParams(-1,-2).apply { topMargin=dp(8) })
     }

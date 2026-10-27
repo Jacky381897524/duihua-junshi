@@ -2,8 +2,11 @@ package com.loveadvisor.core.knowledge
 class KnowledgeRouter {
     fun unified(query:KnowledgeQuery,documents:List<KnowledgeDocument>):List<KnowledgeExcerpt> {
         val topics=topics(query)
-        val fixed=documents.filter { it.id in setOf("jev-copilot.md","romance-master.md") }.map { KnowledgeExcerpt(it.id,it.title,it.path,it.source,excerpt(it.text,topics.keys).take(1000)) }
-        val relevant=select(query,documents.filterNot { it.id in setOf("jev-copilot.md","romance-master.md") }).take(1).map { it.copy(text=it.text.take(1200)) }
+        val fixedIds=setOf("jev-copilot.md","romance-master.md","social-balance-v1.7.md")
+        val fixed=documents.filter { it.id in fixedIds }.map { KnowledgeExcerpt(it.id,it.title,it.path,it.source,excerpt(it.text,topics.keys).take(1000)) }
+        // Search every indexed library, including notes, and keep several complementary sources.
+        // Never concatenate all full books into every model request.
+        val relevant=rank(query,documents.filterNot { it.id in fixedIds }).take(5).map { it.copy(text=it.text.take(1100)) }
         return fixed+relevant
     }
     private val terms=mapOf(
@@ -14,6 +17,8 @@ class KnowledgeRouter {
         "work" to listOf("办事","同事","工作","资料","领导"),
         "expression" to listOf("聊天","接话","夸","调侃","润色","幽默","尴尬"),
         "humor" to listOf("幽默","接梗","玩笑","有趣","好笑","逗","哈哈"),
+        "meme" to listOf("梗","哈哈","笑死","绷不住","抽象","离谱","上头","拿捏","电子","班味","lol","lmao","bruh","rizz","delulu","iykyk"),
+        "language" to listOf("英文","英语","外语","翻译","english","wanna","gonna","you're","what","how","bonjour","hola","こんにちは","안녕"),
         "reciprocity" to listOf("互惠","有来有回","讨好","迎合","敷衍","只回","总是我","投入","主动","接话口"),
         "personality" to listOf("mbti","依恋","人格","性格"),
         "family" to listOf("婚姻","家庭","育儿","家务","结婚","金钱","父母"),
@@ -25,9 +30,12 @@ class KnowledgeRouter {
     )
     private fun topics(query:KnowledgeQuery):Map<String,Int> {
         val input=(query.text+" "+query.goal).lowercase()
-        return terms.mapValues { (_,words)->words.count { input.contains(it) } }.filterValues { it>0 }.ifEmpty { mapOf("expression" to 1) }
+        val matched=terms.mapValues { (_,words)->words.count { input.contains(it) } }.filterValues { it>0 }.toMutableMap()
+        if(input.count { it in 'a'..'z' }>=12 && input.count { it in '\u4e00'..'\u9fff' }<4 || input.any { it in '\u3040'..'\u30ff' || it in '\uac00'..'\ud7af' || it in '\u0400'..'\u052f' || it in '\u0600'..'\u06ff' })matched["language"]=3
+        return matched.ifEmpty { mapOf("expression" to 1) }
     }
-    fun select(query:KnowledgeQuery,documents:List<KnowledgeDocument>):List<KnowledgeExcerpt> {
+    fun select(query:KnowledgeQuery,documents:List<KnowledgeDocument>):List<KnowledgeExcerpt> = rank(query,documents).take(3)
+    private fun rank(query:KnowledgeQuery,documents:List<KnowledgeDocument>):List<KnowledgeExcerpt> {
         val input=(query.text+" "+query.goal).lowercase()
         val matched=topics(query)
         val scored=(query.notes+documents).distinctBy { it.id }.map { doc ->
@@ -37,7 +45,7 @@ class KnowledgeRouter {
             score+=tokenWords.count { doc.text.contains(it,true) }*4
             doc to score
         }.filter { it.second>0 }.sortedWith(compareByDescending<Pair<KnowledgeDocument,Int>> { it.second }.thenBy { it.first.id })
-        return scored.take(3).map { (doc,_)->KnowledgeExcerpt(doc.id,doc.title,doc.path,doc.source,excerpt(doc.text,matched.keys)) }
+        return scored.map { (doc,_)->KnowledgeExcerpt(doc.id,doc.title,doc.path,doc.source,excerpt(doc.text,matched.keys)) }
     }
     private fun excerpt(text:String,topics:Set<String>):String {
         val sections=text.split(Regex("(?m)(?=^## )"))

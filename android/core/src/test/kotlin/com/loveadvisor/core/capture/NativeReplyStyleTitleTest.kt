@@ -5,6 +5,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NativeReplyStyleTitleTest {
+    @Test fun registeredGenericChatRequiresAnExplicitHeaderIdAndAnEditableComposer() {
+        val window=WindowSnapshot("com.whatsapp",8,RectI(0,0,1080,2344),listOf(NodeRecord("com.whatsapp:id/conversation_contact_name","Alex","TextView",false,RectI(180,110,780,190)),NodeRecord("input","","EditText",true,RectI(100,2100,900,2200))))
+        assertEquals("Alex",NativeReplyStyleTitle.read(window))
+        assertNull(NativeReplyStyleTitle.read(window.copy(nodes=window.nodes.dropLast(1))))
+        assertNull(NativeReplyStyleTitle.read(window.copy(nodes=window.nodes.map { it.copy(id="arbitrary") })))
+    }
     private val title=NodeRecord("com.tencent.mobileqq:id/3kc","🍃    L 。","android.widget.TextView",false,RectI(172,121,350,178))
     private val input=NodeRecord("input","","android.widget.EditText",true,RectI(130,2150,850,2250))
     private val chat=WindowSnapshot("com.tencent.mobileqq",1,RectI(0,0,1080,2344),listOf(title,input))

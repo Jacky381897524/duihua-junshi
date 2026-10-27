@@ -5,9 +5,17 @@ import com.loveadvisor.core.advisor.NicknameText
 /** Conservative raw chat-header text; missing or ambiguous titles are never guessed. */
 object NativeReplyStyleTitle {
     fun read(window:WindowSnapshot?):String? {
-        if(window==null || window.packageName !in setOf(ChatApps.QQ,ChatApps.WECHAT))return null
+        if(window==null || !ChatApps.supported(window.packageName))return null
         val v=window.viewport
         if(!window.nodes.any { it.editable && it.bounds.top>v.top+v.height*.55 })return null
+        if(window.packageName !in setOf(ChatApps.QQ,ChatApps.WECHAT)) {
+            if(window.windowClassName.orEmpty().contains(Regex("(?i)profile|search|webview")))return null
+            // An explicit resource ID and navigation-band bounds are required, not arbitrary top text.
+            return window.nodes.filter { n -> val id=n.id.orEmpty();val r=n.bounds
+                id.startsWith(window.packageName+":id/") && id.substringAfter(":id/").contains(Regex("(?i)(chat|conversation|toolbar|header|top).*(title|name)")) &&
+                    !n.editable && NicknameText.valid(n.text.orEmpty()) && !TextSceneParser.isUi(n.text.orEmpty()) && r.top>=v.top && r.bottom<v.top+v.height*.13
+            }.mapNotNull { it.text }.distinct().singleOrNull()
+        }
         if(window.packageName==ChatApps.WECHAT) {
             val name=window.windowClassName.orEmpty()
             if(listOf(".profile.",".webview.","appbrand").any { name.contains(it,true) })return null

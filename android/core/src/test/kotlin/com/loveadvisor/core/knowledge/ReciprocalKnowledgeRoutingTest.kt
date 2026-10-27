@@ -13,11 +13,11 @@ class ReciprocalKnowledgeRoutingTest {
         }
     }
 
-    @Test fun humorAndReciprocityExamplesAreReachableWithinUnifiedThreeDocumentBudget() {
+    @Test fun humorAndReciprocityExamplesAreReachableWithinUnifiedMultiDocumentBudget() {
         val docs=listOf(doc("jev-copilot.md",listOf("expression"),"## 事实\n以事实为准"),doc("romance-master.md",listOf("expression"),"## 幽默\n轻松接梗"),doc("generic",listOf("expression"),"## 普通\n接话"),doc("playbook",listOf("humor","reciprocity"),"## 接梗\n从共同场景留一个接话口\n"+"例子".repeat(2000)))
         val result=KnowledgeRouter().unified(KnowledgeQuery("怎么幽默接梗又不讨好"),docs)
-        assertEquals(listOf("jev-copilot.md","romance-master.md","playbook"),result.map { it.id })
-        assertTrue(result.size<=3 && result.sumOf { it.text.length }<=3600)
+        assertTrue(result.map { it.id }.containsAll(listOf("jev-copilot.md","romance-master.md","playbook")))
+        assertTrue(result.size<=8 && result.sumOf { it.text.length }<=9000)
     }
 
     @Test fun unifiedFixedDocsUseActualSceneSoRefusalIsNotReplacedByInvitation() {

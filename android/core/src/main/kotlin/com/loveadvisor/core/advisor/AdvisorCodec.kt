@@ -16,7 +16,7 @@ class AdvisorCodec {
             val replies=root.getAsJsonArray("replies").map { element ->
                 val o=element.asJsonObject; val b=o.getAsJsonObject("branches")
                 val score=o.get("score")?.takeUnless { it.isJsonNull }?.let { require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber); it.asDouble }
-                ReplyPlan(string(o,"id"),Strategy.valueOf(string(o,"strategy")),string(o,"text"),string(o,"reason"),string(o,"suitableWhen"),string(o,"cost"),ReplyBranches(string(b,"positive"),string(b,"ambiguous"),string(b,"rejection")),score,targetMessageId=optional(o,"targetMessageId"),topic=optional(o,"topic"))
+                ReplyPlan(string(o,"id"),Strategy.valueOf(string(o,"strategy")),string(o,"text"),string(o,"reason"),string(o,"suitableWhen"),string(o,"cost"),ReplyBranches(string(b,"positive"),string(b,"ambiguous"),string(b,"rejection")),score,targetMessageId=optional(o,"targetMessageId"),topic=optional(o,"topic"),translationZh=optional(o,"translationZh"))
             }
             AdvisorBatch(analysis.copy(strategies=replies.map { it.strategy }.distinct()),replies)
         } catch(_:Exception) { null }

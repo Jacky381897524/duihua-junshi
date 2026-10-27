@@ -12,10 +12,9 @@ class ReplyRealitySwitch(context:Context,private val settings:AppSettings,compac
     ink:Int=ViewStyles.themed(context,ViewStyles.INK),muted:Int=ViewStyles.themed(context,ViewStyles.MUTED)):LinearLayout(context) {
     private var updating=false
     private var unsubscribe:(()->Unit)?=null
-    private val toggle=Switch(context).apply { text="真人感";textSize=if(compact)14f else 16f;setTextColor(ink);minHeight=ViewStyles.dp(context,44f) }
+    private val toggle=Switch(context).apply { text=android.text.SpannableString("真人感（更接近你的口吻）").apply { setSpan(android.text.style.RelativeSizeSpan(.68f),3,length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);setSpan(android.text.style.ForegroundColorSpan(muted),3,length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) };textSize=if(compact)14f else 16f;setTextColor(ink);minHeight=ViewStyles.dp(context,44f) }
     init {
         orientation=VERTICAL;addView(toggle,LayoutParams(-1,-2))
-        addView(ViewStyles.text(context,if(compact)"优先使用 · 下次生成生效" else "默认开启，结合本人原话、对象记忆和自然表达。与去AI味同时开启时优先使用真人感；关闭后暂停学习和使用这些记忆。",if(compact)11f else 12f,muted))
         render()
         toggle.setOnCheckedChangeListener { _,enabled -> if(!updating)try {
             settings.update { it.copy(realisticRepliesEnabled=enabled) }

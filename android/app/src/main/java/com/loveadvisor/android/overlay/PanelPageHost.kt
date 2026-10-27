@@ -56,11 +56,17 @@ class PanelPageHost(context:Context,private val onFocusChanged:(Boolean)->Unit,p
         editing.pageChanged(false);onFocusChanged(false);removed.asReversed().forEach { it.closed() };onChanged()
     }
     fun releaseEditingFocus() { editing.release();onFocusChanged(false) }
+    /** A user-triggered paste button needs the same real window focus as tapping its field. */
+    fun requestFieldFocus(field:EditText) {
+        if(!stack.editable || !field.isShown)return
+        if(editing.fieldTapped())onFocusChanged(true)
+        field.requestFocus();showKeyboardAfterFocus(field)
+    }
     override fun dispatchTouchEvent(event:MotionEvent):Boolean {
         // Acquire window/IME focus for a real field tap, never just for opening or
         // reattaching a retained page. Coordinates are used locally, not logged.
         if(event.actionMasked==MotionEvent.ACTION_DOWN)fieldAt(pages.lastOrNull()?.content,event.rawX.toInt(),event.rawY.toInt())?.let { field ->
-            if(editing.fieldTapped()) { onFocusChanged(true);field.requestFocus();showKeyboardAfterFocus(field) }
+            requestFieldFocus(field)
         }
         return super.dispatchTouchEvent(event)
     }

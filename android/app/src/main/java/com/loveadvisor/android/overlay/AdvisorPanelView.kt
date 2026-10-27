@@ -62,7 +62,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         analysisRow=ViewStyles.row(context).apply { gravity=Gravity.CENTER_VERTICAL }
         summary=palette.text("对方真实意图：读取后判断",12f,bold=true).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
         analysisRow.addView(summary,LinearLayout.LayoutParams(0,-2,1f))
-        analyze=palette.button("判断分析") { onAnalyze() }.apply { contentDescription="判断分析" }
+        analyze=palette.button("选句指定回复") { onAnalyze() }.apply { contentDescription="选句指定回复";maxLines=2 }
         analysisRow.addView(analyze,LinearLayout.LayoutParams(dp(52),textRowHeight(28)).apply { leftMargin=dp(4) })
         read=palette.button("读取信息") { onRead() }.apply { contentDescription="读取信息";maxLines=2 }
         analysisRow.addView(read,LinearLayout.LayoutParams(dp(52),textRowHeight(28)).apply { leftMargin=dp(4) })
@@ -114,7 +114,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         refresh.text=if(loading) "正在生成六条…" else "刷新换一批 · 6 条"
         for(i in 0 until cards.childCount) (cards.getChildAt(i) as? ReplyCardView)?.let { card ->
             card.copyButton.isEnabled=!filling
-            card.fillButton?.let { button -> button.isEnabled=!filling && !reading && !loading && displayed?.let { isCurrent(it.ticket.session) }==true;button.alpha=if(button.isEnabled)1f else .45f }
+            card.fillButton?.let { button -> button.isEnabled=!filling && !reading && !loading && displayed?.let { isCurrent(it.ticket.session) && com.loveadvisor.core.capture.ChatApps.supported(it.ticket.session.packageName) }==true;button.alpha=if(button.isEnabled)1f else .45f }
         }
     }
     fun setReading(value:Boolean) { reading=value; updateButtons() }
@@ -134,6 +134,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     fun popPage()=pages.pop()
     fun closeStyleEditor() { pages.clear() }
     fun releaseEditingFocus() { pages.releaseEditingFocus() }
+    fun requestFieldFocus(field:EditText) { pages.requestFieldFocus(field) }
     private fun installEditorBack() {
         if(!pages.hasPages) { removeEditorBack?.invoke();removeEditorBack=null;return }
         if(android.os.Build.VERSION.SDK_INT>=33 && removeEditorBack==null) {
@@ -173,19 +174,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             showLock(capsule.locked);lock.setOnClickListener { showLock(capsule.toggleLock()) }
             lock.minimumHeight=textRowHeight(36);lock.setPadding(dp(10),dp(5),dp(10),dp(5))
             menu.addView(lock,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(7) })
-            val sizeLabel=palette.text("胶囊大小 · ${(capsule.scale*100).toInt()}%",12f)
-            menu.addView(sizeLabel)
-            val slider=SeekBar(context).apply { max=1300;progress=((capsule.scale-.7f)*1000).toInt().coerceIn(0,1300);contentDescription="胶囊大小，70%至200%" }
-            slider.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(view:SeekBar,progress:Int,fromUser:Boolean) { if(fromUser) { val value=.7f+progress/1000f;sizeLabel.text="胶囊大小 · ${(value*100).toInt()}%";capsule.resize(value,false) } }
-                override fun onStartTrackingTouch(view:SeekBar) {}
-                override fun onStopTrackingTouch(view:SeekBar) { capsule.resize(.7f+view.progress/1000f,true) }
-            })
-            menu.addView(slider,LinearLayout.LayoutParams(-1,dp(36)))
-            val range=ViewStyles.row(context)
-            range.addView(palette.text("70%",10f,palette.muted),LinearLayout.LayoutParams(0,-2,1f))
-            range.addView(palette.text("200%",10f,palette.muted))
-            menu.addView(range,LinearLayout.LayoutParams(-1,-2))
+            menu.addView(com.loveadvisor.android.ui.CapsuleScaleControl(context,capsule.scale) { value,commit -> capsule.resize(value,commit) },LinearLayout.LayoutParams(-1,-2))
             menuFinished=capsule.finishResize
         }
         items.drop(1).forEach { item(it) }
@@ -237,7 +226,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private fun sizeHeader(available:Int) {
         val sizing=com.loveadvisor.core.overlay.PanelHeaderLayout.measure(available,resources.displayMetrics.density,resources.configuration.fontScale)
         shortActionLabels=sizing.shortLabels
-        val analyzeLabel=if(shortActionLabels)"判断" else "判断分析"
+        val analyzeLabel="选句指定回复"
         val readLabel=if(reading)"读取中…" else if(shortActionLabels)"读取" else "读取信息"
         if(analyze.text.toString()!=analyzeLabel)analyze.text=analyzeLabel
         if(read.text.toString()!=readLabel)read.text=readLabel

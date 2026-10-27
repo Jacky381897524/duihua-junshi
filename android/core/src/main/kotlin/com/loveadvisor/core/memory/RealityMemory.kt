@@ -12,13 +12,13 @@ enum class PersonalKind { LIKE, DISLIKE, HABIT, TRAIT, BOUNDARY, RELATIONSHIP, E
 enum class EvidenceStatus { OBSERVED, TENTATIVE, CONFIRMED }
 data class PersonalContact(val id:String,val platform:String,val nickname:String,val group:String?=null,val relationship:String="未知",val relationshipConfirmed:Boolean=false,val groupRoom:Boolean=false)
 data class PersonalEvidence(val id:String,val ownerId:String,val peerId:String,val text:String,val time:MessageTime?,val readAt:Long,val speaker:Speaker)
-data class PersonalMemory(val id:String,val ownerId:String,val kind:PersonalKind,val text:String,val sourceId:String?,val status:EvidenceStatus=EvidenceStatus.OBSERVED,val updatedAt:Long=0,val locked:Boolean=false)
+data class PersonalMemory(val id:String,val ownerId:String,val kind:PersonalKind,val text:String,val sourceId:String?,val status:EvidenceStatus=EvidenceStatus.OBSERVED,val updatedAt:Long=0,val locked:Boolean=false,val interpretation:String?=null,val supportingSourceIds:List<String> = emptyList())
 data class InteractionSignal(val sourceId:String,val contactId:String,val category:String,val at:Long,val delta:Double)
 data class VoiceCorrection(val id:String,val peerId:String,val original:String,val actual:String,val at:Long)
 data class PersonalData(val contacts:List<PersonalContact> = emptyList(),val evidence:List<PersonalEvidence> = emptyList(),val memories:List<PersonalMemory> = emptyList(),val signals:List<InteractionSignal> = emptyList(),val corrections:List<VoiceCorrection> = emptyList(),val classified:Set<String> = emptySet(),val aliases:Map<String,String> = emptyMap(),val blocked:Set<String> = emptySet())
-data class RealityMemoryState(val schema:Int=1,val learningEnabled:Boolean=true,val paused:Boolean=false,val revision:Long=0,val data:PersonalData=PersonalData(),val undo:PersonalData?=null)
+data class RealityMemoryState(val schema:Int=1,val learningEnabled:Boolean=true,val paused:Boolean=false,val revision:Long=0,val data:PersonalData=PersonalData(),val undo:PersonalData?=null,val learningPolicy:Int=2)
 interface RealityPersistence { fun load():RealityMemoryState?; fun save(state:RealityMemoryState) }
-data class PersonalProposal(val sourceId:String,val kind:PersonalKind,val quote:String)
+data class PersonalProposal(val sourceId:String,val kind:PersonalKind,val quote:String,val relationship:String?=null,val supportingSourceIds:List<String> = emptyList())
 data class LearningSlice(val revision:Long,val evidence:List<PersonalEvidence>)
 data class LearningReceipt(val added:Int,val contactId:String?,val revision:Long)
 
@@ -42,8 +42,9 @@ class RealityMemoryRepository(private val persistence:RealityPersistence) {
     private fun canonical(key:String)=state().data.aliases[key] ?: key
     @Synchronized fun contactId(snapshot:ChatSnapshot):String?=PersonalIdentity.root(snapshot)?.let(::canonical)
     @Synchronized fun ingest(snapshot:ChatSnapshot,now:Long=System.currentTimeMillis()):LearningReceipt {
-        val old=state();val rootKey=PersonalIdentity.root(snapshot) ?: return LearningReceipt(0,null,old.revision)
+        var old=state();val rootKey=PersonalIdentity.root(snapshot) ?: return LearningReceipt(0,null,old.revision)
         if(!old.learningEnabled || old.paused)return LearningReceipt(0,canonical(rootKey),old.revision)
+        if(upgradeLearning(now))old=state()
         val title=snapshot.identity!!.displayTitle!!
         var data=old.data
         val contacts=data.contacts.toMutableList()
@@ -72,10 +73,7 @@ class RealityMemoryRepository(private val persistence:RealityPersistence) {
             added.add(PersonalEvidence(id,owner,peer,m.text,m.time,now,m.speaker))
         }
         if(added.isEmpty() && contacts==data.contacts)return LearningReceipt(0,root,old.revision)
-        val automatic=added.mapNotNull { e -> LocalPersonalLearning.classify(e)?.let { kind ->
-            val owner=if(kind==PersonalKind.RELATIONSHIP && !group)e.peerId else e.ownerId
-            PersonalMemory(PersonalIdentity.digest("$owner|$kind|${PersonalIdentity.normalized(e.text)}"),owner,kind,e.text,e.id,if(kind in setOf(PersonalKind.RELATIONSHIP,PersonalKind.TRAIT))EvidenceStatus.TENTATIVE else EvidenceStatus.OBSERVED,now)
-        } }
+        val automatic=added.flatMap { e -> LocalPersonalLearning.memories(e,contacts,now) }
         val memories=(data.memories+automatic).distinctBy { it.id }
         var signals=data.signals
         for(e in added) {
@@ -91,6 +89,14 @@ class RealityMemoryRepository(private val persistence:RealityPersistence) {
         change(data)
         return LearningReceipt(added.size,root,state().revision)
     }
+    /** Once per learning policy, reorganize existing raw evidence without undoing user edits/deletions. */
+    @Synchronized fun upgradeLearning(now:Long=System.currentTimeMillis()):Boolean {
+        val s=state();if(s.learningPolicy>=2 || !s.learningEnabled || s.paused)return false
+        val d=s.data
+        val automatic=d.evidence.filter { it.id !in d.blocked }.flatMap { LocalPersonalLearning.memories(it,d.contacts,now) }.filter { it.id !in d.blocked }
+        commit(s.copy(learningPolicy=2,revision=s.revision+1,data=d.copy(memories=(d.memories+automatic).distinctBy { it.id },classified=emptySet())))
+        return true
+    }
     @Synchronized fun pending(max:Int=24):LearningSlice {
         val s=state();return LearningSlice(s.revision,if(!s.learningEnabled || s.paused)emptyList() else s.data.evidence.filter { it.id !in s.data.classified && it.id !in s.data.blocked }.takeLast(max))
     }
@@ -102,14 +108,20 @@ class RealityMemoryRepository(private val persistence:RealityPersistence) {
             val e=available[p.sourceId] ?: return@mapNotNull null
             if(e.id in s.data.blocked)return@mapNotNull null
             val quote=p.quote.trim()
-            if(quote.length !in 2..300 || !e.text.contains(quote) || !LocalPersonalLearning.permitted(p.kind,quote) || !LocalPersonalLearning.permitted(p.kind,e.text))return@mapNotNull null
+            if(quote.length !in 2..300 || !e.text.contains(quote))return@mapNotNull null
+            val support=(p.supportingSourceIds.orEmpty()+p.sourceId).distinct().mapNotNull { id -> s.data.evidence.find { it.id==id && it.id !in s.data.blocked && it.peerId==e.peerId } }
+            val relation=p.relationship?.takeIf { it in setOf("朋友","同事","同学","家人","伴侣","暧昧中","初识网友","熟人") }
+            if(p.kind==PersonalKind.RELATIONSHIP && relation!=null && PersonalRelations.contradicts(relation,e.text))return@mapNotNull null
+            if(p.kind==PersonalKind.RELATIONSHIP && relation!=null && PersonalRelations.explicitLabel(e.text)?.let { it!=relation }==true)return@mapNotNull null
+            val groundedRelation=p.kind==PersonalKind.RELATIONSHIP && relation!=null && p.supportingSourceIds.orEmpty().all { id -> support.any { it.id==id } } && support.map { it.speaker }.toSet().containsAll(setOf(Speaker.ME,Speaker.OTHER)) && support.size>=2
+            if(!groundedRelation && !LocalPersonalLearning.permittedInSource(p.kind,e.text,quote))return@mapNotNull null
             // Store the source verbatim, never a model-authored fact about a person.
             val group=s.data.contacts.find { it.id==e.peerId }?.group!=null
             if(p.kind==PersonalKind.RELATIONSHIP && group)return@mapNotNull null
             val owner=if(p.kind==PersonalKind.RELATIONSHIP)e.peerId else e.ownerId
             val id=PersonalIdentity.digest("$owner|${p.kind}|${PersonalIdentity.normalized(quote)}")
             if(id in s.data.blocked || s.data.memories.any { it.id==id && it.locked })return@mapNotNull null
-            PersonalMemory(id,owner,p.kind,quote,e.id,if(p.kind in setOf(PersonalKind.TRAIT,PersonalKind.RELATIONSHIP))EvidenceStatus.TENTATIVE else EvidenceStatus.OBSERVED,now)
+            PersonalMemory(id,owner,p.kind,quote,e.id,if(p.kind in setOf(PersonalKind.TRAIT,PersonalKind.RELATIONSHIP))EvidenceStatus.TENTATIVE else EvidenceStatus.OBSERVED,now,interpretation=relation.takeIf { groundedRelation },supportingSourceIds=if(groundedRelation)support.map { it.id } else emptyList())
         }
         val existing=s.data.memories.map { it.id }.toSet()
         change(s.data.copy(memories=s.data.memories+items.filter { it.id !in existing }.distinctBy { it.id },classified=s.data.classified+available.keys))
@@ -118,7 +130,7 @@ class RealityMemoryRepository(private val persistence:RealityPersistence) {
     @Synchronized fun edit(item:PersonalMemory,text:String) {
         require(text.isNotBlank() && text.length<=300) { "记忆需为1至300字" }
         val d=state().data;require(item.ownerId==PersonalIdentity.SELF || d.contacts.any { it.id==item.ownerId })
-        val saved=item.copy(text=text.trim(),status=EvidenceStatus.CONFIRMED,locked=true,updatedAt=System.currentTimeMillis())
+        val saved=item.copy(text=text.trim(),status=EvidenceStatus.CONFIRMED,locked=true,updatedAt=System.currentTimeMillis(),interpretation=null)
         change(d.copy(memories=d.memories.filterNot { it.id==item.id }+saved,blocked=d.blocked-item.id))
     }
     @Synchronized fun relationship(id:String,label:String) {
@@ -152,22 +164,45 @@ class RealityMemoryRepository(private val persistence:RealityPersistence) {
 }
 
 object LocalPersonalLearning {
+    fun memories(e:PersonalEvidence,contacts:List<PersonalContact>,now:Long):List<PersonalMemory> = observations(e).mapNotNull { (kind,quote) ->
+        if(kind==PersonalKind.RELATIONSHIP && contacts.find { it.id==e.peerId }?.group!=null)return@mapNotNull null
+        val owner=if(kind==PersonalKind.RELATIONSHIP)e.peerId else e.ownerId
+        PersonalMemory(PersonalIdentity.digest("$owner|$kind|${PersonalIdentity.normalized(quote)}"),owner,kind,quote,e.id,if(kind in setOf(PersonalKind.RELATIONSHIP,PersonalKind.TRAIT))EvidenceStatus.TENTATIVE else EvidenceStatus.OBSERVED,now)
+    }
     private const val firstPerson="我(?:本人|自己)?(?:真的|比较|一直|平时|非常|特别|也|更|还|其实|很|最|挺|超|蛮|就|向来|有点){0,3}"
     fun permitted(kind:PersonalKind,text:String):Boolean {
-        if(text.contains(Regex("[?？]|他说|她说|你说|假如|如果|例如|比如|指令|忽略|system|prompt",RegexOption.IGNORE_CASE)))return false
+        if(text.contains(Regex("[?？]|吗$|他说|她说|你说|假如|如果|例如|比如|指令|忽略|system|prompt|\\b(if|he says|she says|you said)\\b",RegexOption.IGNORE_CASE)))return false
+        val fragment=text.trim().contains(Regex("^(?:不吃|不喝|不喜欢|讨厌|最爱|喜欢|爱吃|爱喝|每[天晚周]|通常|习惯|一般都|总是|慢热|内向|外向)"))
+        val english=text.contains(Regex("\\bI\\s+(?:really\\s+|usually\\s+|always\\s+)?",RegexOption.IGNORE_CASE))
         return when(kind) {
-            PersonalKind.LIKE -> text.contains(Regex(firstPerson+"(喜欢|爱吃|爱喝|最爱)")) && !text.contains(Regex("不喜欢|不爱|讨厌|以前|曾经"))
-            PersonalKind.DISLIKE -> text.contains(Regex(firstPerson+"(不喜欢|讨厌|不爱|不吃|不喝)"))
-            PersonalKind.HABIT -> text.contains(Regex(firstPerson+"(习惯|通常|每天|每晚|一般|总是)"))
+            PersonalKind.LIKE -> (text.contains(Regex(firstPerson+"(喜欢|爱吃|爱喝|最爱)")) || fragment && text.contains(Regex("^(喜欢|最爱|爱吃|爱喝)")) || english && text.contains(Regex("\\bI (?:really )?(?:love|like|enjoy|prefer)\\b",RegexOption.IGNORE_CASE))) && !text.contains(Regex("不喜欢|不爱|讨厌|以前|曾经|\\b(?:don't|do not|used to|no longer|not)\\b",RegexOption.IGNORE_CASE))
+            PersonalKind.DISLIKE -> text.contains(Regex(firstPerson+"(不喜欢|讨厌|不爱|不吃|不喝)")) || fragment && text.contains(Regex("^(不吃|不喝|不喜欢|讨厌)")) || english && text.contains(Regex("\\bI (?:don't|do not) (?:like|eat|drink)|\\bI (?:hate|dislike)\\b",RegexOption.IGNORE_CASE))
+            PersonalKind.HABIT -> text.contains(Regex(firstPerson+"(习惯|通常|每天|每晚|每周|一般|总是)")) || fragment && text.contains(Regex("^(每[天晚周]|通常|习惯|一般都|总是)")) || english && text.contains(Regex("\\bI (?:usually|always)\\b",RegexOption.IGNORE_CASE))
             PersonalKind.BOUNDARY -> text.contains(Regex("不要再|别再|我不想|我不愿意|不接受"))
-            PersonalKind.RELATIONSHIP -> text.contains(Regex("我们.{0,4}(朋友|同事|同学|夫妻|恋人|家人)|我是你.{0,3}(老婆|老公|同事|朋友)|只是朋友"))
-            PersonalKind.TRAIT -> text.contains(Regex(firstPerson+"(性格|慢热|内向|外向|急性子)"))
+            PersonalKind.RELATIONSHIP -> text.contains(Regex("(?:我们|咱俩).{0,4}(朋友|同事|同学|夫妻|恋人|家人|结婚)|我是你.{0,3}(老婆|老公|同事|朋友)|只是朋友"))
+            PersonalKind.TRAIT -> text.contains(Regex(firstPerson+"(性格|慢热|内向|外向|急性子)")) || fragment && text.contains(Regex("^(慢热|内向|外向)"))
             PersonalKind.EVENT -> text.length>=4
             PersonalKind.FACT -> text.startsWith("我")
             PersonalKind.VOICE -> false // voice samples come from actual ME messages/corrections, never model classifications
         }
     }
     fun classify(e:PersonalEvidence)=if(e.text.length>300)null else listOf(PersonalKind.DISLIKE,PersonalKind.LIKE,PersonalKind.HABIT,PersonalKind.BOUNDARY,PersonalKind.RELATIONSHIP,PersonalKind.TRAIT).firstOrNull { permitted(it,e.text) }
+    private fun clauses(source:String):List<Pair<String,String>> {
+        if(source.contains(Regex("他说|她说|你说|如果|假如|指令|忽略|system|prompt",RegexOption.IGNORE_CASE)))return emptyList()
+        val first=source.split(Regex("[，。！!?？；;\\n]" )).first().trim()
+        val own=first.startsWith("我") && listOf(PersonalKind.LIKE,PersonalKind.DISLIKE,PersonalKind.HABIT,PersonalKind.TRAIT).any { permitted(it,first) } && !Regex("^我(?:妈|爸|哥|姐|弟|妹|朋友|同事)").containsMatchIn(first)
+        return Regex("[^，。！!?？；;\\n]+[，。！!?？；;\\n]?").findAll(source).map { it.value.trim() }.filterNot { it.endsWith('?') || it.endsWith('？') }.map { it.trimEnd('，','。','！','!','；',';').trim() }.filter { it.isNotBlank() }.map { quote ->
+            quote to if(own && quote.startsWith("也"))"我"+quote.drop(1) else quote
+        }.toList()
+    }
+    fun permittedInSource(kind:PersonalKind,source:String,quote:String):Boolean {
+        if(!source.contains(quote))return false
+        return permitted(kind,quote) && permitted(kind,source) || clauses(source).any { (original,classified) -> original==quote && permitted(kind,classified) }
+    }
+    fun observations(e:PersonalEvidence):List<Pair<PersonalKind,String>> {
+        val split=clauses(e.text).filter { it.first.length in 2..300 }.mapNotNull { (original,classified) -> classify(e.copy(text=classified))?.let { it to original } }
+        return split.ifEmpty { classify(e)?.let { listOf(it to e.text) }.orEmpty() }
+    }
 }
 
 /** An interaction estimate, not a measurement of another person's feelings. No points for read/refresh/send alone. */

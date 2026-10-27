@@ -15,7 +15,7 @@ class WindowCapture(private val service:AccessibilityService) {
         // The legacy API returns display pixels; crop them to the same app-window origin
         // used by native records and vision coordinates.
         val legacyFrame=if(Build.VERSION.SDK_INT<34) service.windows.firstOrNull { it.id==windowId }?.let { Rect().apply { it.getBoundsInScreen(this) } } else null
-        if(Build.VERSION.SDK_INT<34 && (legacyFrame==null || legacyFrame.isEmpty)) { callback(CaptureImageResult.Failure(-1,"微信窗口范围暂不可用"));return }
+        if(Build.VERSION.SDK_INT<34 && (legacyFrame==null || legacyFrame.isEmpty)) { callback(CaptureImageResult.Failure(-1,"聊天应用窗口范围暂不可用"));return }
         val listener=object:AccessibilityService.TakeScreenshotCallback {
             override fun onSuccess(result:AccessibilityService.ScreenshotResult) {
                 val hardware=result.hardwareBuffer
@@ -25,7 +25,7 @@ class WindowCapture(private val service:AccessibilityService) {
                 else if(bitmap!=null) {
                     val frame=legacyFrame
                     if(frame==null)callback(CaptureImageResult.Success(bitmap))
-                    else if(frame.left<0 || frame.top<0 || frame.right>bitmap.width || frame.bottom>bitmap.height) { bitmap.recycle();callback(CaptureImageResult.Failure(-1,"微信窗口范围已变化")) }
+                    else if(frame.left<0 || frame.top<0 || frame.right>bitmap.width || frame.bottom>bitmap.height) { bitmap.recycle();callback(CaptureImageResult.Failure(-1,"聊天应用窗口范围已变化")) }
                     else {
                         val cropped=Bitmap.createBitmap(bitmap,frame.left,frame.top,frame.width(),frame.height())
                         if(cropped!==bitmap)bitmap.recycle()

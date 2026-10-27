@@ -196,8 +196,8 @@ class OverlayController(private val service:ChatCaptureService) {
                 })
             }
         },{ service.refresh() },{ service.captureNow() },{ anchor ->
-            panel?.toggleMenu(listOf("回复风格设置" to { editReplyStyle() },"悬浮窗设置" to { editOverlaySettings() },"模型设置" to { editModelSettings() }),capsuleMenuControls(),android.widget.LinearLayout(service).apply { orientation=android.widget.LinearLayout.VERTICAL;val palette=PanelPalette(service,useFrostedWindow);addView(com.loveadvisor.android.ui.ReplyRealitySwitch(service,graph.settings,true,palette.ink,palette.muted));addView(com.loveadvisor.android.ui.ReplyNaturalnessSwitch(service,graph.settings,true,palette.ink,palette.muted)) })
-        },{ hide() },{ graph.tracker.isCurrent(it) && ChatApps.supported(it.packageName) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() },frosted=useFrostedWindow,onEditingFocus={ panelEditingFocus(it) },onAnalyze={ showMessageAnalysis() })
+            panel?.toggleMenu(listOf("回复风格设置" to { editReplyStyle() },"复制单句回复" to { editPastedReply() },"悬浮窗设置" to { editOverlaySettings() },"模型设置" to { editModelSettings() }),capsuleMenuControls(),android.widget.LinearLayout(service).apply { orientation=android.widget.LinearLayout.VERTICAL;val palette=PanelPalette(service,useFrostedWindow);addView(com.loveadvisor.android.ui.ReplyRealitySwitch(service,graph.settings,true,palette.ink,palette.muted));addView(com.loveadvisor.android.ui.ReplyNaturalnessSwitch(service,graph.settings,true,palette.ink,palette.muted)) })
+        },{ hide() },{ graph.tracker.isCurrent(it) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() },frosted=useFrostedWindow,onEditingFocus={ panelEditingFocus(it) },onAnalyze={ showMessageAnalysis() })
         view.contentDescription="聊天候选面板"
         panel=view; panelParams=params(1,1,"LoveAdvisorPanel"); panelOnLeft=null
         view.setOnApplyWindowInsetsListener { _,insets ->
@@ -286,6 +286,11 @@ class OverlayController(private val service:ChatCaptureService) {
         }
         view.showPage("models",ModelSettingsView(service,graph,host,compact=true),editable=true,closed={ scope.close() })
     }
+    private fun editPastedReply() {
+        val view=panel ?: return
+        if(reading || filling || state.loading) { service.notifyUser("请等待当前操作完成");return }
+        view.showPage("pasted-reply",PastedReplyView(service,{ text -> view.closeStyleEditor();service.analyzePasted(text) },{ view.popPage() },{ field -> view.requestFieldFocus(field) }),editable=true)
+    }
     private fun editOverlaySettings() {
         val view=panel ?: return
         val previous=islandBounds
@@ -307,8 +312,8 @@ class OverlayController(private val service:ChatCaptureService) {
     private fun readSnapshot()=service.currentChatSnapshot?.takeIf { graph.tracker.currentToken!=null && graph.tracker.lastSnapshot==it }
     private fun showMessageAnalysis() {
         val view=panel ?: return
-        val snapshot=readSnapshot()
-        if(snapshot==null) { service.notifyUser("请先读取信息，才能判断分析");return }
+        val snapshot=readSnapshot()?.takeUnless { it.source==com.loveadvisor.core.model.CaptureSource.PASTE }
+        if(snapshot==null) { service.notifyUser("请先读取信息，再选句指定回复");return }
         if(reading || filling || state.loading) { service.notifyUser("请等待当前操作完成");return }
         val token=graph.tracker.currentToken ?: return
         val controller=analysisController ?: com.loveadvisor.android.analysis.MessageAnalysisController(graph).also { analysisController=it }
@@ -317,7 +322,7 @@ class OverlayController(private val service:ChatCaptureService) {
         val list=MessageAnalysisListView(service,snapshot,{ message ->
             if(!current()) { service.notifyUser("对话已变化，请重新读取");return@MessageAnalysisListView }
             view.closeStyleEditor();service.replyTo(com.loveadvisor.core.model.ReplyTarget(message.id))
-        },{ view.popPage() },{ if(current()) { view.closeStyleEditor();service.replyTo(null) } },{ message,callback ->
+        },{ view.popPage() },{ message,callback ->
             if(current())controller.analyze(snapshot,message.id,callback) else { callback(null,"请重新读取后判断");{} }
         })
         view.showPage("judgment-list",list,closed={ list.close();controller.cancel();analysisSession=null })

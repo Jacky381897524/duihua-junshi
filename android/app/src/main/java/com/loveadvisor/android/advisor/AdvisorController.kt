@@ -33,7 +33,7 @@ class AdvisorController(private val graph:AppGraph) {
         worker.execute {
             try {
                 val batch=Logs.within(log) {
-                    graph.personalMemory.observe(snapshot)
+                    if(snapshot.source!=CaptureSource.PASTE)graph.personalMemory.observe(snapshot)
                     val currentRows=ConversationTimePolicy.currentMessages(snapshot)
                     Logs.event(LogStep.TIME_CONTEXT,LogState.OK,metrics=mapOf(LogMetric.MESSAGE_COUNT to snapshot.messages.size.toLong(),LogMetric.EXPIRED_MESSAGE_COUNT to (snapshot.messages.size-currentRows.size).toLong(),LogMetric.ENABLED to if(replyTarget==null)1L else 0L))
                     val input=graph.inputFor(snapshot,goal,background,objectId,replyTarget)
@@ -46,7 +46,8 @@ class AdvisorController(private val graph:AppGraph) {
                         BatchCompletion.ACCEPTED -> {
                             Logs.event(LogStep.REPLY_RESULT,LogState.OK,operation=log,metrics=mapOf(LogMetric.RESULT_COUNT to batch.replies.size.toLong()));Logs.end(log,LogState.OK)
                             val currentIds=ConversationTimePolicy.currentMessages(snapshot).map { it.id }.toSet()
-                            if(replyTarget!=null && replyTarget.messageId !in currentIds)graph.coordinator.status("正在回复历史消息 · 按当前时间重提话题")
+                            if(snapshot.source==CaptureSource.PASTE)graph.coordinator.status(if(com.loveadvisor.core.capture.ChatApps.supported(snapshot.packageName))"单句分析 · 填入前核对当前聊天" else "单句分析 · 未确认对象，可复制回复；读取聊天后可验证填入")
+                            else if(replyTarget!=null && replyTarget.messageId !in currentIds)graph.coordinator.status("正在回复历史消息 · 按当前时间重提话题")
                             else if(currentIds.size<snapshot.messages.size)graph.coordinator.status("已排除${snapshot.messages.size-currentIds.size}条旧消息 · 按近24小时话题判断")
                             publish()
                             worker.execute {

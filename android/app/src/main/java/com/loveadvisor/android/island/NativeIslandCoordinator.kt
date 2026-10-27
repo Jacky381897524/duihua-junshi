@@ -46,7 +46,7 @@ class NativeIslandCoordinator(private val service:ChatCaptureService,private val
                 !settings.nativeIslandEnabled -> "原生岛已关闭"
                 !value.vivo -> "当前设备不支持 vivo 原生岛，使用悬浮球"
                 !value.notificationsEnabled -> "通知权限或通道未开启，使用悬浮球"
-                else -> "等待微信、QQ或抖音前台；其他界面不显示入口"
+                else -> "等待已支持的聊天应用前台；其他界面不显示入口"
             }
             if(!value.notificationsEnabled && settings.nativeIslandConfirmedBuild!=null) graph.settings.update { it.copy(nativeIslandConfirmedBuild=null) }
             return

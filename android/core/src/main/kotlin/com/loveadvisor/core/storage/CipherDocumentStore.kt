@@ -7,7 +7,9 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.io.FileOutputStream
 class CipherDocumentStore(private val directory:File,private val cipherFactory:()->Cipher={ Cipher.getInstance("AES/GCM/NoPadding") },private val limits:Map<String,Int> = emptyMap(),private val key:()->SecretKey) {
-    private fun limit(name:String)=(limits[name] ?: (3*1024*1024)).also { require(it in 1..32*1024*1024) }
+    private fun limit(name:String)=(limits[name] ?: (if(name.startsWith("pm-"))limits["pm-*"] else null) ?: (3*1024*1024)).also { require(it in 1..32*1024*1024) }
+    @Synchronized fun remove(name:String) { for(suffix in listOf(".enc",".pending")) { val file=path(name,suffix);check(!file.exists() || file.delete()) { "无法删除本地资料" } } }
+    @Synchronized fun names():Set<String> = directory.listFiles().orEmpty().filter { it.isFile && it.name.endsWith(".enc") }.map { it.name.removeSuffix(".enc") }.filter { Regex("[a-z0-9_-]{1,40}").matches(it) }.toSet()
     private fun path(name:String,suffix:String):File {
         require(Regex("[a-z0-9_-]{1,40}").matches(name)) { "本地文档名无效" }
         return File(directory,name+suffix)

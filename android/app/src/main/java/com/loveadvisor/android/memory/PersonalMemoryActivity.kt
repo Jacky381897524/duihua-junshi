@@ -18,12 +18,21 @@ import java.util.UUID
 class PersonalMemoryActivity:BaseActivity() {
     private val repository get()=graph.personalMemory.repository
     private var selected:String?=null
+    private var shownData=PersonalData()
+    private var backCallback:android.window.OnBackInvokedCallback?=null
+    private var resumedOnce=false
     private var limit=40
     private var importField:EditText?=null
-    override fun onCreate(savedInstanceState:Bundle?) { super.onCreate(savedInstanceState);reload() }
+    override fun onCreate(savedInstanceState:Bundle?) { super.onCreate(savedInstanceState);selected=savedInstanceState?.getString("selected-contact");reload()
+        if(android.os.Build.VERSION.SDK_INT>=33) { val callback=android.window.OnBackInvokedCallback { backOneLevel() };backCallback=callback;onBackInvokedDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,callback) } }
+    override fun onResume() { super.onResume();if(resumedOnce)reload() else resumedOnce=true }
+    private fun backOneLevel() { if(selected!=null) { selected=null;limit=40;reload() } else finish() }
+    @Deprecated("Legacy back support") override fun onBackPressed() { backOneLevel() }
+    override fun onSaveInstanceState(out:Bundle) { out.putString("selected-contact",selected);super.onSaveInstanceState(out) }
+    override fun onDestroy() { if(android.os.Build.VERSION.SDK_INT>=33)backCallback?.let { onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it) };super.onDestroy() }
     private fun reload() {
         page("真人感与记忆","正在读取本地资料…")
-        work("memory",{ repository.state() },{ state -> if(selected==null)overview(state) else details(state,selected!!) })
+        work("memory",{ repository.state() },{ state -> shownData=state.data;if(selected==null)overview(state) else details(state,selected!!) })
     }
     private fun date(at:Long?)=if(at==null || at<=0)"时间未知" else SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.CHINA).format(Date(at))
     private fun title(contact:PersonalContact)=contact.nickname+(if(contact.groupRoom)" · 群聊" else "")+contact.group?.takeUnless { contact.groupRoom }?.let { " · 群：$it" }.orEmpty()+" · "+ChatApps.label(contact.platform)
@@ -84,24 +93,25 @@ class PersonalMemoryActivity:BaseActivity() {
             val card=ViewStyles.card(this)
             val source=s.data.evidence.find { it.id==item.sourceId }
             card.addView(ViewStyles.text(this,"${kind(item.kind)} · ${when(item.status) { EvidenceStatus.CONFIRMED->"你已确认";EvidenceStatus.TENTATIVE->"待确认观察";else->"原话陈述" }}",12f,ViewStyles.MUTED))
-            card.addView(ViewStyles.text(this,item.text,15f))
+            card.addView(ViewStyles.text(this,item.interpretation?.let { "关系观察：$it（待确认）\n原话：${item.text}" } ?: item.text,15f))
             card.addView(ViewStyles.text(this,source?.let { "原文时间：${it.time?.label ?: "未显示"} · ${it.time?.epochMillis?.let(::date) ?: "时间未确定"}\n首次读取：${date(it.readAt)}" } ?: "手动资料 · ${date(item.updatedAt)}",11f,ViewStyles.MUTED))
             card.addView(ViewStyles.button(this,"查看来源 / 编辑") {
                 val panel=ViewStyles.column(this,14)
-                panel.addView(ViewStyles.text(this,"原始证据：${source?.text ?: "手动添加"}",13f,ViewStyles.MUTED))
+                val origins=(listOfNotNull(source)+item.supportingSourceIds.orEmpty().mapNotNull { key -> s.data.evidence.find { it.id==key } }).distinctBy { it.id }
+                panel.addView(ViewStyles.text(this,"原始证据：\n"+origins.joinToString("\n\n") { e -> "${if(e.speaker==com.loveadvisor.core.model.Speaker.ME)"我" else s.data.contacts.find { it.id==e.ownerId }?.nickname ?: "对方"}：${e.text}" }.ifBlank { "手动添加" },13f,ViewStyles.MUTED))
                 val field=ViewStyles.field(this,"确认后记为你的修正",item.text,true);panel.addView(field)
                 AlertDialog.Builder(this).setTitle("${kind(item.kind)} · 纠正资料").setView(panel).setNegativeButton("取消",null).setPositiveButton("确认保存") { _,_->perform { repository.edit(item,field.text.toString()) } }.setNeutralButton("删除") { _,_->perform(LogStep.MEMORY_DELETE) { repository.deleteMemory(item.id) } }.show()
             });body.addView(card)
         }
         if(items.size>limit)body.addView(ViewStyles.button(this,"再显示40条资料") { limit+=40;details(s,id) })
-        val evidence=s.data.evidence.filter { it.ownerId==id }
-        body.addView(ViewStyles.button(this,"查看已读取原话 · ${evidence.size}条") { evidenceDialog(evidence,0) })
+        val evidence=PersonalConversation.evidence(s.data,id)
+        body.addView(ViewStyles.button(this,"查看双方已读取原话 · ${evidence.size}条") { evidenceDialog(evidence,0) })
         if(self && s.data.corrections.isNotEmpty())body.addView(ViewStyles.button(this,"查看我确认的候选修改") { showText("实际修改",s.data.corrections.takeLast(50).joinToString("\n\n") { "${date(it.at)}\n原候选：${it.original}\n我改成：${it.actual}" }) })
         body.addView(ViewStyles.button(this,"清除此处记忆与原话") { confirm("删除资料","删除该对象（本人页则为本人）的已读原话、资料、相关互动与修正。保留昵称入口；可以撤销。") { perform(LogStep.MEMORY_DELETE) { repository.forget(id) } } })
     }
     private fun kind(value:PersonalKind)=when(value) { PersonalKind.LIKE->"喜好";PersonalKind.DISLIKE->"不喜欢";PersonalKind.HABIT->"习惯";PersonalKind.TRAIT->"性格观察";PersonalKind.BOUNDARY->"边界";PersonalKind.RELATIONSHIP->"关系依据";PersonalKind.EVENT->"事件";PersonalKind.FACT->"事实陈述";PersonalKind.VOICE->"口吻" }
     private fun evidenceDialog(rows:List<PersonalEvidence>,offset:Int) {
-        val scroll=ScrollView(this);scroll.addView(ViewStyles.text(this,rows.asReversed().drop(offset).take(30).joinToString("\n\n") { "${it.time?.label ?: "消息时间未显示"} · 读取${date(it.readAt)}\n${it.text}" }.ifBlank { "暂无原话" },14f))
+        val scroll=ScrollView(this);scroll.addView(ViewStyles.text(this,rows.asReversed().drop(offset).take(30).joinToString("\n\n") { "${it.time?.label ?: "消息时间未显示"} · 读取${date(it.readAt)}\n${if(it.speaker==com.loveadvisor.core.model.Speaker.ME)"我" else shownData.contacts.find { c -> c.id==it.ownerId }?.nickname ?: "对方"}：${it.text}" }.ifBlank { "暂无原话" },14f))
         val dialog=AlertDialog.Builder(this).setTitle("已读原话 ${offset+1}–${minOf(offset+30,rows.size)}").setView(scroll).setNegativeButton("关闭",null)
         if(offset+30<rows.size)dialog.setPositiveButton("更早30条") { _,_->evidenceDialog(rows,offset+30) }
         dialog.show()

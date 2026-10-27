@@ -4,6 +4,13 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun socialScopeAndSelfNamesSurviveRoundTripWithoutChangingModeSwitches() {
+        val saved=SettingsData(additionalChatApps=mapOf("org.example.chat" to "其他聊天"),socialSelfNames=mapOf("com.discord" to "我的名字"),realisticRepliesEnabled=false,naturalRepliesEnabled=true)
+        val loaded=AppSettings.decode(Gson().toJson(saved))
+        assertEquals(saved.additionalChatApps,loaded.additionalChatApps);assertEquals(saved.socialSelfNames,loaded.socialSelfNames)
+        assertFalse(loaded.realisticRepliesEnabled);assertTrue(loaded.naturalRepliesEnabled)
+        assertTrue(AppSettings.decode("{}").additionalChatApps.isEmpty());assertTrue(AppSettings.decode("{}").socialSelfNames.isEmpty())
+    }
     @Test fun realityDefaultsOnAndSavedOffSurvivesUpgrade() {
         fun real(raw:String)=Gson().toJsonTree(AppSettings.decode(raw)).asJsonObject["realisticRepliesEnabled"]?.asBoolean
         assertEquals(true,real("{}"))

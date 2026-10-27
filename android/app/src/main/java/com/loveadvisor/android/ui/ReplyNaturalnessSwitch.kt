@@ -14,13 +14,12 @@ class ReplyNaturalnessSwitch(context:Context,private val settings:AppSettings,co
     private var updating=false
     private var unsubscribe:(()->Unit)?=null
     private val toggle=Switch(context).apply {
-        text="去AI味";textSize=if(compact)14f else 16f;setTextColor(ink)
+        text=android.text.SpannableString("去AI味（减少生硬感）").apply { setSpan(android.text.style.RelativeSizeSpan(.68f),4,length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);setSpan(android.text.style.ForegroundColorSpan(muted),4,length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) };textSize=if(compact)14f else 16f;setTextColor(ink)
         minHeight=ViewStyles.dp(context,44f);setPadding(0,ViewStyles.dp(context,4f),0,ViewStyles.dp(context,4f))
     }
     init {
         orientation=VERTICAL
         addView(toggle,LayoutParams(-1,-2))
-        addView(ViewStyles.text(context,if(compact)"真人感开启时优先使用真人感" else "默认关闭。真人感关闭时可单独使用，两个开关都关则恢复原版规则。",if(compact)11f else 12f,muted),LayoutParams(-1,-2))
         renderSavedValue()
         toggle.setOnCheckedChangeListener { _,enabled ->
             if(!updating) {

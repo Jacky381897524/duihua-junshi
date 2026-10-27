@@ -1,7 +1,7 @@
 package com.loveadvisor.core.advisor
 import com.google.gson.Gson
 object UnifiedPrompt {
-    fun systemFor(input:AdvisorInput)=if(input.realisticRepliesEnabled)system.replace("单聊六种不同策略，群聊允许策略重复","单聊群聊均允许策略重复")+"\n"+RealityReplyPolicy.instruction else systemFor(input.naturalRepliesEnabled)
+    fun systemFor(input:AdvisorInput)=(if(input.realisticRepliesEnabled)system.replace("单聊六种不同策略，群聊允许策略重复","单聊群聊均允许策略重复")+"\n"+RealityReplyPolicy.instruction else systemFor(input.naturalRepliesEnabled))+"\n"+BilingualPolicy.instruction
     fun systemFor(naturalRepliesEnabled:Boolean)=if(naturalRepliesEnabled)system.replace("单聊六种不同策略，群聊允许策略重复","单聊群聊均允许策略重复")+"\n"+NaturalReplyPolicy.instruction else system
     val system = ConversationTimePolicy.instruction+"\n"+ConversationTurn.instruction+"\n"+"""
         你是统一聊天助手，融合聊天副驾、狗头军师和恋爱大师的能力。不存在模式选择。
@@ -24,7 +24,7 @@ object UnifiedPrompt {
     private fun dataCurrent(input:AdvisorInput,analysis:AdvisorAnalysis?,previous:List<String>):String = Gson().toJson(mapOf(
         "expressionMode" to RealityReplyPolicy.mode(input.realisticRepliesEnabled,input.naturalRepliesEnabled).name,"personaContext" to input.personalContext.takeIf { input.realisticRepliesEnabled },
         "task" to if(analysis==null) "分析当前对话并生成六条候选" else "在共同分析基础上刷新六条不同的新候选，避免重复历史正文",
-        "conversationType" to input.snapshot.identity?.kind?.name,
+        "conversationType" to input.snapshot.identity?.kind?.name,"replyLanguage" to BilingualPolicy.language(input),
         "messages" to boundedMessages(input.snapshot.messages),
         "userGoal" to input.goal.take(1000),"backgroundData" to input.background.take(6000),
         "knowledgeData" to input.knowledge,"replyStyle" to input.replyStyle.orEmpty().take(1500),"responsePolicy" to ResponsePolicy.dataFor(input.naturalExpression),"commonAnalysis" to analysis,"previousReplies" to previous.takeLast(18)

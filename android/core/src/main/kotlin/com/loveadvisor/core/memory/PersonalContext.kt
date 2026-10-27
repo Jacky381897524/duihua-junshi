@@ -6,7 +6,7 @@ import com.google.gson.Gson
 
 data class VoiceHabits(val sampleCount:Int=0,val medianLength:Int=0,val punctuationRatio:Double=0.0,val commonEndings:List<String> = emptyList())
 data class PersonalContext(val contacts:List<PersonalContact> = emptyList(),val memories:List<ContextMemory> = emptyList(),val ownExamples:List<String> = emptyList(),val corrections:List<VoiceCorrection> = emptyList(),val interaction:List<ContextTrend> = emptyList(),val ownHabits:VoiceHabits=VoiceHabits())
-data class ContextMemory(val owner:String,val category:PersonalKind,val original:String,val status:EvidenceStatus,val time:MessageTime?,val firstReadAt:Long?)
+data class ContextMemory(val owner:String,val category:PersonalKind,val original:String,val status:EvidenceStatus,val time:MessageTime?,val firstReadAt:Long?,val interpretation:String?=null)
 data class ContextTrend(val contactId:String,val estimate:Double,val evidenceCount:Int,val lastEvidenceAt:Long?)
 
 /** Local retrieval: current raw messages stay in their own field and are never replaced by remembered prose. */
@@ -33,7 +33,7 @@ object PersonalContextBuilder {
                 }==true || m.kind==PersonalKind.EVENT && m.sourceId==null && now-m.updatedAt<=24*3600_000L && relevance(m.text)>0)
         }.sortedWith(compareByDescending<PersonalMemory> { it.locked }.thenByDescending { relevance(it.text)+(if(it.kind in setOf(PersonalKind.BOUNDARY,PersonalKind.DISLIKE))2 else 0) }.thenByDescending { it.updatedAt }).take(14).map { m ->
             val evidence=sources[m.sourceId]
-            ContextMemory(m.ownerId,m.kind,m.text.take(220),m.status,evidence?.time,evidence?.readAt ?: m.updatedAt)
+            ContextMemory(m.ownerId,m.kind,m.text.take(220),m.status,evidence?.time,evidence?.readAt ?: m.updatedAt,m.interpretation)
         }
         // Actual examples stay within this contact; the fallback carries only global language statistics.
         val own=d.evidence.filter { it.ownerId==PersonalIdentity.SELF && it.id !in d.blocked && it.text.length in 2..160 }

@@ -49,13 +49,13 @@ class ReplyFiller(private val service:ChatCaptureService) {
         }
         fun verify(attempt:Int) {
             main.postDelayed({ read { observed ->
-                if(observed?.editable?.text==text) done(true,"已填入微信草稿，请自行发送")
+                if(observed?.editable?.text==text) done(true,"已填入聊天草稿，请自行发送")
                 else if(attempt<3) verify(attempt+1) else fallback("无法确认写入结果，请核对草稿")
             } },if(attempt==0)120L else 180L)
         }
         fun write(expectedDraft:String) {
             read freshRead@{ fresh ->
-                if(fresh==null) { fallback("微信未提供可操作的聊天输入框");return@freshRead }
+                if(fresh==null) { fallback("当前页面未提供可操作的聊天输入框");return@freshRead }
                 if(fresh.editable.text.orEmpty()!=expectedDraft) { done(false,"草稿已变化，已保留原稿，请重新选择回复");return@freshRead }
                 action(fresh,AccessibilityNodeInfo.ACTION_CLICK) { action(fresh,AccessibilityNodeInfo.ACTION_FOCUS) {
                     // IME appears asynchronously. Wait, reread the target, then write.
@@ -89,14 +89,14 @@ class ReplyFiller(private val service:ChatCaptureService) {
             if(first==null) {
                 service.fillDiagnostic("原生输入框不可用，尝试系统输入连接")
                 service.fillStage("native-unavailable")
-                val confirm=onConfirm?.let { present -> { draft:String,write:()->Unit -> present(draft,write,{ done(false,"已保留微信原稿",cancelled=true) }) } }
+                val confirm=onConfirm?.let { present -> { draft:String,write:()->Unit -> present(draft,write,{ done(false,"已保留聊天原稿",cancelled=true) }) } }
                 ImeReplyFiller(service).fill(token,text,confirm,{ active() }) { success,message -> done(success,message) }
                 return@read
             }
             val draft=first.editable.text.orEmpty()
             if(draft.isNotBlank() && draft!=text) {
                 if(onConfirm==null) fallback("输入框已有草稿，未覆盖")
-                else onConfirm(draft,{ if(!finished.get())write(draft) },{ done(false,"已保留微信原稿",cancelled=true) })
+                else onConfirm(draft,{ if(!finished.get())write(draft) },{ done(false,"已保留聊天原稿",cancelled=true) })
             } else write(draft)
         }
         return { if(Looper.myLooper()==Looper.getMainLooper())done(false,"已取消填入，保留原稿",cancelled=true) else main.post { done(false,"已取消填入，保留原稿",cancelled=true) } }

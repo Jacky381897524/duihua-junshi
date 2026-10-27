@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.6 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.7 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,14 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.7", "多平台、双语候选与对象记忆升级", listOf(
+                "温暖承接、具体欣赏、幽默接梗与互惠平衡，多份相关知识共同参与；保留两个表达开关。",
+                "外语候选同时显示中文释义，复制和填入只有外语正文；建议用中文。",
+                "扩展社交应用通用识别通道，可添加其他已安装应用。平台和新系统布局仍需真机验证。",
+                "菜单增加复制单句回复，无需截图；未确认聊天的单句候选可复制，已确认聊天填入前继续校验。",
+                "对象资料显示双方原话，返回先回全部对象；逐对象加密存储和旧版迁移，自动整理喜好、习惯及关系依据。",
+                "选句指定回复、精简菜单开关说明、胶囊每次增减1%，移除主页完整咨询入口。"
+            )),
             Release("V1.6", "真人感 · 本人与对象的持久记忆", listOf(
                 "真人感默认开启，去AI味默认关闭；同时开启时真人感优先，原开关保留。",
                 "手动读取或确认导入后增量整理本人原话、对象喜好、习惯、边界及关系依据；按平台和群成员隔离，支持来源检查、纠正、删除和撤销。",

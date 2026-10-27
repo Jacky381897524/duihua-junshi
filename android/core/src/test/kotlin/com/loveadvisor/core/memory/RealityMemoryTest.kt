@@ -8,10 +8,57 @@ import java.time.Instant
 import java.time.ZoneId
 
 class RealityMemoryTest {
+    @Test fun oldClassifiedRawEvidenceIsReorganizedOnceWithoutResurrectingDeletedSources() {
+        val disk=Disk();val first=RealityMemoryRepository(disk);val s=snapshot(text="每周六都会去跑步")
+        first.ingest(s,now);val state=first.state();val json=com.google.gson.JsonParser.parseString(Gson().toJson(state.copy(data=state.data.copy(memories=emptyList(),classified=state.data.evidence.map { it.id }.toSet())))).asJsonObject
+        json.remove("learningPolicy");disk.json=json.toString()
+        val reopened=RealityMemoryRepository(disk);reopened.ingest(s,now+1)
+        assertTrue(reopened.state().data.memories.any { it.kind==PersonalKind.HABIT })
+        assertFalse(reopened.pending().evidence.isEmpty())
+        val pending=reopened.pending();reopened.apply(pending,emptyList(),now+2);val revision=reopened.state().revision
+        reopened.ingest(s,now+3);assertEquals(revision,reopened.state().revision)
+        val blocked=json.deepCopy();blocked.getAsJsonObject("data").add("blocked",Gson().toJsonTree(state.data.evidence.map { it.id }.toSet()));disk.json=blocked.toString()
+        val deleted=RealityMemoryRepository(disk);deleted.ingest(s,now+4)
+        assertTrue(deleted.state().data.memories.isEmpty());assertTrue(deleted.pending().evidence.isEmpty())
+    }
+    @Test fun explicitNegativeRelationshipAndConfirmedCorrectionsBeatModelGuesses() {
+        val c=PersonalContact("a","com.tencent.mm","甲")
+        val denied=PersonalMemory("n","a",PersonalKind.RELATIONSHIP,"我们不是恋人",null)
+        assertNotEquals("可能是伴侣（待确认）",PersonalRelations.context(c,listOf(denied)).relationship)
+        val confirmed=PersonalMemory("m","a",PersonalKind.RELATIONSHIP,"同事",null,EvidenceStatus.CONFIRMED,10,true)
+        val guess=PersonalMemory("g","a",PersonalKind.RELATIONSHIP,"等你下班",null,EvidenceStatus.TENTATIVE,20,interpretation="伴侣")
+        assertEquals("同事",PersonalRelations.context(c,listOf(confirmed,guess)).relationship)
+    }
+    @Test fun localLearningFindsSeveralExplicitFactsBeforeAnEndingQuestion() {
+        val repo=RealityMemoryRepository(Disk());repo.ingest(snapshot(text="我喜欢咖啡，也每天跑步，你呢？"),now)
+        val memories=repo.state().data.memories
+        assertTrue(memories.any { it.kind==PersonalKind.LIKE && "喜欢咖啡" in it.text })
+        assertTrue(memories.any { it.kind==PersonalKind.HABIT && "每天跑步" in it.text })
+        assertFalse(memories.any { "你呢" in it.text })
+    }
+    @Test fun groundedRelationshipNeedsBothSidesOfSameObjectAndCannotOverrideUserConfirmation() {
+        val repo=RealityMemoryRepository(Disk());val s=snapshot(text="我这边刚忙完").let { it.copy(messages=it.messages+it.messages.first().copy(id="mine",speaker=Speaker.ME,text="等你下班一起回家")) }
+        repo.ingest(s,now);val slice=repo.pending();val source=slice.evidence.first();val contact=repo.contactId(s)!!
+        repo.apply(slice,listOf(PersonalProposal(source.id,PersonalKind.RELATIONSHIP,source.text,"熟人",slice.evidence.map { it.id })),now)
+        assertEquals("可能是熟人（待确认）",PersonalRelations.context(repo.state().data.contacts.single(),repo.state().data.memories).relationship)
+        repo.relationship(contact,"朋友")
+        assertEquals("朋友",PersonalRelations.context(repo.state().data.contacts.single(),repo.state().data.memories).relationship)
+    }
+    @Test fun relationshipWithMissingOrOtherObjectSourceIsDiscarded() {
+        val repo=RealityMemoryRepository(Disk());repo.ingest(snapshot(text="我这边刚忙完"),now);val slice=repo.pending();val e=slice.evidence.single()
+        repo.apply(slice,listOf(PersonalProposal(e.id,PersonalKind.RELATIONSHIP,e.text,"伴侣",listOf("nonexistent"))),now)
+        assertFalse(repo.state().data.memories.any { it.kind==PersonalKind.RELATIONSHIP })
+    }
+    @Test fun questionsAndThirdPersonChainedStatementsNeverBecomePreferences() {
+        for(text in listOf("我喜欢咖啡吗？","如果我喜欢咖啡","我妈喜欢咖啡，也每天跑步")) {
+            val repo=RealityMemoryRepository(Disk());repo.ingest(snapshot(text=text),now)
+            assertFalse(text,repo.state().data.memories.any { it.kind in setOf(PersonalKind.LIKE,PersonalKind.HABIT) })
+        }
+    }
     private val now=Instant.parse("2026-10-24T10:00:00Z").toEpochMilli()
     private class Disk:RealityPersistence {
         var json:String?=null;var fail=false
-        override fun load()=json?.let { Gson().fromJson(it,RealityMemoryState::class.java) }
+        override fun load()=json?.let(RealityMemoryCodec::decode)
         override fun save(state:RealityMemoryState) { if(fail)throw IllegalStateException("disk");json=Gson().toJson(state) }
     }
     private fun snapshot(name:String="小林",text:String="我喜欢咖啡",speaker:Speaker=Speaker.OTHER,platform:String="com.tencent.mm",at:Long?=now,kind:ChatKind=ChatKind.DIRECT,sender:String?=null)=ChatSnapshot(platform,4,ConversationIdentity("volatile",name,kind,true),listOf(ChatMessage("volatile",speaker,sender,text,time=at?.let { MessageTime("今天 18:00",it) })),readAtMillis=now)

@@ -29,6 +29,7 @@ class ReplyCardView(context:Context,index:Int,plan:ReplyPlan,onCopy:()->Unit,onF
         addView(palette.text("${index+1} · ${plan.strategy.label}${if(romance) " · 恋爱大师" else ""}${plan.score?.let { " · $scoreLabel ${(it*100).toInt()}" } ?: ""}",if(compact) 11f else 12f,palette.blue,true).apply { layoutParams=LayoutParams(-1,-2).apply { bottomMargin=ViewStyles.dp(context,3f) } })
         plan.topic?.let { addView(palette.text("话题：$it · ${plan.targetLabel ?: "成员（昵称未知）"}",11f,palette.muted)) }
         addView(palette.text(plan.text,if(compact) 13f else 18f,bold=false).apply { setTextIsSelectable(true); minimumHeight=0; layoutParams=LayoutParams(-1,-2) })
+        plan.translationZh?.takeIf { it.isNotBlank() }?.let { addView(palette.text(it,if(compact)11f else 14f,palette.muted).apply { contentDescription="中文释义：$it";setTextIsSelectable(true);setPadding(0,ViewStyles.dp(context,4f),0,0) }) }
         val actions=ViewStyles.row(context).apply {
             gravity=Gravity.TOP
             layoutParams=LayoutParams(-1,-2).apply { topMargin=ViewStyles.dp(context,if(compact) 4f else 6f) }

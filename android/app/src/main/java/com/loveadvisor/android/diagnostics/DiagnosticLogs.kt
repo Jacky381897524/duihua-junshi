@@ -63,7 +63,7 @@ object DiagnosticLogs {
     fun begin(step:LogStep,parent:LogOperation?=context.get(),metrics:Map<LogMetric,Long> = emptyMap()):LogOperation?=journal?.begin(step,parent,metrics)
     fun end(operation:LogOperation?,state:LogState,reason:LogReason=LogReason.NONE,fault:LogFault?=null,metrics:Map<LogMetric,Long> = emptyMap()) { journal?.end(operation,state,reason,fault,metrics) }
     fun failed(step:LogStep,error:Exception,operation:LogOperation?=context.get()) { val fault=LogFault.capture(error);event(step,LogState.FAIL,fault.reason,operation,fault=fault) }
-    fun text(limit:Int=200)=(journal?.text(limit) ?: "诊断日志尚未初始化，不能据此判断没有故障。")+"\n"+fatalSummary+"\n启动步骤 COUNT 编号："+com.loveadvisor.core.startup.StartupStage.entries.joinToString { "${it.ordinal}=${it.name}" }+"\n平台 PLATFORM：0=未知，1=微信，2=QQ，3=抖音；CHAT_KIND：1=单聊，2=群聊。候选请求 REPLY_REQUEST 的 ENABLED：2=真人感（优先），1=去AI味，0=原版规则；MEMORY_READ的COUNT为新增去重消息数，MEMORY_RETRIEVE的COUNT为本次检索资料数；后台记忆分类有25秒总时限，前台生成优先。。"
+    fun text(limit:Int=200)=(journal?.text(limit) ?: "诊断日志尚未初始化，不能据此判断没有故障。")+"\n"+fatalSummary+"\n启动步骤 COUNT 编号："+com.loveadvisor.core.startup.StartupStage.entries.joinToString { "${it.ordinal}=${it.name}" }+"\n平台 PLATFORM：0=未知，1=微信，2=QQ，3=抖音，4=其他已启用社交应用；CHAT_KIND：1=单聊，2=群聊。候选请求 REPLY_REQUEST 的 ENABLED：2=真人感（优先），1=去AI味，0=原版规则；PASTE_REPLY_TAP的COUNT为单句字数，不记录剪贴板正文；MEMORY_READ的ME_MESSAGE_COUNT/OTHER_MESSAGE_COUNT分别为本次双方消息数，COUNT为新增去重消息数，MEMORY_RETRIEVE的COUNT为本次检索资料数；后台记忆分类有25秒总时限，前台生成优先。。"
     fun flush() { journal?.flush() }
     fun step(id:String)=when {
         id.startsWith("test-")->LogStep.MODEL_TEST
@@ -98,8 +98,9 @@ object DiagnosticLogs {
         else->LogReason.UNEXPECTED
     }
     fun action(value:String)=when {
+        value in setOf("复制单句回复","开始分析","粘贴")->LogReason.UI_PASTE_REPLY
         value=="读取信息"->LogReason.UI_READ
-        value=="判断分析"->LogReason.UI_JUDGMENT
+        value=="判断分析" || value=="选句指定回复"->LogReason.UI_JUDGMENT
         value=="填入"->LogReason.UI_FILL
         value=="复制"->LogReason.UI_COPY
         value=="建议"->LogReason.UI_ADVICE
@@ -127,6 +128,8 @@ object DiagnosticLogs {
         "DiagnosticsActivity"->LogReason.PAGE_DIAGNOSTICS
         "PermissionsActivity"->LogReason.PAGE_PERMISSIONS
         "ConsultationActivity"->LogReason.PAGE_CONSULTATION
+        "pasted-reply"->LogReason.PAGE_PASTE_REPLY
+        "SocialAppsActivity"->LogReason.PAGE_SOCIAL_APPS
         "judgment-list"->LogReason.PAGE_JUDGMENT
         "model-picker","style-objects","style-chat-kind"->LogReason.PAGE_PICKER
         else->LogReason.PAGE_OTHER

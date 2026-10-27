@@ -18,6 +18,7 @@ class AppGraph private constructor(val context:Context) {
     val documents=AndroidDocumentStore(context)
     val cache=AppCache(context)
     val settings=AppSettings(documents)
+    init { settings.subscribe { ChatApps.configureAdditional(settings.load().additionalChatApps) } }
     val profiles=ProfileStore(documents)
     val memory=MemoryRepository(EncryptedMemoryPersistence(documents))
     val personalMemory=PersonalMemoryService(settings,documents)
@@ -62,12 +63,12 @@ class AppGraph private constructor(val context:Context) {
         val history=if(config.historyEnabled && target!=null) data.history.filter { it.objectId==target.id }.map { saved -> saved.messages.map { message -> if(message.observedAtMillis>0)message else message.copy(observedAtMillis=saved.createdAt) } } else emptyList()
         val extra=BackgroundBuilder.build(data.self,target,context,history,background)
         val query=KnowledgeQuery(scoped.messages.takeLast(80).joinToString("\n") { it.text },goal,data.notes)
-        val selected=if(ChatApps.supported(snapshot.packageName)) KnowledgeRouter().unified(query,knowledge.documents) else KnowledgeRouter().select(query,knowledge.documents)
-        return AdvisorInput(config.profile,scoped,goal,extra,selected,GroupReplyStyle.resolve(snapshot,settings.replyStyleCatalog(ChatKind.DIRECT),config.globalReplyStyle,settings.replyStyleCatalog(ChatKind.GROUP),config.globalGroupReplyStyle),replyTarget=replyTarget,naturalRepliesEnabled=config.naturalRepliesEnabled,realisticRepliesEnabled=config.realisticRepliesEnabled,personalContext=if(config.realisticRepliesEnabled)personalMemory.context(scoped,replyTarget) else null)
+        val selected=if(ChatApps.supported(snapshot.packageName) || snapshot.source==CaptureSource.PASTE) KnowledgeRouter().unified(query,knowledge.documents) else KnowledgeRouter().select(query,knowledge.documents)
+        return AdvisorInput(config.profile,scoped,goal,extra,selected,if(snapshot.source==CaptureSource.PASTE)config.globalReplyStyle else GroupReplyStyle.resolve(snapshot,settings.replyStyleCatalog(ChatKind.DIRECT),config.globalReplyStyle,settings.replyStyleCatalog(ChatKind.GROUP),config.globalGroupReplyStyle),replyTarget=replyTarget,naturalRepliesEnabled=config.naturalRepliesEnabled,realisticRepliesEnabled=config.realisticRepliesEnabled,personalContext=if(config.realisticRepliesEnabled && snapshot.source!=CaptureSource.PASTE)personalMemory.context(scoped,replyTarget) else null)
     }
     fun generate(input:AdvisorInput,common:AdvisorAnalysis?,previous:List<String>,cancel:Cancellation):AdvisorBatch {
         val config=settings.load()
-        if(ChatApps.supported(input.snapshot.packageName)) {
+        if(ChatApps.supported(input.snapshot.packageName) || input.snapshot.source==CaptureSource.PASTE) {
             return automaticAdvisor.generate(input,config.judgeProfile(),previous,cancel)
         }
         val enriched=if(config.jev.enabled && common==null) {

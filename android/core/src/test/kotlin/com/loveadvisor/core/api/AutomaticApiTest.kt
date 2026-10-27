@@ -5,6 +5,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AutomaticApiTest {
+    @Test fun bilingualGenerationAndRankingKeepOriginalAndTranslationPairedInTwoRequests() {
+        val texts=listOf("Sounds good, I'm in!","Coffee's always a yes.","What time works for you?","I could use a coffee break.","Let's try somewhere new.","A quick coffee sounds nice.")
+        val compact=com.google.gson.Gson().toJson(mapOf("replies" to texts.mapIndexed { i,t -> mapOf("strategy" to Strategy.entries[i].name,"text" to t,"translationZh" to "中文释义$i") }))
+        val answers=(0..5).associate { "candidate_$it" to mapOf("score" to it*.5) }+mapOf("true_intent" to mapOf("choice" to "casual_chat"),"danger_level" to mapOf("score" to 0),"best_action" to mapOf("choice" to "acknowledge"))
+        val wire=Wire { ApiResponse(200,com.google.gson.Gson().toJson(if(it.url.endsWith("decisions"))mapOf("answers" to answers) else mapOf("choices" to listOf(mapOf("message" to mapOf("content" to compact)))))) }
+        val snapshot=AdvisorFixtures.snapshot().copy(packageName="com.whatsapp",messages=listOf(com.loveadvisor.core.model.ChatMessage("en",com.loveadvisor.core.model.Speaker.OTHER,null,"Wanna grab coffee after work?")))
+        val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(AdvisorInput(ProviderPresets.OPENROUTER.reply("fake"),snapshot,realisticRepliesEnabled=true),JevProfile(apiKey="fake"),emptyList(),Cancellation())
+        assertEquals(2,wire.requests.size);assertEquals(texts.last(),batch.replies.first().text);assertEquals("中文释义5",batch.replies.first().translationZh)
+        assertTrue(batch.replies.all { it.text !in listOf(it.translationZh) && !it.text.contains("中文") })
+    }
     private class Wire(val handler:(ApiRequest)->ApiResponse):HttpTransport {
         val requests=mutableListOf<ApiRequest>()
         override fun execute(request:ApiRequest,cancel:Cancellation):ApiResponse { cancel.check(); requests.add(request); return handler(request) }

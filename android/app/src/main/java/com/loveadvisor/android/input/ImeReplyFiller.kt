@@ -41,7 +41,7 @@ class ImeReplyFiller(private val service:ChatCaptureService) {
         }
         fun draft(next:(InputMethod.AccessibilityInputConnection,String)->Unit) {
             val epoch=service.editorGeneration()
-            val c=connection() ?: run { fail("尚未连接微信聊天输入框，请点输入框后重试");return }
+            val c=connection() ?: run { fail("尚未连接当前聊天输入框，请点输入框后重试");return }
             boundEditor.compareAndSet(-1,epoch)
             if(!active() || epoch!=service.editorGeneration()) { done(false,"输入连接已变化，请重新选择回复");return }
             worker.execute {
@@ -49,14 +49,14 @@ class ImeReplyFiller(private val service:ChatCaptureService) {
                 main.post {
                     if(finished.get())return@post
                     if(!active()) { done(false,"聊天已变化，请重新读取");return@post }
-                    if(surrounding==null || !ImeFillPolicy.completeDraft(surrounding.text.toString(),surrounding.offset,surrounding.selectionStart,surrounding.selectionEnd))fail("微信未返回完整草稿，已保留原稿")
+                    if(surrounding==null || !ImeFillPolicy.completeDraft(surrounding.text.toString(),surrounding.offset,surrounding.selectionStart,surrounding.selectionEnd))fail("聊天未返回完整草稿，已保留原稿")
                     else next(c,surrounding.text.toString())
                 }
             }
         }
         fun verify(attempt:Int) {
             main.postDelayed({ if(!finished.get())draft { _,actual ->
-                if(actual==text)done(true,"已填入微信草稿，请自行发送")
+                if(actual==text)done(true,"已填入聊天草稿，请自行发送")
                 else if(attempt<3)verify(attempt+1) else fail("输入接口未确认写入，请核对草稿")
             } },if(attempt==0)80L else 180L)
         }
@@ -107,7 +107,7 @@ class ImeReplyFiller(private val service:ChatCaptureService) {
             draft { _,old ->
                 if(old==text)service.verifyVisualFill(token) { if(it && active())done(true,"聊天草稿已是这条回复") else done(false,"当前聊天无法确认，请重新读取") }
                 else if(old.isNotBlank()) {
-                    if(onConfirm==null)fail("微信已有草稿，未覆盖")
+                    if(onConfirm==null)fail("聊天已有草稿，未覆盖")
                     else service.verifyVisualFill(token) { verified ->
                         if(verified && active())onConfirm(old) { if(!finished.get())write(old) }
                         else done(false,"当前聊天无法确认，请重新读取")
