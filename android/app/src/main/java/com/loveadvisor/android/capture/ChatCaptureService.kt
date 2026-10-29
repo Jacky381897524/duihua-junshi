@@ -621,7 +621,8 @@ class ChatCaptureService:AccessibilityService() {
         val now=SystemClock.uptimeMillis();if(now-lastHeaderCheck<400)return
         lastHeaderCheck=now;headerCheckPending=true
         val pkg=foregroundPackage;val id=foregroundWindowId;val lease=navigation
-        foregroundWorker.execute {
+        // Do not queue node traversal ahead of the foreground hide/show metadata path.
+        nativeWorker.execute {
             val header=Logs.recover(LogStep.WINDOW_LOOKUP) { reader.readHeader(pkg) }
             val title=NativeReplyStyleTitle.read(header)
             main.post {
