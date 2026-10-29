@@ -8,9 +8,9 @@ import java.util.UUID
 class MemoryActivity:BaseActivity() {
     override fun onCreate(savedInstanceState:Bundle?) { super.onCreate(savedInstanceState); render() }
     private fun render() {
-        page("手工记忆与历史","此处保留旧版手工资料。V1.6按对象自动整理、口吻学习和互动趋势请进入真人感与记忆。")
+        page("手工记忆与历史","此处保留旧版手工资料。V1.6按对象自动整理、口吻学习和互动趋势请进入真实与记忆。")
         val state=graph.memory.state(); val data=graph.profiles.load()
-        body.addView(ViewStyles.button(this,"进入真人感与记忆") { open(PersonalMemoryActivity::class.java) })
+        body.addView(ViewStyles.button(this,"进入真实与记忆") { open(PersonalMemoryActivity::class.java) })
         body.addView(ViewStyles.switch(this,"保存关联对象的聊天历史",graph.settings.load().historyEnabled) { graph.settings.update { d -> d.copy(historyEnabled=it) } })
         body.addView(ViewStyles.text(this,"${state.items.size}/200 条记忆 · ${data.history.size} 段历史；每对象最多 20 个事件、5 个假设。",13f,ViewStyles.MUTED))
         body.addView(ViewStyles.button(this,"手动添加记忆") { edit(null) })

@@ -73,7 +73,7 @@ class MainActivity : BaseActivity() {
         body.addView(ViewStyles.button(this,"聊天应用适配") { open(com.loveadvisor.android.settings.SocialAppsActivity::class.java) })
         body.addView(ViewStyles.switch(this,"减少动效",config.reducedMotion) { enabled -> graph.settings.update { it.copy(reducedMotion=enabled) } })
         body.addView(ViewStyles.button(this,"融合知识库与我的笔记") { open(KnowledgeActivity::class.java) })
-        body.addView(ViewStyles.button(this,"真人感与记忆") { open(com.loveadvisor.android.memory.PersonalMemoryActivity::class.java) })
+        body.addView(ViewStyles.button(this,"真实与记忆") { open(com.loveadvisor.android.memory.PersonalMemoryActivity::class.java) })
         body.addView(ViewStyles.button(this,"关系资料、记忆与历史") { open(ProfilesActivity::class.java) })
         body.addView(ViewStyles.button(this,"逐轮模拟练习") { open(PracticeActivity::class.java) })
         body.addView(ViewStyles.button(this,"导入聊天 / 本地截图识别") { open(ImportActivity::class.java) })

@@ -200,7 +200,7 @@ class OverlayController(private val service:ChatCaptureService) {
                 })
             }
         },{ service.refresh() },{ service.captureNow() },{ anchor ->
-            panel?.toggleMenu(listOf("回复风格设置" to { editReplyStyle() },"复制单句回复" to { editPastedReply() },"悬浮窗设置" to { editOverlaySettings() },"模型设置" to { editModelSettings() }),capsuleMenuControls(),android.widget.LinearLayout(service).apply { orientation=android.widget.LinearLayout.VERTICAL;val palette=PanelPalette(service,useFrostedWindow);addView(com.loveadvisor.android.ui.ReplyRealitySwitch(service,graph.settings,true,palette.ink,palette.muted));addView(com.loveadvisor.android.ui.ReplyNaturalnessSwitch(service,graph.settings,true,palette.ink,palette.muted)) })
+            panel?.toggleMenu(listOf("回复风格设置" to { editReplyStyle() },"复制单句回复" to { editPastedReply() },"悬浮窗设置" to { editOverlaySettings() },"模型设置" to { editModelSettings() }),capsuleMenuControls(),com.loveadvisor.android.ui.ReplyModeSelector(service,graph.settings,true))
         },{ hide() },{ graph.tracker.isCurrent(it) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() },frosted=useFrostedWindow,onEditingFocus={ panelEditingFocus(it) },onAnalyze={ showMessageAnalysis() })
         view.contentDescription="聊天候选面板"
         panel=view; panelParams=params(1,1,"LoveAdvisorPanel"); panelOnLeft=null

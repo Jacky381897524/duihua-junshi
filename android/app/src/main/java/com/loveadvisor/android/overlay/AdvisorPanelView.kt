@@ -21,12 +21,14 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private val summary:TextView; private val status:TextView; private val scroll:ScrollView
     private val advice:TextView;private val level:TextView
     private val analysisRow:LinearLayout
+    private val statusRow=ViewStyles.row(context).apply { gravity=Gravity.CENTER_VERTICAL }
     private var shortActionLabels=false
+    private var headerInset=-1
     private val analyze:Button
     private var analysisAvailable=false
     private var readContextTitle:String?=null
     private var personalStatus=""
-    private val interaction=InteractionMeterView(context,palette,reduced) { invalidateHeight();onResize() }
+    private val interaction=InteractionMeterView(context,palette,reduced) { showInteractionDetails() }
     private var statusMessage="等待点击读取；聊天变化不会自动请求模型"
     val currentPageId get()=pages.currentId
     private val cards:LinearLayout; private val refresh:Button; private val read:Button; private val count:TextView
@@ -68,10 +70,11 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         read=palette.button("读取信息") { onRead() }.apply { contentDescription="读取信息";maxLines=2 }
         analysisRow.addView(read,LinearLayout.LayoutParams(dp(52),textRowHeight(28)).apply { leftMargin=dp(4) })
         listOf(analyze,read).forEach { it.textSize=10.5f;it.setPadding(dp(4),0,dp(4),0) }
-        column.addView(analysisRow,rowParams(-2,5))
-        column.addView(interaction,rowParams(-2,7))
+        column.addView(analysisRow,rowParams(-2,2))
         status=palette.text(statusMessage,11f,palette.muted).apply { maxLines=2 }
-        column.addView(status,rowParams(-2,10))
+        statusRow.addView(status,LinearLayout.LayoutParams(0,-2,1f))
+        statusRow.addView(interaction,LinearLayout.LayoutParams(dp(108),-2).apply { leftMargin=dp(4) })
+        column.addView(statusRow,rowParams(-2,7))
         val label=ViewStyles.row(context)
         advice=palette.text("建议：先读取当前对话",12f).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
         column.addView(advice,rowParams(-2,6))
@@ -123,6 +126,13 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     fun setAnalysisAvailable(value:Boolean) { analysisAvailable=value;updateButtons() }
     fun setReadContext(title:String?) { readContextTitle=title;renderStatus() }
     fun setInteraction(value:com.loveadvisor.core.memory.InteractionPresentation) { interaction.render(value);invalidateHeight() }
+    private fun showInteractionDetails() {
+        val page=ViewStyles.column(context)
+        page.addView(palette.text("好感度与互动依据",17f,bold=true))
+        page.addView(palette.text(interaction.description(),12f,palette.muted),LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(10);bottomMargin=dp(12) })
+        page.addView(palette.actionButton("返回候选面板") { popPage() })
+        showPage("interaction",page)
+    }
     fun setFilling(value:Boolean) { filling=value; updateButtons() }
     private fun renderStatus() { status.text=readContextTitle?.let { "已读：$it${personalStatus}\n$statusMessage" } ?: statusMessage;invalidateHeight() }
     fun fillResult(message:String) { statusMessage=message;renderStatus() }
@@ -237,6 +247,12 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             val lp=action.layoutParams as LinearLayout.LayoutParams
             lp.width=sizing.actionWidth;lp.height=sizing.actionHeight;lp.leftMargin=sizing.gap
         }
+        val inset=dp(if(resources.configuration.fontScale>1.3f)2 else 12)
+        if(headerInset!=inset) {
+            listOf(analyze,read).forEach { it.background=android.graphics.drawable.InsetDrawable(ViewStyles.shape(context,palette.card,12f,palette.border),0,inset,0,inset) }
+            headerInset=inset
+        }
+        (interaction.layoutParams as LinearLayout.LayoutParams).apply { width=2*sizing.actionWidth+sizing.gap;leftMargin=sizing.gap }
     }
     override fun onMeasure(widthMeasureSpec:Int,heightMeasureSpec:Int) {
         sizeHeader((MeasureSpec.getSize(widthMeasureSpec)-column.paddingLeft-column.paddingRight).coerceAtLeast(1))

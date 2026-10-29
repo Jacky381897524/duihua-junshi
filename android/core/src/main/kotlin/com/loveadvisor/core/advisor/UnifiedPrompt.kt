@@ -27,7 +27,7 @@ object UnifiedPrompt {
         "conversationType" to input.snapshot.identity?.kind?.name,"replyLanguage" to BilingualPolicy.language(input),
         "messages" to boundedMessages(input.snapshot.messages),
         "userGoal" to input.goal.take(1000),"backgroundData" to input.background.take(6000),
-        "knowledgeData" to input.knowledge,"replyStyle" to input.replyStyle.orEmpty().take(1500),"responsePolicy" to ResponsePolicy.dataFor(input.naturalExpression),"commonAnalysis" to analysis,"previousReplies" to previous.takeLast(18)
+        "knowledgeData" to input.knowledge,"replyStyle" to input.replyStyle.orEmpty().take(1500),"responsePolicy" to ResponsePolicy.dataFor(input.naturalExpression,input.realisticRepliesEnabled),"commonAnalysis" to analysis,"previousReplies" to previous.takeLast(18)
     )+ConversationTurn.data(input.snapshot,input.replyTarget))
     private fun boundedMessages(messages:List<com.loveadvisor.core.model.ChatMessage>):List<com.loveadvisor.core.model.ChatMessage> {
         var budget=24000

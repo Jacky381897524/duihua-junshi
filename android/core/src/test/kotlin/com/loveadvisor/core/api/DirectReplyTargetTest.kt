@@ -14,7 +14,7 @@ class DirectReplyTargetTest {
         ChatMessage("question",Speaker.OTHER,null,"然后呢"),
         ChatMessage("nickname",Speaker.OTHER,null,"小宝宝"),
         ChatMessage("latest",last,null,if(last==Speaker.ME)"我在听你说" else "嗯嗯")))
-    private class Wire(private val returnedTarget:String="question"):HttpTransport {
+    private class Wire(private val returnedTarget:String?="question"):HttpTransport {
         val requests=mutableListOf<ApiRequest>()
         override fun execute(request:ApiRequest,cancel:Cancellation):ApiResponse {
             requests.add(request)
@@ -25,11 +25,23 @@ class DirectReplyTargetTest {
             }
             val system=JsonParser.parseString(request.body).asJsonObject["messages"].asJsonArray[0].asJsonObject["content"].asString
             val value=if(system.contains("\"why\""))mapOf("why" to "接住选中的问题","whenToUse" to "对方继续追问时","caution" to "不编造事实","positive" to "顺着实际回答聊","ambiguous" to "给对方空间","rejection" to "尊重拒绝")
-                else mapOf("replies" to AdvisorFixtures.valid().replies.map { mapOf("strategy" to it.strategy.name,"text" to it.text,"targetMessageId" to returnedTarget) })
+                else mapOf("replies" to AdvisorFixtures.valid().replies.map { mapOf("strategy" to it.strategy.name,"text" to it.text,"targetMessageId" to (returnedTarget ?: JsonParser.parseString(JsonParser.parseString(request.body).asJsonObject["messages"].asJsonArray[1].asJsonObject["content"].asString).asJsonObject["targetMessageId"].asString)) })
             return ApiResponse(200,gson.toJson(mapOf("choices" to listOf(mapOf("message" to mapOf("content" to gson.toJson(value)))))))
         }
     }
     private fun data(request:ApiRequest)=JsonParser.parseString(JsonParser.parseString(request.body).asJsonObject["messages"].asJsonArray[1].asJsonObject["content"].asString).asJsonObject
+    @Test fun longSelectedIdsSurviveDraftAliasesRankingAndPublicationWithOnlyTwoRequests() {
+        val target="message-12345678-1234-1234-1234-123456789abc"
+        val sample=snapshot().copy(messages=listOf(ChatMessage(target,Speaker.OTHER,null,"然后呢")))
+        val wire=Wire(null)
+        val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(AdvisorInput(ProviderPresets.OPENROUTER.reply("fake"),sample,replyTarget=ReplyTarget(target)),JevProfile(apiKey="fake"),emptyList(),Cancellation())
+        assertEquals(2,wire.requests.size);assertTrue(batch.replies.all { it.targetMessageId==target })
+        val draft=data(wire.requests.first());assertNotEquals(target,draft["targetMessageId"].asString)
+        val state=JsonParser.parseString(wire.requests.last().body).asJsonObject["state"].asJsonObject
+        val alias=state["targetMessageId"].asString
+        assertEquals(alias,state["chat"].asJsonObject["messages"].asJsonArray[0].asJsonObject["id"].asString)
+        assertTrue(state["candidates"].asJsonArray.all { it.asJsonObject["targetMessageId"].asString==alias })
+    }
     @Test fun directSelectionSurvivesGenerationRankingAndDetailsEvenWhenSomeoneSpokeLater() {
         for(last in listOf(Speaker.ME,Speaker.OTHER)) {
             val wire=Wire();val advisor=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire))

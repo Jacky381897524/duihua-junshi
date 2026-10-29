@@ -2,7 +2,13 @@ package com.loveadvisor.core.advisor
 
 /** Shared quality contract for drafting and the existing single judging request. */
 object ResponsePolicy {
-    fun dataFor(naturalRepliesEnabled:Boolean)=if(naturalRepliesEnabled)NaturalReplyPolicy.data else data
+    fun dataFor(naturalRepliesEnabled:Boolean,realisticRepliesEnabled:Boolean=false):Map<String,Any> {
+        val selected=if(naturalRepliesEnabled)NaturalReplyPolicy.data else data
+        if(!realisticRepliesEnabled)return selected
+        val dimensions=(data["dimensions"] as Map<*,*>).entries.associate { it.key.toString() to it.value.toString() }+
+            ("reciprocity" to "表达自己的态度，也按真实关系与当下需要真诚讨好、哄人、偏爱或赞美；提供被理解、认可与支持的情绪价值，不因热情扣分，不编造承诺或越过明确拒绝。")
+        return selected+mapOf("objective" to "按场景自然接话，提供情绪价值，保留真实口吻；合适时可以真诚讨好与哄人。","dimensions" to dimensions)
+    }
     fun judgingInstructionFor(naturalRepliesEnabled:Boolean)=judgingInstruction+if(naturalRepliesEnabled)NaturalReplyPolicy.judgingInstruction else ""
     val data:Map<String,Any> = mapOf(
         "objective" to "有来有回、自然具体、有自己的表达，让对方容易接话；不以讨好换回应",

@@ -40,7 +40,7 @@ class RealityModeRegressionTest {
             assertTrue(batch.realisticRepliesEnabled);assertTrue(coordinator.complete(pending.requestTicket,batch));assertFalse(coordinator.state.loading)
             assertEquals(6,coordinator.state.current!!.batch.replies.size);assertEquals(2,wire.requests.size)
             val draft=JsonParser.parseString(wire.requests.first().body).asJsonObject["messages"].asJsonArray
-            assertTrue(draft[0].asJsonObject["content"].asString.contains("本次启用真人感"))
+            assertTrue(draft[0].asJsonObject["content"].asString.contains("本次启用真实表达"))
             assertFalse(draft[0].asJsonObject["content"].asString.contains("仅本次启用去AI味"))
             val draftData=JsonParser.parseString(draft[1].asJsonObject["content"].asString).asJsonObject
             val judge=JsonParser.parseString(wire.requests.last().body).asJsonObject
@@ -55,7 +55,7 @@ class RealityModeRegressionTest {
         val base=AdvisorInput(ApiProfile(baseUrl="https://example.com",apiKey="fake"),snapshot,personalContext=PersonalContext(ownExamples=listOf("私人样本")))
         val data=UnifiedPrompt.data(base)
         assertFalse(data.contains("私人样本"));assertEquals(ExpressionMode.LEGACY,RealityReplyPolicy.mode(false,false));assertEquals(ExpressionMode.NATURAL,RealityReplyPolicy.mode(false,true))
-        assertFalse(UnifiedPrompt.systemFor(base).contains("本次启用真人感"))
+        assertFalse(UnifiedPrompt.systemFor(base).contains("本次启用真实表达"))
         assertTrue(UnifiedPrompt.systemFor(base.copy(naturalRepliesEnabled=true)).contains(NaturalReplyPolicy.instruction))
     }
 }

@@ -9,33 +9,26 @@ import com.loveadvisor.android.ui.ViewStyles
 import com.loveadvisor.core.memory.InteractionPresentation
 
 /** Updates from local evidence changes only; no timers, model requests or artificial score growth. */
-class InteractionMeterView(context:Context,private val palette:PanelPalette,private val reduced:()->Boolean,private val resized:()->Unit):LinearLayout(context) {
-    private val title=palette.text("好感度 · 待读取",11f,palette.blue,true)
-    private val detail=palette.text("",10f,palette.muted)
+class InteractionMeterView(context:Context,private val palette:PanelPalette,private val reduced:()->Boolean,private val openDetails:()->Unit):LinearLayout(context) {
+    private val title=palette.text("好感度 · 待读取",10f,palette.blue,true).apply { gravity=Gravity.CENTER;maxLines=2 }
     private val bar=Meter(context)
     private var shown=InteractionPresentation()
-    private var expanded=false
     init {
         orientation=VERTICAL;isClickable=true;isFocusable=true
         background=ViewStyles.shape(context,palette.card,12f,palette.border)
-        setPadding(dp(10),dp(7),dp(10),dp(7));minimumHeight=dp(48)
-        addView(title,LayoutParams(-1,-2));addView(bar,LayoutParams(-1,dp(4)).apply { topMargin=dp(6) })
-        addView(detail,LayoutParams(-1,-2).apply { topMargin=dp(6) });detail.visibility=GONE
-        setOnClickListener { expanded=!expanded;detail.visibility=if(expanded)VISIBLE else GONE;renderDetail();performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);resized() }
+        setPadding(dp(6),dp(4),dp(6),dp(4));minimumHeight=dp(28)
+        addView(title,LayoutParams(-1,-2));addView(bar,LayoutParams(-1,dp(2)).apply { topMargin=dp(4) })
+        setOnClickListener { performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);openDetails() }
     }
     fun render(value:InteractionPresentation) {
         val changed=value!=shown;val same=shown.contactId==value.contactId
         shown=value
         val estimate=value.estimate
-        title.text=when { value.group && value.contactId==null->"好感度 · 选句后查看群成员";value.contactId==null->"好感度 · 待读取对象";estimate==null->"好感度 · 待积累依据";else->"好感度 ${estimate.toInt()}/100 · 互动估计" }
-        contentDescription=title.text.toString()+"，点按查看依据"
-        stateDescription=if(expanded)"已展开" else "已收起"
-        bar.set(value.estimate?.toFloat()?.div(100f) ?: 0f,changed && same && !reduced())
-        renderDetail()
+        title.text=when { value.group && value.contactId==null->"好感度 · 先选句";value.contactId==null->"好感度 · 待读取";estimate==null->"好感度 · 待积累";else->"好感度 ${estimate.toInt()}/100" }
+        contentDescription=title.text.toString()+"，互动趋势估计，点按查看依据"
+        if(changed)bar.set(estimate?.toFloat()?.div(100f) ?: 0f,same && !reduced())
     }
-    private fun renderDetail() {
-        detail.text="关系：${shown.relationship} · ${shown.evidenceCount}条互动依据\n"+if(shown.paused)"学习已暂停，保留已有估计。" else "读取或记忆更新后刷新；是模型与规则的估计，不是对方真实心理。重复材料不累计。"
-    }
+    fun description()="${title.text}\n关系：${shown.relationship} · ${shown.evidenceCount}条互动依据\n"+if(shown.paused)"学习已暂停，保留已有估计。" else "读取或记忆更新后刷新；是模型与规则的估计，不是对方真实心理。重复材料不累计。"
     fun stop()=bar.stop()
     private fun dp(n:Int)=ViewStyles.dp(context,n.toFloat())
     private class Meter(context:Context):View(context) {

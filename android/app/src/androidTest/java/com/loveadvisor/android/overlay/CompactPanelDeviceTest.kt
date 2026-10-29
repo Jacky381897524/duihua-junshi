@@ -15,10 +15,16 @@ class CompactPanelDeviceTest {
             val c=test.targetContext;val d=c.resources.displayMetrics.density
             val panel=AdvisorPanelView(c,{},{_,_->},{},{},{},{},{true},{true})
             panel.measure(View.MeasureSpec.makeMeasureSpec((320*d).toInt(),View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec((470*d).toInt(),View.MeasureSpec.EXACTLY));panel.layout(0,0,panel.measuredWidth,panel.measuredHeight)
-            val views=all(panel);val read=views.first { it.contentDescription=="读取信息" };val analyze=views.first { it.contentDescription=="判断分析" }
+            val views=all(panel);val read=views.first { it.contentDescription=="读取信息" };val analyze=views.first { it.contentDescription=="选句回复" }
             val intent=views.filterIsInstance<TextView>().first { it.text.startsWith("对方真实意图") }
             assertSame(intent.parent,read.parent);assertSame(analyze.parent,read.parent)
             assertTrue(read.width<panel.width*.22);assertTrue(analyze.width<panel.width*.22);assertTrue(intent.width>panel.width*.54)
+            val meter=views.filterIsInstance<InteractionMeterView>().single()
+            val row=meter.parent as ViewGroup
+            assertEquals(analyze.left,meter.left);assertEquals(read.right,meter.right)
+            val status=row.getChildAt(0)
+            assertTrue(kotlin.math.abs(status.top+status.height/2-meter.top-meter.height/2)<=1)
+            assertTrue(meter.height<=36*d)
         }
     }
     @Test fun compactModelFormReducesSpaceWithoutHidingSave() {

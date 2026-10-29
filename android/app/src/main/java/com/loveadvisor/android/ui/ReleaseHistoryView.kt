@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.7.1 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.7.2 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,12 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.7.2", "紧凑面板、三段表达与用量优化", listOf(
+                "好感度收进已读状态右侧，与上方两个操作按钮对齐；点按查看依据，默认不再占整行。操作按钮缩小可见边框，保留触摸区域。",
+                "默认、袪味、真实合为三段选择，支持点击、横滑与过渡动画；主页设置、面板菜单和记忆页同步。既有选择保留，切换后下次生成生效。",
+                "真实表达按场景提供情绪价值，合适时允许讨好、哄人、偏爱和赞美，生成与排序一起调整。",
+                "模型请求使用可还原的短编号，合并重复评分说明；保留聊天正文、选句目标和知识检索数量。诊断增加服务返回的输入、输出与缓存token数字，缺失时不猜测。"
+            )),
             Release("V1.7.1", "易点操作、好感度与逐对象候选保留", listOf(
                 "复制单句回复恢复正常高度的分析与返回按钮，窄屏可滚动；粘贴按钮与输入框垂直居中。",
                 "胶囊大小加减改为小圆形，每次1%，保留足够触摸区域；统一简称选句回复。",

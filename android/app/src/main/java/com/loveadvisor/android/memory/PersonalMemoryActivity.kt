@@ -31,7 +31,7 @@ class PersonalMemoryActivity:BaseActivity() {
     override fun onSaveInstanceState(out:Bundle) { out.putString("selected-contact",selected);super.onSaveInstanceState(out) }
     override fun onDestroy() { if(android.os.Build.VERSION.SDK_INT>=33)backCallback?.let { onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it) };super.onDestroy() }
     private fun reload() {
-        page("真人感与记忆","正在读取本地资料…")
+        page("真实与记忆","正在读取本地资料…")
         work("memory",{ repository.state() },{ state -> shownData=state.data;if(selected==null)overview(state) else details(state,selected!!) })
     }
     private fun date(at:Long?)=if(at==null || at<=0)"时间未知" else SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.CHINA).format(Date(at))
@@ -41,8 +41,8 @@ class PersonalMemoryActivity:BaseActivity() {
         work("memory",{ action();Logs.event(step,LogState.OK) },{ reload() })
     }
     private fun overview(s:RealityMemoryState) {
-        page("真人感与记忆","保存在本机的加密持久资料，清除缓存会保留。只有手动读取、导入及确认修正才提供学习材料。")
-        body.addView(ReplyRealitySwitch(this,graph.settings))
+        page("真实与记忆","保存在本机的加密持久资料，清除缓存会保留。只有手动读取、导入及确认修正才提供学习材料。")
+        body.addView(ReplyModeSelector(this,graph.settings))
         body.addView(ViewStyles.switch(this,"学习新读到的聊天",s.learningEnabled) { enabled -> perform { repository.configure(enabled,repository.state().paused) } })
         body.addView(ViewStyles.switch(this,"暂停学习（仍可使用已有记忆）",s.paused) { paused -> perform { repository.configure(repository.state().learningEnabled,paused) } })
         body.addView(ViewStyles.text(this,"${s.data.contacts.size}个对象/群成员 · ${s.data.evidence.size}条去重原话 · ${s.data.memories.size}条资料\n${graph.personalMemory.status}",13f,ViewStyles.MUTED))
@@ -54,8 +54,8 @@ class PersonalMemoryActivity:BaseActivity() {
         s.data.contacts.forEach { contact ->
             body.addView(ViewStyles.button(this,title(contact)+"\n关系："+relation(contact,s)) { selected=contact.id;limit=40;reload() })
         }
-        body.addView(ViewStyles.button(this,"清空真人感的全部资料") {
-            confirm("清空真人感资料","删除原话、记忆、修正、关系和互动记录，也清除撤销副本。已删除的原话不会因再次读取自动恢复；此操作不可撤销。") { perform(LogStep.MEMORY_DELETE) { repository.clear() } }
+        body.addView(ViewStyles.button(this,"清空真实的全部资料") {
+            confirm("清空真实资料","删除原话、记忆、修正、关系和互动记录，也清除撤销副本。已删除的原话不会因再次读取自动恢复；此操作不可撤销。") { perform(LogStep.MEMORY_DELETE) { repository.clear() } }
         })
         body.addView(ViewStyles.text(this,"按平台与昵称匹配，群成员按所在群隔离。同名者可能混淆，请检查来源并手动关联或纠正；不会自动按相似昵称合并。",12f,ViewStyles.MUTED))
     }
@@ -146,7 +146,7 @@ class PersonalMemoryActivity:BaseActivity() {
         val group=CheckBox(this).apply { text="这是群聊（每行使用具体成员昵称）" }
         val text=ViewStyles.field(this,"时间单独一行，例如2026年10月24日 18:30\n我：今天怎么样\n对方：我喜欢咖啡",multiline=true);text.minLines=5
         panel.addView(platform);panel.addView(name);panel.addView(group);panel.addView(text)
-        panel.addView(ViewStyles.text(this,"仅导入你有权使用的记录。内容留在本机；真人感开启时会将选中的新原文发给已配置模型分类。昵称、平台和说话方确认后保存。",12f,ViewStyles.MUTED))
+        panel.addView(ViewStyles.text(this,"仅导入你有权使用的记录。内容留在本机；真实开启时会将选中的新原文发给已配置模型分类。昵称、平台和说话方确认后保存。",12f,ViewStyles.MUTED))
         panel.addView(ViewStyles.button(this,"选择UTF-8文本文件") { importField=text;startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).setType("text/*").addCategory(Intent.CATEGORY_OPENABLE),81) })
         val scroll=ScrollView(this);scroll.addView(panel)
         val dialog=AlertDialog.Builder(this).setTitle("导入并学习聊天").setView(scroll).setNegativeButton("取消",null).setPositiveButton("确认导入",null).create()
