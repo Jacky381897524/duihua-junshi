@@ -65,4 +65,16 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
         gate.cancel(); tracker.invalidate("capture-invalidated"); active=null
         history.clear(); historySession=null; timeScope=null; state=BatchState()
     }
+    /** A fresh session token is mandatory: cached tickets must never authorize a different window. */
+    @Synchronized fun restore(saved:SavedConversationReplies,windowId:Int):Boolean {
+        val snapshot=saved.snapshot.copy(windowId=windowId)
+        if(snapshot.identity?.confirmed!=true || !AdvisorValidator().validate(saved.batch).valid)return false
+        gate.cancel();active=null
+        val token=tracker.update(snapshot) ?: return false
+        val ticket=gate.begin(token);gate.cancel()
+        target=saved.target;timeScope=ConversationTimePolicy.scopeKey(snapshot,target)
+        history.clear();history.add(saved.batch);historySession=token
+        state=BatchState(VisibleBatch(ticket,saved.batch),error="已恢复本对象上次候选 · 未调用模型")
+        return true
+    }
 }

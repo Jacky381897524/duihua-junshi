@@ -25,6 +25,7 @@ if (!(Test-Path -LiteralPath $taskSigningStore)) {
 $taskSigningMirror = Join-Path $taskConfig.active 'signing'
 New-Item -ItemType Directory -Force -Path $taskSigningMirror | Out-Null
 $env:LOVEADVISOR_SIGNING_STORE = Join-Path $taskSigningMirror 'love-advisor-dev.p12'
+$env:LOVEADVISOR_AUTHOR_AVATAR = Join-Path $taskSigningDir 'author-avatar.jpg'
 Copy-Item -LiteralPath $taskSigningStore -Destination $env:LOVEADVISOR_SIGNING_STORE -Force
 $env:PATH = "$($taskConfig.java)\bin;$env:PATH"
 $taskLogDir = Join-Path $taskRoot '.superpowers/sdd/2026-10-17-v1310-cache-compatibility'

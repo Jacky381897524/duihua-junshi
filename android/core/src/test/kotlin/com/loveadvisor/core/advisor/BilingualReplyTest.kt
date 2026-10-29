@@ -8,6 +8,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class BilingualReplyTest {
+    private fun snapshot(vararg texts:String)=AdvisorFixtures.snapshot().copy(messages=texts.mapIndexed { i,text -> ChatMessage("m$i",Speaker.OTHER,null,text) })
+    @org.junit.Test fun accountCodesAndEnglishTokensDoNotSwitchChineseConversation() {
+        assertEquals("zh",BilingualPolicy.language(snapshot("这是我账号","1817257896","lzxyw2")))
+        assertEquals("zh",BilingualPolicy.language(snapshot("等我玩完告诉你","OK")))
+        assertEquals("zh",BilingualPolicy.language(snapshot("这是我账号","discord_id_123")))
+    }
+    @org.junit.Test fun chineseDropsUnexpectedTranslationLocallyAndRejectsEmbeddedBilingualBody() {
+        val input=AdvisorInput(com.loveadvisor.core.api.ApiProfile(baseUrl="https://example.com",apiKey=""),snapshot("今天有点累"))
+        val plan=AdvisorFixtures.valid().replies.first().copy(translationZh="多余的中文释义")
+        assertNull(BilingualPolicy.normalize(input,listOf(plan)).single().translationZh)
+        assertFalse(BilingualPolicy.errors(input,listOf(plan.copy(text="Take a break\n那你先歇会儿"))).isEmpty())
+    }
     @Test fun codecPreservesChineseGlossWithoutAddingItToSendableText() {
         val json=JsonParser.parseString(AdvisorFixtures.json()).asJsonObject
         json["replies"].asJsonArray[0].asJsonObject.apply { addProperty("text","Sounds good, I'm in!");addProperty("translationZh","听起来不错，算我一个！") }

@@ -44,6 +44,7 @@ class AdvisorController(private val graph:AppGraph) {
                     if(current.cancelled) { Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED);return@post }
                     when(graph.coordinator.completeResult(pending.requestTicket,batch)) {
                         BatchCompletion.ACCEPTED -> {
+                            graph.replySessions.remember(SavedConversationReplies(snapshot,batch,replyTarget))
                             Logs.event(LogStep.REPLY_RESULT,LogState.OK,operation=log,metrics=mapOf(LogMetric.RESULT_COUNT to batch.replies.size.toLong()));Logs.end(log,LogState.OK)
                             val currentIds=ConversationTimePolicy.currentMessages(snapshot).map { it.id }.toSet()
                             if(snapshot.source==CaptureSource.PASTE)graph.coordinator.status(if(com.loveadvisor.core.capture.ChatApps.supported(snapshot.packageName))"单句分析 · 填入前核对当前聊天" else "单句分析 · 未确认对象，可复制回复；读取聊天后可验证填入")
@@ -86,4 +87,10 @@ class AdvisorController(private val graph:AppGraph) {
     }
     fun pauseCapture(message:String) { cancelOperation();graph.coordinator.pauseCapture(message); publish() }
     fun invalidate(reason:String="会话已变化") { cancelOperation(LogReason.CONTEXT_CHANGED);graph.coordinator.invalidate();Logs.event(LogStep.UI_ACTION,LogState.WARN,LogReason.CONTEXT_CHANGED);publish() }
+    fun restore(saved:SavedConversationReplies,windowId:Int):Boolean {
+        cancelOperation(LogReason.CONTEXT_CHANGED)
+        val restored=graph.coordinator.restore(saved,windowId)
+        if(restored) { lastContext=Context(saved.snapshot.copy(windowId=windowId),"","",null,saved.target);publish() }
+        return restored
+    }
 }

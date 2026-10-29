@@ -40,6 +40,7 @@ class OverlayController(private val service:ChatCaptureService) {
     private var panelAttachments=0L
     private var panelDetachments=0L
     fun hasEditorLease()=editorFocus && panelWindow.registered && panel?.isAttachedToWindow==true
+    fun hasRetainedPanel()=panel!=null
     fun releaseEditorFocus() { panel?.releaseEditingFocus() }
     private var bubbleParams:WindowManager.LayoutParams?=null; private var panelParams:WindowManager.LayoutParams?=null
     private var anchorX:Int?=null; private var anchorY:Int?=null; private var panelOnLeft:Boolean?=null
@@ -81,7 +82,9 @@ class OverlayController(private val service:ChatCaptureService) {
         }
     }
     private val listener:(BatchState)->Unit={ render(it) }
+    private val stopMemoryUpdates=graph.personalMemory.repository.subscribe { main.post { updateInteraction() } }
     init { graph.controller.listen(listener) }
+    private fun updateInteraction() { val view=panel ?: return;service.interactionForPanel { value -> if(panel===view)view.setInteraction(value) } }
     private fun create() {
         if(bubble!=null) return
         val size=ViewStyles.dp(service,40f)
@@ -180,6 +183,7 @@ class OverlayController(private val service:ChatCaptureService) {
         Logs.event(LogStep.UI_ACTION,reason=LogReason.UI_OPEN_PANEL)
         if(!service.overlayAllowed()) return
         if(panel!=null) { if(islandPanel==native) return else hide() }
+        service.prepareCachedPanel()
         showBubble();islandPanel=native;islandBounds=null
         stopEdgeMotion();idle.interact(SystemClock.uptimeMillis(),idleSeconds());idle.pause();main.removeCallbacks(autoHide)
         useFrostedWindow=graph.settings.load().frostedPanelEnabled && android.os.Build.VERSION.SDK_INT>=31
@@ -200,6 +204,7 @@ class OverlayController(private val service:ChatCaptureService) {
         },{ hide() },{ graph.tracker.isCurrent(it) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() },frosted=useFrostedWindow,onEditingFocus={ panelEditingFocus(it) },onAnalyze={ showMessageAnalysis() })
         view.contentDescription="聊天候选面板"
         panel=view; panelParams=params(1,1,"LoveAdvisorPanel"); panelOnLeft=null
+        updateInteraction()
         view.setOnApplyWindowInsetsListener { _,insets ->
             val bottom=if(insets.isVisible(WindowInsets.Type.ime()))insets.getInsets(WindowInsets.Type.ime()).bottom else 0
             if(bottom!=imeInsetBottom) { imeInsetBottom=bottom;view.post { resize() } }
@@ -313,7 +318,7 @@ class OverlayController(private val service:ChatCaptureService) {
     private fun showMessageAnalysis() {
         val view=panel ?: return
         val snapshot=readSnapshot()?.takeUnless { it.source==com.loveadvisor.core.model.CaptureSource.PASTE }
-        if(snapshot==null) { service.notifyUser("请先读取信息，再选句指定回复");return }
+        if(snapshot==null) { service.notifyUser("请先读取信息，再选句回复");return }
         if(reading || filling || state.loading) { service.notifyUser("请等待当前操作完成");return }
         val token=graph.tracker.currentToken ?: return
         val controller=analysisController ?: com.loveadvisor.android.analysis.MessageAnalysisController(graph).also { analysisController=it }
@@ -328,6 +333,7 @@ class OverlayController(private val service:ChatCaptureService) {
         view.showPage("judgment-list",list,closed={ list.close();controller.cancel();analysisSession=null })
     }
     fun render(value:BatchState) {
+        updateInteraction()
         state=value
         if(analysisSession?.let { !graph.tracker.isCurrent(it) }==true) { panel?.closeStyleEditor();analysisController?.invalidate() }
         panel?.setReadContext(readSnapshot()?.identity?.displayTitle);panel?.setAnalysisAvailable(readSnapshot()!=null);panel?.render(value);updateCapsuleStatus();layout()
@@ -518,5 +524,5 @@ class OverlayController(private val service:ChatCaptureService) {
             }
         }
     }
-    fun destroy() { analysisController?.close();analysisController=null;hide();suppress();capsule?.release();capsule=null;main.removeCallbacksAndMessages(null);bubble?.drawable?.let { (it as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle() }; bubble=null; panel=null; bubbleParams=null; panelParams=null; graph.controller.unlisten(listener) }
+    fun destroy() { stopMemoryUpdates();analysisController?.close();analysisController=null;hide();suppress();capsule?.release();capsule=null;main.removeCallbacksAndMessages(null);bubble?.drawable?.let { (it as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle() }; bubble=null; panel=null; bubbleParams=null; panelParams=null; graph.controller.unlisten(listener) }
 }

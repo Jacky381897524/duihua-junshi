@@ -26,6 +26,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private var analysisAvailable=false
     private var readContextTitle:String?=null
     private var personalStatus=""
+    private val interaction=InteractionMeterView(context,palette,reduced) { invalidateHeight();onResize() }
     private var statusMessage="等待点击读取；聊天变化不会自动请求模型"
     val currentPageId get()=pages.currentId
     private val cards:LinearLayout; private val refresh:Button; private val read:Button; private val count:TextView
@@ -62,12 +63,13 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         analysisRow=ViewStyles.row(context).apply { gravity=Gravity.CENTER_VERTICAL }
         summary=palette.text("对方真实意图：读取后判断",12f,bold=true).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
         analysisRow.addView(summary,LinearLayout.LayoutParams(0,-2,1f))
-        analyze=palette.button("选句指定回复") { onAnalyze() }.apply { contentDescription="选句指定回复";maxLines=2 }
+        analyze=palette.button("选句回复") { onAnalyze() }.apply { contentDescription="选句回复";maxLines=2 }
         analysisRow.addView(analyze,LinearLayout.LayoutParams(dp(52),textRowHeight(28)).apply { leftMargin=dp(4) })
         read=palette.button("读取信息") { onRead() }.apply { contentDescription="读取信息";maxLines=2 }
         analysisRow.addView(read,LinearLayout.LayoutParams(dp(52),textRowHeight(28)).apply { leftMargin=dp(4) })
         listOf(analyze,read).forEach { it.textSize=10.5f;it.setPadding(dp(4),0,dp(4),0) }
         column.addView(analysisRow,rowParams(-2,5))
+        column.addView(interaction,rowParams(-2,7))
         status=palette.text(statusMessage,11f,palette.muted).apply { maxLines=2 }
         column.addView(status,rowParams(-2,10))
         val label=ViewStyles.row(context)
@@ -120,6 +122,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     fun setReading(value:Boolean) { reading=value; updateButtons() }
     fun setAnalysisAvailable(value:Boolean) { analysisAvailable=value;updateButtons() }
     fun setReadContext(title:String?) { readContextTitle=title;renderStatus() }
+    fun setInteraction(value:com.loveadvisor.core.memory.InteractionPresentation) { interaction.render(value);invalidateHeight() }
     fun setFilling(value:Boolean) { filling=value; updateButtons() }
     private fun renderStatus() { status.text=readContextTitle?.let { "已读：$it${personalStatus}\n$statusMessage" } ?: statusMessage;invalidateHeight() }
     fun fillResult(message:String) { statusMessage=message;renderStatus() }
@@ -226,7 +229,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private fun sizeHeader(available:Int) {
         val sizing=com.loveadvisor.core.overlay.PanelHeaderLayout.measure(available,resources.displayMetrics.density,resources.configuration.fontScale)
         shortActionLabels=sizing.shortLabels
-        val analyzeLabel="选句指定回复"
+        val analyzeLabel="选句回复"
         val readLabel=if(reading)"读取中…" else if(shortActionLabels)"读取" else "读取信息"
         if(analyze.text.toString()!=analyzeLabel)analyze.text=analyzeLabel
         if(read.text.toString()!=readLabel)read.text=readLabel
@@ -251,9 +254,8 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         val visible=state.current
         personalStatus=visible?.batch?.takeIf { it.realisticRepliesEnabled }?.personalContext?.let { personal ->
             val contact=personal.contacts.singleOrNull()
-            val trend=personal.interaction.singleOrNull()?.takeIf { it.evidenceCount>0 }
             val relation=contact?.takeIf { it.relationshipConfirmed }?.let { " · ${it.relationship}" }.orEmpty()
-            relation+(trend?.let { " · 好感估计${it.estimate.toInt()}/100" }.orEmpty())
+            relation
         }.orEmpty()
         statusMessage=state.error ?: when {
             state.loading && visible!=null -> "保留上一轮 · 正在生成新候选"
@@ -283,5 +285,5 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         updateButtons()
     }
     fun compact(enabled:Boolean) { if(compacted==enabled)return;compacted=enabled;summary.maxLines=if(enabled) 1 else 2; status.maxLines=if(enabled) 1 else 2;invalidateHeight() }
-    fun stopAnimations() { OverlayAnimator.stop(this); for(i in 0 until cards.childCount) OverlayAnimator.stop(cards.getChildAt(i)) }
+    fun stopAnimations() { interaction.stop();OverlayAnimator.stop(this); for(i in 0 until cards.childCount) OverlayAnimator.stop(cards.getChildAt(i)) }
 }

@@ -33,10 +33,12 @@ object PersonalIdentity {
 
 /** Encrypted persistence is supplied by Android. No write occurs on a getter or on generation/refresh. */
 class RealityMemoryRepository(private val persistence:RealityPersistence) {
+    private val listeners=java.util.concurrent.CopyOnWriteArraySet<()->Unit>()
+    fun subscribe(listener:()->Unit):()->Unit { listeners.add(listener);return { listeners.remove(listener) } }
     private var value:RealityMemoryState?=null
     @Synchronized fun cachedRevision():Long?=value?.revision
     @Synchronized fun state():RealityMemoryState=value ?: (persistence.load() ?: RealityMemoryState()).also { value=it }
-    private fun commit(next:RealityMemoryState) { persistence.save(next);value=next }
+    private fun commit(next:RealityMemoryState) { persistence.save(next);value=next;listeners.forEach { listener -> runCatching { listener() } } }
     private fun change(data:PersonalData,undoable:Boolean=true) { val old=state();commit(old.copy(revision=old.revision+1,data=data,undo=if(undoable)old.data else old.undo)) }
     @Synchronized fun configure(enabled:Boolean,paused:Boolean) { val s=state();commit(s.copy(learningEnabled=enabled,paused=paused,revision=s.revision+1)) }
     private fun canonical(key:String)=state().data.aliases[key] ?: key

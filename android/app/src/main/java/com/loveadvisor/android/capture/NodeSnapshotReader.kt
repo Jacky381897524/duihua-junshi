@@ -41,6 +41,29 @@ class NodeSnapshotReader(private val service:AccessibilityService) {
         } catch(error:Exception) { val fault=LogFault.capture(error);Logs.end(log,LogState.FAIL,fault.reason,fault);throw error }
     }
     fun read(identity:ConversationIdentity?=null,expectedPackage:String?=null):WindowSnapshot?=readWithTargets(identity,expectedPackage)?.window
+    /** Cache restoration inspects header/composer geometry only; never reads message text. */
+    fun readHeader(expectedPackage:String?=null):WindowSnapshot? {
+        val application=applicationWindow() ?: return null
+        val frame=Rect();application.getBoundsInScreen(frame)
+        val v=RectI(frame.left,frame.top,frame.right,frame.bottom)
+        val root=application.root ?: return null
+        val pkg=root.packageName?.toString() ?: return null
+        if(expectedPackage!=null && expectedPackage!=pkg)return null
+        val nodes=mutableListOf<NodeRecord>();var visited=0;val deadline=SystemClock.uptimeMillis()+100
+        fun walk(n:AccessibilityNodeInfo,depth:Int) {
+            if(++visited>200 || depth>25 || SystemClock.uptimeMillis()>deadline || !n.isVisibleToUser)return
+            val r=Rect();n.getBoundsInScreen(r)
+            if(r.bottom<v.top || r.top>v.bottom)return
+            // Skip the conversation-list subtree between the navigation bar and composer.
+            if(r.top>v.top+v.height*.16 && r.bottom<v.top+v.height*.72)return
+            val header=r.top>=v.top && r.bottom<v.top+v.height*.16
+            val editable=isTextTarget(n) && r.top>v.top+v.height*.55
+            if(header || editable)nodes.add(NodeRecord(n.viewIdResourceName,if(header)n.text?.toString() else null,n.className?.toString().orEmpty(),editable,RectI(r.left,r.top,r.right,r.bottom)))
+            for(i in 0 until n.childCount.coerceAtMost(60))n.getChild(i)?.let { walk(it,depth+1) }
+        }
+        walk(root,0)
+        return WindowSnapshot(pkg,application.id,v,nodes,windowClassName=windowClass(application.id))
+    }
     fun readWithTargets(identity:ConversationIdentity?=null,expectedPackage:String?=null):WindowRead? {
         val application=applicationWindow() ?: return null
         val frame=Rect(); application.getBoundsInScreen(frame)

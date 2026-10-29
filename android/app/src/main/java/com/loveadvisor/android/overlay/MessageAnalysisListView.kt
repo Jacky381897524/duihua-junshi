@@ -25,7 +25,7 @@ class MessageAnalysisListView(context:Context,private val snapshot:ChatSnapshot,
     private val next=Runnable { startVisible() }
     init {
         orientation=VERTICAL;val palette=PanelPalette(context)
-        addView(palette.text("选句指定回复",17f,bold=true))
+        addView(palette.text("选句回复",17f,bold=true))
         addView(palette.text("自动判断近24小时话题；旧消息可指定回复。判断为模型推测。",11f,palette.muted),LayoutParams(-1,-2).apply { topMargin=dp(5);bottomMargin=dp(10) })
         val content=LinearLayout(context).apply { orientation=VERTICAL }
         val current=currentIds()

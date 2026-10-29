@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.7 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.7.1 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,14 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.7.1", "易点操作、好感度与逐对象候选保留", listOf(
+                "复制单句回复恢复正常高度的分析与返回按钮，窄屏可滚动；粘贴按钮与输入框垂直居中。",
+                "胶囊大小加减改为小圆形，每次1%，保留足够触摸区域；统一简称选句回复。",
+                "中文会话清除多余翻译字段，账号及孤立英文词不再误切双语，真正外语仍显示中文释义。",
+                "读取信息下方新增可点开的好感度进度条；随互动依据更新，支持减少动效，无依据时不虚构分数。",
+                "每个已确认对象加密保存最后成功的一批候选，切回核对对象后恢复，不依赖复制或填入，不调用模型；填入继续校验标题、输入框及草稿。",
+                "官方作者资料使用私有资源和发布签名验证；未验证的构建显示非官方。开源分支仍可改写代码，不能保证绝对不可篡改。"
+            )),
             Release("V1.7", "多平台、双语候选与对象记忆升级", listOf(
                 "温暖承接、具体欣赏、幽默接梗与互惠平衡，多份相关知识共同参与；保留两个表达开关。",
                 "外语候选同时显示中文释义，复制和填入只有外语正文；建议用中文。",
@@ -221,7 +229,7 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
                 "默认等待 15 秒，用户可自定义隐藏等待时间；减少动效设置继续有效。"
             )),
             Release("V1.2.12", "作者信息与全对象回复风格", listOf(
-                "版本名称改为 V1.2.12，主页底部加入作者海街寺庙与圆形头像。",
+                "版本名称改为 V1.2.12，主页底部加入作者资料与圆形头像。",
                 "新增全对象回复风格，无需匹配联系人名称；有专属风格时优先专属，否则使用全对象风格。",
                 "全对象风格可清空，专属风格继续独立保存、查看和删除。"
             )),

@@ -31,12 +31,12 @@ class AutomaticAdvisor(private val client:ChatCompletionClient,private val judge
             val raw=client.complete(input.profile,messages,cancel,if(BilingualPolicy.language(input)!="zh")2200 else if(group || input.replyStyle.orEmpty().contains("详细") || input.replyStyle.orEmpty().contains("长一点")) 1800 else if(selected!=null)1100 else 700)
             val parsed=try {
                 val text=raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-                JsonParser.parseString(text).asJsonObject["replies"].asJsonArray.mapIndexed { i,row ->
+                BilingualPolicy.normalize(input,JsonParser.parseString(text).asJsonObject["replies"].asJsonArray.mapIndexed { i,row ->
                     val o=row.asJsonObject
                     val targetId=if(group || selected!=null)o["targetMessageId"]?.asString else null
                     val label=if(group)input.snapshot.messages.find { it.id==targetId }?.sender ?: "成员（昵称未知）" else selected?.text?.take(80)
                     ReplyPlan("auto-$i",Strategy.valueOf(o["strategy"].asString),o["text"].asString,"","","",ReplyBranches("","",""),targetMessageId=targetId,topic=if(group)o["topic"]?.asString else null,targetLabel=label,translationZh=o["translationZh"]?.takeUnless { it.isJsonNull }?.asString)
-                }
+                })
             } catch(_:Exception) { null }
             if(parsed!=null) {
                 val preliminary=AdvisorBatch(AdvisorAnalysis(emptyList(),emptyList(),emptyList(),"待判断",null,"待判断"),parsed,compact=true,kind=if(group)ChatKind.GROUP else ChatKind.DIRECT,naturalRepliesEnabled=input.naturalRepliesEnabled,realisticRepliesEnabled=input.realisticRepliesEnabled,personalContext=input.personalContext.takeIf { input.realisticRepliesEnabled })

@@ -15,10 +15,21 @@ class CapsuleScaleControl(context:Context,initial:Float,private val changed:(Flo
         orientation=VERTICAL;addView(label)
         val palette=PanelPalette(context)
         val row=LinearLayout(context).apply { gravity=Gravity.CENTER_VERTICAL }
-        fun step(text:String,delta:Int)=palette.button(text) { setPercent(percent+delta,true) }.apply { textSize=19f;contentDescription=if(delta<0)"缩小胶囊1%" else "放大胶囊1%";minimumWidth=0;minWidth=0;setPadding(0,0,0,0) }
-        row.addView(step("−",-1),LayoutParams(ViewStyles.dp(context,36f),ViewStyles.dp(context,40f)))
+        fun step(text:String,delta:Int):android.view.View {
+            val button=palette.button(text) { setPercent(percent+delta,true) }.apply {
+                textSize=19f;minimumWidth=0;minWidth=0;setPadding(0,0,0,0)
+                background=android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x334E85E8),android.graphics.drawable.GradientDrawable().apply { shape=android.graphics.drawable.GradientDrawable.OVAL;setColor(palette.card);setStroke(ViewStyles.dp(context,1f),palette.border) },null)
+                importantForAccessibility=android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            return FrameLayout(context).apply {
+                contentDescription=if(delta<0)"缩小胶囊1%" else "放大胶囊1%";isFocusable=true;isClickable=true
+                addView(button,FrameLayout.LayoutParams(ViewStyles.dp(context,32f),ViewStyles.dp(context,32f),Gravity.CENTER))
+                setOnClickListener { button.performClick() }
+            }
+        }
+        row.addView(step("−",-1),LayoutParams(ViewStyles.dp(context,48f),ViewStyles.dp(context,48f)))
         row.addView(slider,LayoutParams(0,ViewStyles.dp(context,40f),1f))
-        row.addView(step("+",1),LayoutParams(ViewStyles.dp(context,36f),ViewStyles.dp(context,40f)))
+        row.addView(step("+",1),LayoutParams(ViewStyles.dp(context,48f),ViewStyles.dp(context,48f)))
         addView(row,LayoutParams(-1,-2));render()
         slider.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(view:SeekBar,progress:Int,fromUser:Boolean) { if(fromUser)setPercent(progress+70,false) }

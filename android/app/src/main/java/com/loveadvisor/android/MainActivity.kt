@@ -84,16 +84,18 @@ class MainActivity : BaseActivity() {
         body.addView(ViewStyles.button(this,"更新记录") { open(ReleaseHistoryActivity::class.java) })
         val author=ViewStyles.card(this);body.addView(author)
         val authorRow=ViewStyles.row(this);author.addView(authorRow)
+        val verifiedAuthor=com.loveadvisor.android.security.VerifiedAuthor.load(this)
         val avatarSize=ViewStyles.dp(this,48f)
         val avatar=android.widget.ImageView(this).apply {
-            setImageResource(R.drawable.author_avatar);scaleType=android.widget.ImageView.ScaleType.CENTER_CROP
+            verifiedAuthor.avatar?.let { bytes -> setImageBitmap(android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)) } ?: setImageResource(R.drawable.advisor_logo_new);scaleType=android.widget.ImageView.ScaleType.CENTER_CROP
             background=ViewStyles.shape(this@MainActivity,0xFFFFE500.toInt(),24f);clipToOutline=true
-            contentDescription="作者海街寺庙头像"
+            contentDescription="作者头像"
         }
         authorRow.addView(avatar,android.widget.LinearLayout.LayoutParams(avatarSize,avatarSize).apply { rightMargin=ViewStyles.dp(this@MainActivity,12f) })
         val authorName=ViewStyles.column(this)
         authorName.addView(ViewStyles.text(this,"作者",12f,ViewStyles.MUTED))
-        authorName.addView(ViewStyles.text(this,"海街寺庙",17f,bold=true))
+        authorName.addView(ViewStyles.text(this,verifiedAuthor.name,17f,bold=true))
+        authorName.addView(ViewStyles.text(this,if(verifiedAuthor.official)"官方作者资料 · 签名已验证" else "未通过官方签名验证",11f,ViewStyles.MUTED))
         authorRow.addView(authorName,android.widget.LinearLayout.LayoutParams(0,-2,1f))
         authorRow.addView(ViewStyles.text(this,BuildConfig.VERSION_NAME,12f,ViewStyles.MUTED))
     }

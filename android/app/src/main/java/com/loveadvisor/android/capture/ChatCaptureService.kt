@@ -107,6 +107,10 @@ class ChatCaptureService:AccessibilityService() {
     private var stopStartup:(()->Unit)?=null
     private var visualCancel:Cancellation?=null
     private var visualFill:VisualFillReference?=null
+    private val savedFillReferences=mutableMapOf<String,VisualFillReference>()
+    private var cancelCachedHeader:(()->Unit)?=null
+    private var headerCheckPending=false
+    private var lastHeaderCheck=0L
     var lastFillDiagnosticStatus="尚未点击填入"; private set
     private val fillTrace=FillStageTrace { SystemClock.elapsedRealtime() }
     val lastFillStages get()=fillTrace.description()
@@ -152,6 +156,7 @@ class ChatCaptureService:AccessibilityService() {
         val pkg=event.packageName?.toString()
         if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED && event.windowChanges and (AccessibilityEvent.WINDOWS_CHANGE_REMOVED or AccessibilityEvent.WINDOWS_CHANGE_ADDED)!=0) reader.forgetWindow(event.windowId)
         val structural=event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED || event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        if(ChatApps.supported(pkg) && event.eventType in setOf(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED))checkCachedHeader(allowTitleOcr=event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
         if(ChatApps.supported(pkg) && event.eventType==AccessibilityEvent.TYPE_VIEW_SCROLLED && manualRead.active!=null) {
             cancelScreenRead("读取期间屏幕已滚动，本次读取已取消；已保留上次内容")
         }
@@ -271,7 +276,8 @@ class ChatCaptureService:AccessibilityService() {
             if(lastForegroundWindow?.viewport==current.viewport)return false
         }
         if(!ChatApps.supported(current.packageName)) { diagnosticStatus="当前前台应用不在已启用的聊天应用范围"; leaveForeground(); return false }
-        if(foregroundWindowId!=null && (foregroundWindowId!=current.windowId || foregroundPackage!=current.packageName)) {
+        val changedWindow=foregroundWindowId!=null && (foregroundWindowId!=current.windowId || foregroundPackage!=current.packageName)
+        if(changedWindow) {
             // Switching directly between supported split panes must not transfer
             // the old editor's keyboard lease to the newly focused application.
             overlay.releaseEditorFocus()
@@ -280,6 +286,7 @@ class ChatCaptureService:AccessibilityService() {
         val entering=!wechatForeground
         foregroundWindowId=current.windowId;foregroundPackage=current.packageName; wechatForeground=true
         lastForegroundWindow=current
+        if((entering || changedWindow) && overlay.hasRetainedPanel())prepareCachedPanel()
         diagnosticStatus="按需读取 · ${ChatApps.label(current.packageName)}窗口 ${current.windowId} · ${current.viewport.width}×${current.viewport.height} · 仅检查前台，未收集聊天正文"
         if(entering) { foregroundStage("show-confirmed-chat");Logs.event(LogStep.FOREGROUND_ENTER,LogState.OK,metrics=mapOf(LogMetric.PLATFORM to platform(current.packageName),LogMetric.WINDOW_ID to current.windowId.toLong())) }
         ensureOverlay(); overlay.resize()
@@ -362,6 +369,7 @@ class ChatCaptureService:AccessibilityService() {
         identity=snapshot.identity
         conversation.observe(snapshot,System.currentTimeMillis(),entered)
         val merged=conversation.current ?: run { finishRead(ticket,"未取得可分析的对话，请重新读取"); return }
+        visualFill?.let { ref -> merged.identity?.let { savedFillReferences[merged.packageName+":"+it.id]=ref } }
         graph.controller.observe(merged,"正在生成六条候选…")
         worker.execute { Logs.recover(LogStep.LOCAL_TASK) { graph.recent.remember(merged) } }
         graph.currentObjectId=null; graph.controller.analyze(merged,objectId=null,diagnosticParent=readLog)
@@ -490,6 +498,7 @@ class ChatCaptureService:AccessibilityService() {
         return if((current.source==CaptureSource.OCR || current.source==CaptureSource.PASTE && conversation.current?.source==CaptureSource.OCR) && overlayAllowed() && (window.packageName!=ChatApps.WECHAT || WeChatPageClassifier.classify(window) in setOf(WeChatPageKind.CHAT_OR_UNKNOWN,WeChatPageKind.GROUP))) current else null
     }
     fun captureNow() {
+        cancelCachedHeader?.invoke();cancelCachedHeader=null
         pastedSnapshot=null
         Logs.event(LogStep.READ_TAP)
         if(!overlayAllowed()) { notifyUser("请打开已支持的聊天应用聊天后点击读取信息"); return }
@@ -499,10 +508,10 @@ class ChatCaptureService:AccessibilityService() {
         manualRead.begin(); overlay.setReading(true); graph.controller.status("正在读取当前聊天屏幕…"); observe()
     }
     fun captureImage() { captureNow() }
-    /** Explicit style-menu gesture only: native nickname or cropped local OCR, no analysis/network/navigation. */
-    fun readStyleNickname(callback:(String?,String?)->Unit):()->Unit {
-        val log=Logs.begin(LogStep.LOCAL_TASK)
-        Logs.event(LogStep.PAGE_OPEN,reason=LogReason.PAGE_REPLY_STYLE,operation=log)
+    /** Style editor or cache identity check: native header/local OCR, no analysis/network/navigation. */
+    fun readStyleNickname(headerOnly:Boolean=false,onVerifiedImage:((VisualFillReference)->Unit)?=null,callback:(String?,String?)->Unit):()->Unit {
+        val log=Logs.begin(if(headerOnly)LogStep.REPLY_CACHE_RESTORE else LogStep.LOCAL_TASK)
+        if(!headerOnly)Logs.event(LogStep.PAGE_OPEN,reason=LogReason.PAGE_REPLY_STYLE,operation=log)
         val cancel=Cancellation()
         val pkg=foregroundPackage;val windowId=foregroundWindowId;val generation=navigation
         val previous=conversation.current;val previousImage=visualFill
@@ -512,17 +521,21 @@ class ChatCaptureService:AccessibilityService() {
             if(completed || cancel.cancelled)return
             completed=true;cancel.cancel();Logs.end(log,if(resultPackage==null)LogState.CANCELLED else if(title==null)LogState.FAIL else LogState.OK,if(resultPackage==null)LogReason.RESULT_STALE else if(title==null)LogReason.NO_NODES else LogReason.NONE);lastStyleNicknameFromOcr=localOcr;callback(resultPackage,title)
         }
-        fun finish(title:String?,localOcr:Boolean=false) {
+        fun finish(title:String?,localOcr:Boolean=false,reference:VisualFillReference?=null) {
             if(!current()) { complete(null,null);return }
             nativeWorker.execute {
                 val fresh=Logs.recover(LogStep.FOREGROUND_ENTER,log) { reader.foreground() }
-                main.post { complete(if(current() && fresh!=null && fresh.packageName==pkg && fresh.windowId==windowId)pkg else null,title,localOcr) }
+                main.post {
+                    val valid=current() && fresh!=null && fresh.packageName==pkg && fresh.windowId==windowId
+                    if(valid && title!=null && reference!=null)onVerifiedImage?.invoke(reference)
+                    complete(if(valid)pkg else null,title,localOcr)
+                }
             }
         }
         if(pkg==null || windowId==null || !current()) { main.post { complete(null,null) };return { cancel.cancel();Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED) } }
         main.postDelayed({ if(!completed && !cancel.cancelled)complete(if(current())pkg else null,null) },6500)
         nativeWorker.execute {
-            val window=Logs.recover(LogStep.READ_NATIVE,log) { reader.read(expectedPackage=pkg) }
+            val window=Logs.recover(LogStep.READ_NATIVE,log) { if(headerOnly)reader.readHeader(pkg) else reader.read(expectedPackage=pkg) }
             val native=NativeReplyStyleTitle.read(window)
             main.post {
                 if(!current() || window==null || window.windowId!=windowId || window.packageName!=pkg) { complete(null,null);return@post }
@@ -534,36 +547,96 @@ class ChatCaptureService:AccessibilityService() {
                     if(image !is CaptureImageResult.Success) { finish(null);return@captureWindow }
                     val original=image.bitmap
                     if(!current()) { original.recycle();complete(null,null);return@captureWindow }
-                    var cropped:Bitmap?=null
-                    var ocr:MlKitOcr?=null
-                    try {
-                        // Reuse the already-read nickname only after a fresh title-strip match.
-                        // This keeps the confirmed correction usable on Refresh without a second OCR spelling.
-                        val known=previous?.replyStyleTitle ?: previous?.identity?.displayTitle
-                        if(known!=null && previous!=null && previous===conversation.current && previous.packageName==pkg && previous.windowId==windowId &&
-                            previousImage!=null && previousImage===visualFill && previousImage.windowId==windowId && previousImage.generation==generation &&
-                            VisualFillReference.stamp(original)==previousImage.stamp) {
-                            original.recycle();finish(known,localOcr=previous.source==CaptureSource.OCR);return@captureWindow
+                    nativeWorker.execute imageWork@{
+                        if(!current()) { original.recycle();main.post { complete(null,null) };return@imageWork }
+                        var cropped:Bitmap?=null
+                        var ocr:MlKitOcr?=null
+                        try {
+                            // Reuse the already-read nickname only after a fresh title-strip match.
+                            // This keeps the confirmed correction usable on Refresh without a second OCR spelling.
+                            val known=if(headerOnly)previous?.identity?.displayTitle else previous?.replyStyleTitle ?: previous?.identity?.displayTitle
+                            if(known!=null && previous!=null && previous===conversation.current && previous.packageName==pkg && previous.windowId==windowId &&
+                                previousImage!=null && previousImage===visualFill && previousImage.windowId==windowId && previousImage.generation==generation &&
+                                VisualFillReference.stamp(original)==previousImage.stamp) {
+                                original.recycle();finish(known,localOcr=previous.source==CaptureSource.OCR);return@imageWork
+                            }
+                            val v=window.viewport
+                            // Rebuild ephemeral fill evidence from this same locally verified image.
+                            // No old input coordinates or raw images are loaded from persistent cache.
+                            val reference=if(headerOnly)VisualFillReference.stamp(original)?.let { stamp ->
+                                val nativeInput=window.nodes.filter { it.editable && ImeFillPolicy.composerAllowed(it.bounds,v) }.map { it.bounds }.distinct().singleOrNull()
+                                val localInput=if(nativeInput==null)com.loveadvisor.core.input.WechatComposerLocator.locate(pkg,original.width,original.height,original::getPixel)?.let { r ->
+                                    RectI(v.left+(r.left*v.width.toDouble()/original.width).toInt(),v.top+(r.top*v.height.toDouble()/original.height).toInt(),v.left+(r.right*v.width.toDouble()/original.width).toInt(),v.top+(r.bottom*v.height.toDouble()/original.height).toInt())
+                                }?.takeIf { ImeFillPolicy.composerAllowed(it,v) } else null
+                                VisualFillReference(windowId,generation,stamp,nativeInput ?: localInput,VisualFillReference.footerStamp(original),v)
+                            } else null
+                            val x=((crop.left-v.left)*original.width.toDouble()/v.width).toInt().coerceIn(0,original.width-1)
+                            val y=((crop.top-v.top)*original.height.toDouble()/v.height).toInt().coerceIn(0,original.height-1)
+                            val right=((crop.right-v.left)*original.width.toDouble()/v.width).toInt().coerceIn(x+1,original.width)
+                            val bottom=((crop.bottom-v.top)*original.height.toDouble()/v.height).toInt().coerceIn(y+1,original.height)
+                            val header=Bitmap.createBitmap(original,x,y,right-x,bottom-y);cropped=header
+                            if(header!==original)original.recycle()
+                            val recognizer=MlKitOcr();ocr=recognizer
+                            recognizer.recognize(header,cancel,{ boxes,_ -> finish(boxes?.let { ReplyStyleHeader.title(it) },localOcr=true,reference=reference) },{
+                                if(!header.isRecycled)header.recycle();recognizer.close()
+                            })
+                        } catch(error:Exception) {
+                            Logs.failed(LogStep.READ_PARSE,error,log)
+                            cropped?.let { if(!it.isRecycled)it.recycle() };if(!original.isRecycled)original.recycle();ocr?.close();finish(null)
                         }
-                        val v=window.viewport
-                        val x=((crop.left-v.left)*original.width.toDouble()/v.width).toInt().coerceIn(0,original.width-1)
-                        val y=((crop.top-v.top)*original.height.toDouble()/v.height).toInt().coerceIn(0,original.height-1)
-                        val right=((crop.right-v.left)*original.width.toDouble()/v.width).toInt().coerceIn(x+1,original.width)
-                        val bottom=((crop.bottom-v.top)*original.height.toDouble()/v.height).toInt().coerceIn(y+1,original.height)
-                        val header=Bitmap.createBitmap(original,x,y,right-x,bottom-y);cropped=header
-                        if(header!==original)original.recycle()
-                        val recognizer=MlKitOcr();ocr=recognizer
-                        recognizer.recognize(header,cancel,{ boxes,_ -> finish(boxes?.let { ReplyStyleHeader.title(it) },localOcr=true) },{
-                            if(!header.isRecycled)header.recycle();recognizer.close()
-                        })
-                    } catch(error:Exception) {
-                        Logs.failed(LogStep.READ_PARSE,error,log)
-                        cropped?.let { if(!it.isRecycled)it.recycle() };if(!original.isRecycled)original.recycle();ocr?.close();finish(null)
                     }
                 }
             }
         }
         return { cancel.cancel();Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED) }
+    }
+    /** Opening the panel may perform one local title-strip OCR, never a chat/vision/model request. */
+    fun prepareCachedPanel() {
+        if(!graph.replySessions.hasEntries() || manualRead.active!=null || graph.coordinator.state.loading || cancelCachedHeader!=null || !overlayAllowed())return
+        graph.controller.invalidate("正在核对对象，恢复本地候选…")
+        val pkg=foregroundPackage;val id=foregroundWindowId;val lease=navigation
+        var freshFill:VisualFillReference?=null
+        cancelCachedHeader=readStyleNickname(headerOnly=true,onVerifiedImage={ freshFill=it }) { actual,title ->
+            cancelCachedHeader=null
+            if(lease!=navigation || pkg!=foregroundPackage || id!=foregroundWindowId || !overlayAllowed())return@readStyleNickname
+            if(actual==pkg && title!=null && restoreCached(actual,title,id,freshFill))return@readStyleNickname
+            conversation.clear();identity=null;pastedSnapshot=null;visualFill=null
+            graph.controller.status("此对象暂无可确认的本地候选，点击读取信息；其他对象候选已保留")
+        }
+    }
+    private fun restoreCached(pkg:String?,title:String,windowId:Int?,freshFill:VisualFillReference?=null):Boolean {
+        if(pkg==null || windowId==null)return false
+        val saved=graph.replySessions.find(pkg,title) ?: return false
+        val snapshot=saved.snapshot.copy(windowId=windowId)
+        conversation.restore(snapshot);identity=snapshot.identity;pastedSnapshot=null
+        visualFill=freshFill ?: savedFillReferences[pkg+":"+snapshot.identity?.id]?.takeIf { it.viewport==null || it.viewport==lastForegroundWindow?.viewport }?.copy(windowId=windowId,generation=navigation)
+        visualFill?.let { savedFillReferences[pkg+":"+snapshot.identity?.id]=it }
+        val restored=graph.controller.restore(saved,windowId)
+        if(restored)Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.OK,metrics=mapOf(LogMetric.CACHED to 1L))
+        return restored
+    }
+    /** Content changes use metadata only. Navigation can verify a missing title via one local crop. */
+    private fun checkCachedHeader(allowTitleOcr:Boolean=false) {
+        if(!wechatForeground || !graph.replySessions.hasEntries() || manualRead.active!=null || graph.coordinator.state.loading || headerCheckPending || cancelCachedHeader!=null || !::overlay.isInitialized || overlay.hasEditorLease())return
+        val now=SystemClock.uptimeMillis();if(now-lastHeaderCheck<400)return
+        lastHeaderCheck=now;headerCheckPending=true
+        val pkg=foregroundPackage;val id=foregroundWindowId;val lease=navigation
+        foregroundWorker.execute {
+            val header=Logs.recover(LogStep.WINDOW_LOOKUP) { reader.readHeader(pkg) }
+            val title=NativeReplyStyleTitle.read(header)
+            main.post {
+                headerCheckPending=false
+                if(allowTitleOcr && title==null && lease==navigation && pkg==foregroundPackage && id==foregroundWindowId && overlayAllowed() && overlay.hasRetainedPanel()) {
+                    prepareCachedPanel();return@post
+                }
+                if(lease==navigation && pkg==foregroundPackage && id==foregroundWindowId && overlayAllowed() && header?.windowId==id && title!=null && title!=identity?.displayTitle) {
+                    if(!restoreCached(pkg,title,id)) {
+                        conversation.clear();identity=null;pastedSnapshot=null;visualFill=null
+                        graph.controller.invalidate("此对象暂无已读候选；其他对象候选已保留")
+                    }
+                }
+            }
+        }
     }
     fun analyzePasted(text:String) {
         if(!overlayAllowed() || manualRead.active!=null || graph.coordinator.state.loading) { notifyUser("请等待当前操作完成，并保持聊天应用前台");return }
@@ -606,6 +679,14 @@ class ChatCaptureService:AccessibilityService() {
     }
     fun confirmDraft(snapshot:ChatSnapshot) { if(ChatApps.supported(snapshot.packageName)) accept(snapshot,manualRead.begin()) }
     fun captureGeneration()=navigation
+    fun interactionForPanel(callback:(com.loveadvisor.core.memory.InteractionPresentation)->Unit) {
+        val snapshot=currentChatSnapshot;val token=graph.tracker.currentToken
+        if(snapshot==null || token==null) { callback(com.loveadvisor.core.memory.InteractionPresentation());return }
+        worker.execute {
+            val value=try { com.loveadvisor.core.memory.InteractionPresenter.build(graph.personalMemory.repository.state(),snapshot,graph.coordinator.targetFor(snapshot)) } catch(error:Exception) { Logs.failed(LogStep.MEMORY_RETRIEVE,error);com.loveadvisor.core.memory.InteractionPresentation() }
+            main.post { if(instance===this && graph.tracker.isCurrent(token))callback(value) }
+        }
+    }
     fun fillDiagnostic(message:String,reset:Boolean=false) {
         if(reset) { fillTrace.begin();fillLog=Logs.begin(LogStep.FILL_TAP) }
         lastFillDiagnosticStatus=message
@@ -712,6 +793,7 @@ class ChatCaptureService:AccessibilityService() {
         if(interrupted)graph.controller.awaitCapture(message)
     }
     private fun leaveForeground(message:String="已保留已读内容，返回后可继续使用") {
+        cancelCachedHeader?.invoke();cancelCachedHeader=null
         val wasForeground=wechatForeground
         if(wasForeground) { foregroundStage("hide-foreground-lost");Logs.event(LogStep.FOREGROUND_LEAVE,LogState.OK) }
         wechatForeground=false; foregroundWindowId=null;foregroundPackage=null

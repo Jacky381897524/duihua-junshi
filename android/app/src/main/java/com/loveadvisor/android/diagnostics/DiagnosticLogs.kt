@@ -100,7 +100,7 @@ object DiagnosticLogs {
     fun action(value:String)=when {
         value in setOf("复制单句回复","开始分析","粘贴")->LogReason.UI_PASTE_REPLY
         value=="读取信息"->LogReason.UI_READ
-        value=="判断分析" || value=="选句指定回复"->LogReason.UI_JUDGMENT
+        value=="判断分析" || value=="选句指定回复" || value=="选句回复"->LogReason.UI_JUDGMENT
         value=="填入"->LogReason.UI_FILL
         value=="复制"->LogReason.UI_COPY
         value=="建议"->LogReason.UI_ADVICE
