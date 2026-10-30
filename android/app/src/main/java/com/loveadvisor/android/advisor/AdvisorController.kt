@@ -19,6 +19,7 @@ class AdvisorController(private val graph:AppGraph) {
     private fun cancelOperation(reason:LogReason=LogReason.USER_CANCELLED) { cancel?.cancel();cancel=null;Logs.end(operation,LogState.CANCELLED,reason);operation=null }
     private data class Context(val snapshot:ChatSnapshot,val goal:String,val background:String,val objectId:String?,val replyTarget:ReplyTarget?)
     private var lastContext:Context?=null
+    private val panelRestoration=PanelReplyRestoration(graph.coordinator,graph.tracker,graph.replySessions)
     private val listeners=linkedSetOf<(BatchState)->Unit>()
     fun listen(listener:(BatchState)->Unit) { listeners.add(listener); listener(graph.coordinator.state) }
     fun unlisten(listener:(BatchState)->Unit) { listeners.remove(listener) }
@@ -87,6 +88,19 @@ class AdvisorController(private val graph:AppGraph) {
     }
     fun pauseCapture(message:String) { cancelOperation();graph.coordinator.pauseCapture(message); publish() }
     fun invalidate(reason:String="会话已变化") { cancelOperation(LogReason.CONTEXT_CHANGED);graph.coordinator.invalidate();Logs.event(LogStep.UI_ACTION,LogState.WARN,LogReason.CONTEXT_CHANGED);publish() }
+    fun beginPanelRestore(packageName:String,windowId:Int):PanelReplyRestoration.Check {
+        val check=panelRestoration.begin(packageName,windowId)
+        publish()
+        return check
+    }
+    /** Caller synchronizes the capture context before publishing a restored batch. */
+    fun completePanelRestore(check:PanelReplyRestoration.Check,title:String?,nativeTitle:Boolean):PanelReplyRestoration.Result {
+        val result=panelRestoration.complete(check,title,nativeTitle)
+        if(result==PanelReplyRestoration.Result.RESTORED)graph.tracker.lastSnapshot?.let {
+            lastContext=Context(it,"","",null,graph.coordinator.targetFor(it))
+        }
+        return result
+    }
     fun restore(saved:SavedConversationReplies,windowId:Int):Boolean {
         cancelOperation(LogReason.CONTEXT_CHANGED)
         val restored=graph.coordinator.restore(saved,windowId)

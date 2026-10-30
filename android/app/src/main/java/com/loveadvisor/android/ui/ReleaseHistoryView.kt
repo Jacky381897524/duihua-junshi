@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.7.2 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "从首次开发到 V1.7.3 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,12 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.7.3", "收起再展开保留候选", listOf(
+                "修复同一聊天收起面板后再次展开，候选被先清空的问题。核对标题期间保留六条候选、已读上下文、选句目标和换批历史。",
+                "本地标题暂不可读或OCR未匹配缓存时，保留标明已读对象的候选；不自动重新读取或调用模型。填入仍实时核对当前对象、输入框和草稿。",
+                "确认切换对象后恢复该对象的本地候选；明确的新对象没有缓存时显示待读取，其他对象的记录仍保留。过期标题回调不能覆盖新的读取和生成。",
+                "诊断区分当前候选保留、标题暂未核对和已确认对象无缓存，记录候选数量，不记录聊天正文。"
+            )),
             Release("V1.7.2", "紧凑面板、三段表达与用量优化", listOf(
                 "好感度收进已读状态右侧，与上方两个操作按钮对齐；点按查看依据，默认不再占整行。操作按钮缩小可见边框，保留触摸区域。",
                 "默认、袪味、真实合为三段选择，支持点击、横滑与过渡动画；主页设置、面板菜单和记忆页同步。既有选择保留，切换后下次生成生效。",

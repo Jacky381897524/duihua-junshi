@@ -18,6 +18,7 @@ import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import java.util.UUID
 import com.loveadvisor.core.advisor.ReplyPlan
+import com.loveadvisor.core.advisor.PanelReplyRestoration
 import com.loveadvisor.android.input.VisualFillReference
 import com.loveadvisor.android.input.VerifiedInputMethod
 import com.loveadvisor.core.input.ComposerFocusResult
@@ -593,24 +594,49 @@ class ChatCaptureService:AccessibilityService() {
     /** Opening the panel may perform one local title-strip OCR, never a chat/vision/model request. */
     fun prepareCachedPanel() {
         if(!graph.replySessions.hasEntries() || manualRead.active!=null || graph.coordinator.state.loading || cancelCachedHeader!=null || !overlayAllowed())return
-        graph.controller.invalidate("正在核对对象，恢复本地候选…")
-        val pkg=foregroundPackage;val id=foregroundWindowId;val lease=navigation
+        val pkg=foregroundPackage ?: return
+        val id=foregroundWindowId ?: return
+        val lease=navigation
+        val check=graph.controller.beginPanelRestore(pkg,id)
         var freshFill:VisualFillReference?=null
         cancelCachedHeader=readStyleNickname(headerOnly=true,onVerifiedImage={ freshFill=it }) { actual,title ->
             cancelCachedHeader=null
             if(lease!=navigation || pkg!=foregroundPackage || id!=foregroundWindowId || !overlayAllowed())return@readStyleNickname
-            if(actual==pkg && title!=null && restoreCached(actual,title,id,freshFill))return@readStyleNickname
-            conversation.clear();identity=null;pastedSnapshot=null;visualFill=null
-            graph.controller.status("此对象暂无可确认的本地候选，点击读取信息；其他对象候选已保留")
+            val verified=title.takeIf { actual==pkg }
+            val result=graph.controller.completePanelRestore(check,verified,nativeTitle=!lastStyleNicknameFromOcr)
+            when(result) {
+                PanelReplyRestoration.Result.RESTORED -> graph.tracker.lastSnapshot?.let { applyCachedSnapshot(it,freshFill) }
+                PanelReplyRestoration.Result.RETAINED -> {
+                    // Only a matching verified title may replace ephemeral fill evidence.
+                    if(verified!=null && verified==identity?.displayTitle) {
+                        val reference=freshFill ?: visualFill?.takeIf { it.windowId==id && (it.viewport==null || it.viewport==lastForegroundWindow?.viewport) }?.copy(generation=navigation)
+                        reference?.let { visualFill=it;savedFillReferences[pkg+":"+identity?.id]=it }
+                    }
+                }
+                PanelReplyRestoration.Result.UNAVAILABLE -> { conversation.clear();identity=null;pastedSnapshot=null;visualFill=null }
+                PanelReplyRestoration.Result.STALE -> return@readStyleNickname
+            }
+            Logs.event(LogStep.REPLY_CACHE_RESTORE,if(result==PanelReplyRestoration.Result.UNAVAILABLE)LogState.SKIP else LogState.OK,
+                reason=when {
+                    result==PanelReplyRestoration.Result.UNAVAILABLE -> LogReason.CACHE_TITLE_MISS
+                    result==PanelReplyRestoration.Result.RETAINED && verified!=identity?.displayTitle -> LogReason.CACHE_TITLE_UNVERIFIED
+                    result==PanelReplyRestoration.Result.RETAINED -> LogReason.CACHE_CURRENT_RETAINED
+                    else -> LogReason.NONE
+                },metrics=mapOf(LogMetric.RESULT_COUNT to (graph.coordinator.state.current?.batch?.replies?.size ?: 0).toLong()))
+            graph.controller.publish()
         }
+    }
+    private fun applyCachedSnapshot(snapshot:ChatSnapshot,freshFill:VisualFillReference?=null) {
+        conversation.restore(snapshot);identity=snapshot.identity;pastedSnapshot=null
+        val pkg=snapshot.packageName
+        visualFill=freshFill ?: savedFillReferences[pkg+":"+snapshot.identity?.id]?.takeIf { it.viewport==null || it.viewport==lastForegroundWindow?.viewport }?.copy(windowId=snapshot.windowId,generation=navigation)
+        visualFill?.let { savedFillReferences[pkg+":"+snapshot.identity?.id]=it }
     }
     private fun restoreCached(pkg:String?,title:String,windowId:Int?,freshFill:VisualFillReference?=null):Boolean {
         if(pkg==null || windowId==null)return false
         val saved=graph.replySessions.find(pkg,title) ?: return false
         val snapshot=saved.snapshot.copy(windowId=windowId)
-        conversation.restore(snapshot);identity=snapshot.identity;pastedSnapshot=null
-        visualFill=freshFill ?: savedFillReferences[pkg+":"+snapshot.identity?.id]?.takeIf { it.viewport==null || it.viewport==lastForegroundWindow?.viewport }?.copy(windowId=windowId,generation=navigation)
-        visualFill?.let { savedFillReferences[pkg+":"+snapshot.identity?.id]=it }
+        applyCachedSnapshot(snapshot,freshFill)
         val restored=graph.controller.restore(saved,windowId)
         if(restored)Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.OK,metrics=mapOf(LogMetric.CACHED to 1L))
         return restored

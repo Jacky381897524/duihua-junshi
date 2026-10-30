@@ -8,6 +8,45 @@ import com.loveadvisor.core.model.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticPanelTest {
+    @Test fun collapseAndReopenKeepsSixCardsEvenWhenTitleLookupFails() {
+        val i=InstrumentationRegistry.getInstrumentation()
+        i.runOnMainSync {
+            val tracker=com.loveadvisor.core.session.SessionTracker()
+            val coordinator=BatchCoordinator(tracker,com.loveadvisor.core.session.RequestGate(tracker))
+            val cache=ConversationReplyCache()
+            val restoration=PanelReplyRestoration(coordinator,tracker,cache)
+            val snapshot=ChatSnapshot("com.tencent.mm",7,ConversationIdentity("contact-a","对象A",ChatKind.DIRECT,true),listOf(ChatMessage("m1",Speaker.OTHER,null,"挪车去")))
+            val batch=AdvisorBatch(AdvisorAnalysis(emptyList(),emptyList(),emptyList(),"准备挪车",1,"接住当前话题"),(0..5).map { ReplyPlan("r$it",Strategy.entries[it],"候选回复$it","","","",ReplyBranches("","","")) },compact=true)
+            val request=coordinator.begin(snapshot)!!
+            assertTrue(coordinator.complete(request.requestTicket,batch))
+            assertTrue(cache.remember(SavedConversationReplies(snapshot,batch)))
+            val visible=coordinator.state.current
+            var panel:AdvisorPanelView?=null
+            var reads=0;var refreshes=0;var copies=0;var fills=0
+            fun all(v:View):List<View> = listOf(v)+if(v is ViewGroup)(0 until v.childCount).flatMap { all(v.getChildAt(it)) } else emptyList()
+            repeat(6) { round ->
+                val check=restoration.begin("com.tencent.mm",7)
+                panel=AdvisorPanelView(i.targetContext,{ copies++ },{ plan,token ->
+                    assertEquals("候选回复0",plan.text);assertTrue(tracker.isCurrent(token));fills++
+                },{ refreshes++ },{ reads++ },{},{ panel?.release();panel=null },{ tracker.isCurrent(it) },{true})
+                val view=panel!!
+                view.setReadContext("对象A");view.render(coordinator.state)
+                assertEquals("核对标题期间候选不能先变成空面板",6,all(view).filterIsInstance<ReplyCardView>().size)
+                assertEquals(PanelReplyRestoration.Result.RETAINED,restoration.complete(check,if(round%2==0)null else "错字昵称",false))
+                view.render(coordinator.state)
+                assertSame(visible,coordinator.state.current)
+                assertEquals(6,all(view).filterIsInstance<ReplyCardView>().size)
+                val buttons=all(view).filterIsInstance<Button>()
+                buttons.first { it.text=="复制" }.performClick()
+                buttons.first { it.text=="填入" }.performClick()
+                assertTrue(all(view).first { it.contentDescription=="收起候选窗" }.performClick())
+                assertNull(panel)
+            }
+            assertEquals(6,copies);assertEquals(6,fills)
+            assertEquals("收起和展开不能触发读取",0,reads)
+            assertEquals("收起和展开不能触发重新生成",0,refreshes)
+        }
+    }
     @Test fun cachedHeightTracksNewRepliesButAdviceKeepsPanelHeight() {
         val i=InstrumentationRegistry.getInstrumentation()
         i.runOnMainSync {
