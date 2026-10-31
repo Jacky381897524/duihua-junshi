@@ -7,6 +7,26 @@ import org.junit.Test
 
 class ConversationReplyCacheTest {
     private fun saved(id:String,title:String=id)=SavedConversationReplies(AdvisorFixtures.snapshot().let { it.copy(identity=it.identity!!.copy(id=id,displayTitle=title)) },AdvisorFixtures.valid())
+    @Test fun defaultTenAndConfigurableLimitEvictLeastRecentlyUsed() {
+        var maximum=10
+        val cache=ConversationReplyCache(limit={ maximum })
+        (1..10).forEach { cache.remember(saved("$it")) }
+        cache.touch(cache.find("com.tencent.mm","1")!!)
+        cache.remember(saved("11"))
+        assertNull(cache.find("com.tencent.mm","2"));assertNotNull(cache.find("com.tencent.mm","1"));assertEquals(10,cache.all().size)
+        maximum=20;(12..21).forEach { cache.remember(saved("$it")) };assertEquals(20,cache.all().size)
+        maximum=3;cache.enforceLimit();assertEquals(3,cache.all().size)
+    }
+    @Test fun groupAndDirectConversationsShareTheSameCapacity() {
+        val cache=ConversationReplyCache(limit={ 2 })
+        val direct=saved("direct")
+        val group=saved("group").let { entry ->
+            entry.copy(snapshot=entry.snapshot.copy(identity=entry.snapshot.identity!!.copy(kind=ChatKind.GROUP)),
+                batch=entry.batch.copy(kind=ChatKind.GROUP,replies=entry.batch.replies.map { it.copy(targetMessageId="m1",topic="近况") }))
+        }
+        assertTrue(cache.remember(direct));assertTrue(cache.remember(group));assertEquals(2,cache.all().size)
+        cache.remember(saved("third"));assertNull(cache.find("com.tencent.mm","direct"));assertNotNull(cache.find("com.tencent.mm","group"))
+    }
     @Test fun aToBToARetainsBothWithoutAnyCopyOrFill() {
         val cache=ConversationReplyCache();val a=saved("a");val b=saved("b")
         assertTrue(cache.remember(a));assertTrue(cache.remember(b))

@@ -61,7 +61,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         header.addView(menu,LinearLayout.LayoutParams(textRowHeight(28),textRowHeight(28)))
         val close=palette.button("×") { onClose() }; close.contentDescription="收起候选窗"
         header.addView(close,LinearLayout.LayoutParams(textRowHeight(28),textRowHeight(28)).apply { leftMargin=dp(6) })
-        column.addView(header,rowParams(textRowHeight(28),9))
+        column.addView(header,rowParams(textRowHeight(28),6))
         analysisRow=ViewStyles.row(context).apply { gravity=Gravity.CENTER_VERTICAL }
         summary=palette.text("对方真实意图：读取后判断",12f,bold=true).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
         analysisRow.addView(summary,LinearLayout.LayoutParams(0,-2,1f))
@@ -74,14 +74,14 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         status=palette.text(statusMessage,11f,palette.muted).apply { maxLines=2 }
         statusRow.addView(status,LinearLayout.LayoutParams(0,-2,1f))
         statusRow.addView(interaction,LinearLayout.LayoutParams(dp(108),-2).apply { leftMargin=dp(4) })
-        column.addView(statusRow,rowParams(-2,7))
+        column.addView(statusRow,rowParams(-2,4))
         val label=ViewStyles.row(context)
         advice=palette.text("建议：先读取当前对话",12f).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
-        column.addView(advice,rowParams(-2,6))
+        column.addView(advice,rowParams(-2,4))
         level=palette.text("等级 · 待判断",11f,palette.muted)
         label.addView(level,LinearLayout.LayoutParams(0,-2,1f))
         count=palette.text("0 / 6",11f,palette.muted); label.addView(count)
-        column.addView(label,rowParams(-2,7))
+        column.addView(label,rowParams(-2,5))
         scroll=ScrollView(context).apply { isFillViewport=false; clipToPadding=true; isVerticalScrollBarEnabled=true }
         cards=ViewStyles.column(context); scroll.addView(cards); column.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         scroll.setOnScrollChangeListener { _,_,_,_,_ -> updateCount() }
@@ -247,7 +247,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             val lp=action.layoutParams as LinearLayout.LayoutParams
             lp.width=sizing.actionWidth;lp.height=sizing.actionHeight;lp.leftMargin=sizing.gap
         }
-        val inset=dp(if(resources.configuration.fontScale>1.3f)2 else 12)
+        val inset=dp(if(resources.configuration.fontScale>1.3f)2 else 10)
         if(headerInset!=inset) {
             listOf(analyze,read).forEach { it.background=android.graphics.drawable.InsetDrawable(ViewStyles.shape(context,palette.card,12f,palette.border),0,inset,0,inset) }
             headerInset=inset

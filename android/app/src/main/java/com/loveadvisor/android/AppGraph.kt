@@ -25,7 +25,7 @@ class AppGraph private constructor(val context:Context) {
     val knowledge=AssetKnowledgeStore(context)
     val tracker=SessionTracker(); val gate=RequestGate(tracker)
     val coordinator=BatchCoordinator(tracker,gate)
-    val replySessions=ConversationReplyCache(ReplySessionPersistence(documents))
+    val replySessions=ConversationReplyCache(ReplySessionPersistence(documents)) { settings.load().replyCacheLimit }
     val transport=com.loveadvisor.android.diagnostics.DiagnosticTransport()
     val catalog=ModelCatalogClient(com.loveadvisor.android.diagnostics.DiagnosticTransport(step=LogStep.MODEL_CATALOG))
     val chat=ChatCompletionClient(com.loveadvisor.android.diagnostics.DiagnosticTransport(step=LogStep.REPLY_REQUEST))

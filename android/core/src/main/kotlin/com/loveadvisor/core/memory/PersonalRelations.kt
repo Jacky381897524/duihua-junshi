@@ -13,7 +13,7 @@ object PersonalRelations {
             claim.contains("同事")->"同事"
             claim.contains("同学")->"同学"
             claim.contains("家人")->"家人"
-            claim.contains(Regex("老婆|老公|夫妻|恋人|结婚"))->"伴侣"
+            claim.contains(Regex("老婆|老公|媳妇|夫妻|恋人|结婚"))->"伴侣"
             claim.contains("朋友")->"朋友"
             else->null
         }

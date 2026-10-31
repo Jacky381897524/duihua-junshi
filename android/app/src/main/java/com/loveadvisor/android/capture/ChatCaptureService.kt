@@ -112,6 +112,23 @@ class ChatCaptureService:AccessibilityService() {
     private var cancelCachedHeader:(()->Unit)?=null
     private var headerCheckPending=false
     private var lastHeaderCheck=0L
+    private var headerRetryRequested=false
+    private val headerRetry=Runnable { checkCachedHeader(allowTitleOcr=true) }
+    private val windowLogTimes=linkedMapOf<String,Long>()
+    private fun recordWindowEvent(key:String,now:Long):Boolean {
+        val last=windowLogTimes[key]
+        if(last!=null && now-last<2000)return false
+        if(windowLogTimes.size>=64 && key !in windowLogTimes)windowLogTimes.remove(windowLogTimes.keys.first())
+        windowLogTimes[key]=now;return true
+    }
+    private fun scheduleHeaderCheck() {
+        if(!::overlay.isInitialized || !overlay.hasRetainedPanel())return
+        if(headerCheckPending || cancelCachedHeader!=null) { headerRetryRequested=true;return }
+        if(!main.hasCallbacks(headerRetry))main.postDelayed(headerRetry,250)
+    }
+    private fun retryHeaderIfRequested() {
+        if(headerRetryRequested) { headerRetryRequested=false;scheduleHeaderCheck() }
+    }
     var lastFillDiagnosticStatus="尚未点击填入"; private set
     private val fillTrace=FillStageTrace { SystemClock.elapsedRealtime() }
     val lastFillStages get()=fillTrace.description()
@@ -157,7 +174,7 @@ class ChatCaptureService:AccessibilityService() {
         val pkg=event.packageName?.toString()
         if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED && event.windowChanges and (AccessibilityEvent.WINDOWS_CHANGE_REMOVED or AccessibilityEvent.WINDOWS_CHANGE_ADDED)!=0) reader.forgetWindow(event.windowId)
         val structural=event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED || event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-        if(ChatApps.supported(pkg) && event.eventType in setOf(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED))checkCachedHeader(allowTitleOcr=event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
+        if(ChatApps.supported(pkg) && event.eventType in setOf(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED))scheduleHeaderCheck()
         if(ChatApps.supported(pkg) && event.eventType==AccessibilityEvent.TYPE_VIEW_SCROLLED && manualRead.active!=null) {
             cancelScreenRead("读取期间屏幕已滚动，本次读取已取消；已保留上次内容")
         }
@@ -193,7 +210,11 @@ class ChatCaptureService:AccessibilityService() {
         // by focused window ID removes the remote application-root dependency.
         val signal=reader.foregroundSignal(appMetadata,event.windowId,pkg,event.eventType!=AccessibilityEvent.TYPE_WINDOWS_CHANGED && !transientWindow)
         val externalFocused=currentWindows.any { it.isFocused && it.type !in setOf(AccessibilityWindowInfo.TYPE_APPLICATION,AccessibilityWindowInfo.TYPE_INPUT_METHOD,AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) }
-        Logs.event(LogStep.WINDOW_EVENT,metrics=mapOf(LogMetric.EVENT_TYPE to event.eventType.toLong(),LogMetric.WINDOW_CHANGES to if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED)event.windowChanges.toLong() else 0L,LogMetric.EVENT_AGE_MS to (SystemClock.uptimeMillis()-event.eventTime).coerceAtLeast(0),LogMetric.WINDOW_COUNT to currentWindows.size.toLong(),LogMetric.EXTERNAL_FOCUSED to if(externalFocused)1L else 0L,LogMetric.EDITOR_ACTIVE to if(::overlay.isInitialized && overlay.hasEditorLease())1L else 0L)+(appMetadata.filter { it.focused }.maxByOrNull { it.layer }?.let { mapOf(LogMetric.FOCUSED_APP_ID to it.id.toLong()) } ?: emptyMap()))
+        val focusedId=appMetadata.filter { it.focused }.maxByOrNull { it.layer }?.id
+        val editor=::overlay.isInitialized && overlay.hasEditorLease()
+        val changes=if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED)event.windowChanges else 0
+        if(recordWindowEvent("${event.eventType}:$changes:${currentWindows.size}:$externalFocused:$editor:$focusedId",SystemClock.uptimeMillis()))
+            Logs.event(LogStep.WINDOW_EVENT,metrics=mapOf(LogMetric.EVENT_TYPE to event.eventType.toLong(),LogMetric.WINDOW_CHANGES to changes.toLong(),LogMetric.EVENT_AGE_MS to (SystemClock.uptimeMillis()-event.eventTime).coerceAtLeast(0),LogMetric.WINDOW_COUNT to currentWindows.size.toLong(),LogMetric.EXTERNAL_FOCUSED to if(externalFocused)1L else 0L,LogMetric.EDITOR_ACTIVE to if(editor)1L else 0L)+(focusedId?.let { mapOf(LogMetric.FOCUSED_APP_ID to it.toLong()) } ?: emptyMap()))
         if(signal!=null && !externalFocused) {
             // No app-root IPC and no wait behind a conversation read. Only OS window metadata.
             foregroundGate.invalidate();main.removeCallbacks(debounced)
@@ -601,6 +622,7 @@ class ChatCaptureService:AccessibilityService() {
         var freshFill:VisualFillReference?=null
         cancelCachedHeader=readStyleNickname(headerOnly=true,onVerifiedImage={ freshFill=it }) { actual,title ->
             cancelCachedHeader=null
+            retryHeaderIfRequested()
             if(lease!=navigation || pkg!=foregroundPackage || id!=foregroundWindowId || !overlayAllowed())return@readStyleNickname
             val verified=title.takeIf { actual==pkg }
             val result=graph.controller.completePanelRestore(check,verified,nativeTitle=!lastStyleNicknameFromOcr)
@@ -638,13 +660,13 @@ class ChatCaptureService:AccessibilityService() {
         val snapshot=saved.snapshot.copy(windowId=windowId)
         applyCachedSnapshot(snapshot,freshFill)
         val restored=graph.controller.restore(saved,windowId)
-        if(restored)Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.OK,metrics=mapOf(LogMetric.CACHED to 1L))
+        if(restored) { graph.replySessions.touch(saved);Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.OK,metrics=mapOf(LogMetric.CACHED to 1L)) }
         return restored
     }
     /** Content changes use metadata only. Navigation can verify a missing title via one local crop. */
     private fun checkCachedHeader(allowTitleOcr:Boolean=false) {
         if(!wechatForeground || !graph.replySessions.hasEntries() || manualRead.active!=null || graph.coordinator.state.loading || headerCheckPending || cancelCachedHeader!=null || !::overlay.isInitialized || overlay.hasEditorLease())return
-        val now=SystemClock.uptimeMillis();if(now-lastHeaderCheck<400)return
+        val now=SystemClock.uptimeMillis();if(now-lastHeaderCheck<1500) { if(!main.hasCallbacks(headerRetry))main.postDelayed(headerRetry,1500-(now-lastHeaderCheck));return }
         lastHeaderCheck=now;headerCheckPending=true
         val pkg=foregroundPackage;val id=foregroundWindowId;val lease=navigation
         // Do not queue node traversal ahead of the foreground hide/show metadata path.
@@ -662,6 +684,7 @@ class ChatCaptureService:AccessibilityService() {
                         graph.controller.invalidate("此对象暂无已读候选；其他对象候选已保留")
                     }
                 }
+                retryHeaderIfRequested()
             }
         }
     }

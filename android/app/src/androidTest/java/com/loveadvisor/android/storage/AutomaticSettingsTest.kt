@@ -4,6 +4,12 @@ import com.loveadvisor.core.api.*
 import org.junit.Assert.*
 import org.junit.Test
 class AutomaticSettingsTest {
+    @Test fun cacheLimitDefaultsToTenAndClampsOlderOrInvalidSettings() {
+        assertEquals(10,AppSettings.decode("{}").replyCacheLimit)
+        assertEquals(20,AppSettings.decode("{\"replyCacheLimit\":100}").replyCacheLimit)
+        assertEquals(1,AppSettings.decode("{\"replyCacheLimit\":0}").replyCacheLimit)
+        assertEquals(17,AppSettings.decode("{\"replyCacheLimit\":17}").replyCacheLimit)
+    }
     @Test fun socialScopeAndSelfNamesSurviveRoundTripWithoutChangingModeSwitches() {
         val saved=SettingsData(additionalChatApps=mapOf("org.example.chat" to "其他聊天"),socialSelfNames=mapOf("com.discord" to "我的名字"),realisticRepliesEnabled=false,naturalRepliesEnabled=true)
         val loaded=AppSettings.decode(Gson().toJson(saved))

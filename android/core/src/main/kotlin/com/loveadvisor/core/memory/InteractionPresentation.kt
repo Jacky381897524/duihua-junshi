@@ -14,6 +14,6 @@ object InteractionPresenter {
         val id=state.data.aliases[raw] ?: raw
         val contact=state.data.contacts.find { it.id==id }
         val signals=state.data.signals.filter { it.contactId==id }
-        return InteractionPresentation(id,if(signals.isEmpty())null else InteractionTrend.score(signals),signals.size,contact?.let { PersonalRelations.context(it,state.data.memories).relationship } ?: "未知",signals.maxOfOrNull { it.at },state.paused || !state.learningEnabled,group)
+        return InteractionPresentation(id,if(signals.isEmpty())null else InteractionTrend.score(signals),signals.size,contact?.let { PersonalRelations.context(it,state.data.memories).relationship } ?: "未知",signals.filter { it.timeKnown!=false }.maxOfOrNull { it.at },state.paused || !state.learningEnabled,group)
     }
 }

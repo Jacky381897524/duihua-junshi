@@ -58,7 +58,7 @@ class PersonalMemoryService(private val settings:AppSettings,documents:AndroidDo
         if(snapshot.source==CaptureSource.PASTE)return
         upgradeExisting()
         val receipt=try { repository.ingest(snapshot) } catch(error:Exception) { status="本地记忆暂未保存，请查看诊断日志；候选仍可生成";Logs.failed(LogStep.MEMORY_SAVE,error);return }
-        Logs.event(LogStep.MEMORY_READ,LogState.OK,metrics=mapOf(LogMetric.COUNT to receipt.added.toLong(),LogMetric.ME_MESSAGE_COUNT to snapshot.messages.count { it.speaker==Speaker.ME }.toLong(),LogMetric.OTHER_MESSAGE_COUNT to snapshot.messages.count { it.speaker==Speaker.OTHER }.toLong()))
+        Logs.event(LogStep.MEMORY_READ,LogState.OK,metrics=mapOf(LogMetric.COUNT to receipt.added.toLong(),LogMetric.ME_MESSAGE_COUNT to snapshot.messages.count { it.speaker==Speaker.ME }.toLong(),LogMetric.OTHER_MESSAGE_COUNT to snapshot.messages.count { it.speaker==Speaker.OTHER }.toLong(),LogMetric.MEMORY_COUNT to receipt.memoriesAdded.toLong(),LogMetric.SIGNAL_COUNT to receipt.signalsAdded.toLong()))
         if(receipt.added>0) synchronized(this) { dirty=true;status="本地已整理${receipt.added}条新消息；候选完成后补充分类";schedule() }
     }
     @Synchronized private fun schedule() {

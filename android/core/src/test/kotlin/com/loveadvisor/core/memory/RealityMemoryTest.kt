@@ -145,10 +145,45 @@ class RealityMemoryTest {
         assertTrue(InteractionTrend.delta(signals,"boundary",now+100)<0)
         assertTrue(InteractionTrend.delta(signals,"closeness",now+86400_000)>0)
     }
-    @Test fun oldOrUndatedImportDoesNotInflateTodaysInteraction() {
+    @Test fun oldOrUndatedImportIsConservativeAndDoesNotInventMessageTime() {
         val repo=RealityMemoryRepository(Disk());repo.ingest(snapshot(text="我想你",at=now-3*86400_000L),now)
         repo.ingest(snapshot(text="谢谢你",at=null),now)
-        assertTrue(repo.state().data.signals.isEmpty())
+        val signals=repo.state().data.signals
+        assertEquals(2,signals.size);assertEquals(now-3*86400_000L,signals.first().at)
+        assertEquals(false,signals.last().timeKnown);assertEquals(now,signals.last().at)
+        assertTrue(signals.sumOf { it.delta }<1.0)
+    }
+    @Test fun naturalCareAndDirectPartnerAddressBecomeTentativeAndCanBeCorrected() {
+        val repo=RealityMemoryRepository(Disk());val care=snapshot(text="中午可以再睡会",at=null)
+        val receipt=repo.ingest(care,now);assertEquals(1,receipt.signalsAdded);assertEquals(0,receipt.memoriesAdded)
+        val relationReceipt=repo.ingest(snapshot(text="老婆你吃饭了吗",speaker=Speaker.ME,at=null),now)
+        assertEquals(0,relationReceipt.signalsAdded);assertEquals(1,relationReceipt.memoriesAdded)
+        val state=repo.state();assertEquals(1,state.data.signals.size)
+        assertEquals("可能是伴侣（待确认）",PersonalRelations.context(state.data.contacts.single(),state.data.memories).relationship)
+        repo.relationship(repo.contactId(care)!!,"朋友")
+        assertEquals("朋友",PersonalRelations.context(repo.state().data.contacts.single(),repo.state().data.memories).relationship)
+        for(text in listOf("老婆饼真好吃","我老公下班了","如果你是我老婆","我们已经分手了"))
+            assertFalse(text,LocalPersonalLearning.permitted(PersonalKind.RELATIONSHIP,text))
+    }
+    @Test fun upgradeBackfillsUndatedEvidenceButDoesNotRestoreDismissedOldSignals() {
+        val disk=Disk();val repo=RealityMemoryRepository(disk)
+        repo.ingest(snapshot(text="谢谢你"),now);val dismissed=repo.state().data.signals.single().sourceId
+        repo.dismissSignal(dismissed)
+        repo.ingest(snapshot(text="中午可以再睡会",at=null),now)
+        val old=repo.state().copy(learningPolicy=2,data=repo.state().data.copy(signals=emptyList()))
+        disk.save(old);val reopened=RealityMemoryRepository(disk);assertTrue(reopened.upgradeLearning(now))
+        assertEquals(1,reopened.state().data.signals.size);assertNotEquals(dismissed,reopened.state().data.signals.single().sourceId)
+    }
+    @Test fun previousDataWithoutNewSignalFieldsStillLoadsAndMigrates() {
+        val disk=Disk();val repo=RealityMemoryRepository(disk);repo.ingest(snapshot(text="谢谢你"),now)
+        val json=com.google.gson.JsonParser.parseString(disk.json).asJsonObject
+        json.addProperty("learningPolicy",2)
+        val data=json.getAsJsonObject("data");data.remove("dismissedSignals")
+        data.getAsJsonArray("signals").forEach { it.asJsonObject.remove("timeKnown") }
+        disk.json=json.toString()
+        val reopened=RealityMemoryRepository(disk);assertTrue(reopened.upgradeLearning(now))
+        assertEquals(1,reopened.state().data.signals.size)
+        assertTrue(reopened.state().data.dismissedSignals.isEmpty())
     }
     @Test fun userCanCorrectAnInteractionWithoutLosingTheConversation() {
         val repo=RealityMemoryRepository(Disk());val row=snapshot(text="谢谢你");repo.ingest(row,now)

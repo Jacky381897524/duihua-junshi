@@ -45,7 +45,7 @@ object PersonalContextBuilder {
         val endings=listOf("哈哈","嗯","啦","呀","呢","啊","哦","吧","嘛","～","~").map { ending -> ending to learnedTexts.count { it.endsWith(ending) } }.filter { it.second>=2 }.sortedByDescending { it.second }.take(4).map { it.first }
         val habits=VoiceHabits(lengths.size,lengths.getOrNull(lengths.size/2) ?: 0,if(learnedTexts.isEmpty())0.0 else learnedTexts.count { it.contains(Regex("[，。！？,.!?]")) }.toDouble()/learnedTexts.size,endings)
         val corrections=d.corrections.filter { (it.peerId in ids || it.peerId==rootId) && now-it.at<=24*3600_000L }.takeLast(2)
-        var context=PersonalContext(contacts,memories,samples,corrections,contacts.map { c -> val signals=d.signals.filter { it.contactId==c.id };ContextTrend(c.id,InteractionTrend.score(signals),signals.size,signals.maxOfOrNull { it.at }) },habits)
+        var context=PersonalContext(contacts,memories,samples,corrections,contacts.map { c -> val signals=d.signals.filter { it.contactId==c.id };ContextTrend(c.id,InteractionTrend.score(signals),signals.size,signals.filter { it.timeKnown!=false }.maxOfOrNull { it.at }) },habits)
         val gson=Gson()
         while(gson.toJson(context).length>BUDGET && (context.memories.isNotEmpty() || context.ownExamples.isNotEmpty() || context.corrections.isNotEmpty())) {
             context=when {

@@ -24,7 +24,7 @@ class InteractionMeterView(context:Context,private val palette:PanelPalette,priv
         val changed=value!=shown;val same=shown.contactId==value.contactId
         shown=value
         val estimate=value.estimate
-        title.text=when { value.group && value.contactId==null->"好感度 · 先选句";value.contactId==null->"好感度 · 待读取";estimate==null->"好感度 · 待积累";else->"好感度 ${estimate.toInt()}/100" }
+        title.text=when { value.group && value.contactId==null->"好感度 · 先选句";value.contactId==null->"好感度 · 待读取";estimate==null->"好感度 · 待积累";else->"好感度 ${"%.1f".format(java.util.Locale.ROOT,estimate)}/100" }
         contentDescription=title.text.toString()+"，互动趋势估计，点按查看依据"
         if(changed)bar.set(estimate?.toFloat()?.div(100f) ?: 0f,same && !reduced())
     }

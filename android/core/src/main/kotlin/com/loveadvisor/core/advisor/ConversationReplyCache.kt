@@ -6,10 +6,12 @@ import com.google.gson.Gson
 /** One last successful batch per confirmed conversation, independent of copy/fill actions. */
 data class SavedConversationReplies(val snapshot:ChatSnapshot,val batch:AdvisorBatch,val target:ReplyTarget?=null,val savedAt:Long=System.currentTimeMillis())
 interface ConversationReplyPersistence { fun load():List<SavedConversationReplies>;fun save(entries:List<SavedConversationReplies>) }
-class ConversationReplyCache(private val persistence:ConversationReplyPersistence?=null) {
+class ConversationReplyCache(private val persistence:ConversationReplyPersistence?=null,private val limit:()->Int={10}) {
     private val entries=linkedMapOf<String,SavedConversationReplies>()
-    init { persistence?.load()?.filter(::valid)?.forEach { entries[key(it.snapshot)]=it } }
+    init { persistence?.load()?.filter(::valid)?.sortedBy { it.savedAt }?.forEach { entries[key(it.snapshot)]=it }; trim() }
     private fun key(s:ChatSnapshot)="${s.packageName}\u0000${s.identity?.kind}\u0000${s.identity?.id}"
+    private fun trim():Boolean { var changed=false;while(entries.size>limit().coerceIn(1,20)) { entries.remove(entries.keys.first());changed=true };return changed }
+    @Synchronized fun enforceLimit() { if(trim())persistence?.save(entries.values.toList()) }
     // Gson can construct partial/null fields from damaged or older documents. Skip a bad
     // entry rather than preventing application startup or discarding other contacts.
     private fun valid(e:SavedConversationReplies)=runCatching {
@@ -21,11 +23,16 @@ class ConversationReplyCache(private val persistence:ConversationReplyPersistenc
     }.getOrDefault(false)
     @Synchronized fun remember(value:SavedConversationReplies):Boolean {
         if(!valid(value))return false
-        entries[key(value.snapshot)]=value
+        val id=key(value.snapshot);entries.remove(id);entries[id]=value
+        trim()
         persistence?.save(entries.values.toList())
         return true
     }
     @Synchronized fun find(packageName:String,title:String):SavedConversationReplies? = entries.values.filter { it.snapshot.packageName==packageName && it.snapshot.identity?.displayTitle==title.trim() }.singleOrNull()
+    @Synchronized fun touch(value:SavedConversationReplies) {
+        val id=key(value.snapshot);val existing=entries.remove(id) ?: return
+        entries[id]=existing.copy(savedAt=System.currentTimeMillis());persistence?.save(entries.values.toList())
+    }
     @Synchronized fun hasEntries()=entries.isNotEmpty()
     @Synchronized fun all()=entries.values.toList()
     companion object {

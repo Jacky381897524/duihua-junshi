@@ -46,7 +46,7 @@ class PanelReplyRestoration(
             return Result.RETAINED
         }
         val saved=name?.let { cache.find(check.packageName,it) }
-        if(saved!=null && coordinator.restore(saved,check.windowId))return Result.RESTORED
+        if(saved!=null && coordinator.restore(saved,check.windowId)) { cache.touch(saved);return Result.RESTORED }
         // An absent/incorrect OCR nickname is not proof of changing contacts.
         // Keep the clearly labelled last read. Fill still verifies the live title,
         // input region and draft independently before any text is written.

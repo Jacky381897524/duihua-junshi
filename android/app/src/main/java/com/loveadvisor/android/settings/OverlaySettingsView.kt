@@ -49,12 +49,22 @@ class OverlaySettingsView(context:Context,private val graph:AppGraph,private val
         }
         ranges.check(limit);ranges.setOnCheckedChangeListener { _,id -> limit=id }
         addView(ranges,row());addView(palette.text("只累计已手动读取的内容，不自动翻聊天记录。",12f,palette.muted),row())
+        heading("候选回复保留")
+        val cacheLimit=EditText(context).apply {
+            hint="保留对象数量（1–20）";setText(original.replyCacheLimit.toString());inputType=InputType.TYPE_CLASS_NUMBER
+            setTextColor(palette.ink);setHintTextColor(palette.muted);textSize=if(compact)13f else 14f;minimumHeight=dp(if(compact)36 else 48)
+            setPadding(dp(12),dp(if(compact)6 else 10),dp(12),dp(if(compact)6 else 10));background=ViewStyles.shape(context,palette.card,12f)
+        };addView(cacheLimit,row())
+        addView(palette.text("单聊和群聊共用此数量；超过上限时移除最久未使用的候选，不影响聊天记忆。",12f,palette.muted),row())
         val status=palette.text("",12f,palette.muted).apply { visibility=GONE };addView(status,row())
         val save=button("保存设置",true) {
             val value=seconds.text.toString().trim().toIntOrNull()
             if(value==null || value !in 1..BubbleIdlePolicy.MAX_SECONDS) { seconds.error="请输入1–3600的整数秒数";return@button }
+            val cacheValue=cacheLimit.text.toString().trim().toIntOrNull()
+            if(cacheValue==null || cacheValue !in 1..20) { cacheLimit.error="请输入1–20之间的整数";return@button }
             try {
-                graph.settings.update { it.copy(frostedPanelEnabled=frosted,topCapsuleEnabled=capsule,nativeIslandEnabled=false,nativeIslandConfirmedBuild=null,reducedMotion=reduced,capsuleLocked=locked,capsuleScale=scale.coerceIn(.7f,2f),capsuleOffsetXdp=if(resetPosition)0f else it.capsuleOffsetXdp,capsuleOffsetYdp=if(resetPosition)0f else it.capsuleOffsetYdp,bubbleAutoHideSeconds=value,fillPanelBehavior=if(keep)"keep" else "collapse",groupContextLimit=limit) }
+                graph.settings.update { it.copy(frostedPanelEnabled=frosted,topCapsuleEnabled=capsule,nativeIslandEnabled=false,nativeIslandConfirmedBuild=null,reducedMotion=reduced,capsuleLocked=locked,capsuleScale=scale.coerceIn(.7f,2f),capsuleOffsetXdp=if(resetPosition)0f else it.capsuleOffsetXdp,capsuleOffsetYdp=if(resetPosition)0f else it.capsuleOffsetYdp,bubbleAutoHideSeconds=value,fillPanelBehavior=if(keep)"keep" else "collapse",groupContextLimit=limit,replyCacheLimit=cacheValue) }
+                graph.replySessions.enforceLimit()
                 onSaved()
             } catch(error:Exception) { com.loveadvisor.android.diagnostics.DiagnosticLogs.failed(com.loveadvisor.core.diagnostics.LogStep.CONFIG_SAVE,error);status.text="保存失败，请重试";status.visibility=VISIBLE }
         }

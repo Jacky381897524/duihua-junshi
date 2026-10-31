@@ -74,11 +74,11 @@ class PersonalMemoryActivity:BaseActivity() {
             body.addView(ViewStyles.text(this,"关系：${relation(contact!!,s)}",16f,bold=true))
             body.addView(ViewStyles.button(this,"确认或更正关系") { textDialog("与你的实际关系",contact.relationship.takeUnless { it=="未知" }.orEmpty(),"例如：同事、朋友、家人、恋人；以你确认为准") { label -> perform { repository.relationship(id,label) } } })
             val signals=s.data.signals.filter { it.contactId==id }
-            val estimate=if(signals.isEmpty())"暂不足以估计" else "${"%.1f".format(Locale.ROOT,InteractionTrend.score(signals))}/100 · ${signals.size}条互动依据 · 最近${date(signals.maxOfOrNull { it.at })}"
+            val estimate=if(signals.isEmpty())"暂不足以估计" else "${"%.1f".format(Locale.ROOT,InteractionTrend.score(signals))}/100 · ${signals.size}条互动依据 · 最近已知时间${date(signals.filter { it.timeKnown!=false }.maxOfOrNull { it.at })}"
             body.addView(ViewStyles.text(this,"好感度（互动趋势估计）：$estimate\n仅根据明确互动变化；不是对方真实内心。重复证据不计分，同类互动递减，每日正向增幅最多3。",13f,ViewStyles.MUTED))
             if(signals.isNotEmpty())body.addView(ViewStyles.button(this,"查看 / 纠正好感变化依据") {
                 val rows=signals.takeLast(50).asReversed()
-                AlertDialog.Builder(this).setTitle("互动依据 · 点击可纠正").setItems(rows.map { signal -> "${date(signal.at)} · ${"%+.2f".format(Locale.ROOT,signal.delta)} · ${s.data.evidence.find { it.id==signal.sourceId }?.text?.take(35).orEmpty()}" }.toTypedArray()) { _,i ->
+                AlertDialog.Builder(this).setTitle("互动依据 · 点击可纠正").setItems(rows.map { signal -> "${if(signal.timeKnown==false)"消息时间未知，读取于${date(signal.at)}" else date(signal.at)} · ${"%+.2f".format(Locale.ROOT,signal.delta)} · ${s.data.evidence.find { it.id==signal.sourceId }?.text?.take(35).orEmpty()}" }.toTypedArray()) { _,i ->
                     val signal=rows[i]
                     AlertDialog.Builder(this).setTitle("本条互动估计").setMessage(s.data.evidence.find { it.id==signal.sourceId }?.text ?: "来源已删除").setNegativeButton("保留",null).setPositiveButton("忽略本条判断") { _,_->perform { repository.dismissSignal(signal.sourceId) } }.show()
                 }.setNegativeButton("关闭",null).show()

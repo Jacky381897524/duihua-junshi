@@ -13,14 +13,14 @@ enum class EvidenceStatus { OBSERVED, TENTATIVE, CONFIRMED }
 data class PersonalContact(val id:String,val platform:String,val nickname:String,val group:String?=null,val relationship:String="未知",val relationshipConfirmed:Boolean=false,val groupRoom:Boolean=false)
 data class PersonalEvidence(val id:String,val ownerId:String,val peerId:String,val text:String,val time:MessageTime?,val readAt:Long,val speaker:Speaker)
 data class PersonalMemory(val id:String,val ownerId:String,val kind:PersonalKind,val text:String,val sourceId:String?,val status:EvidenceStatus=EvidenceStatus.OBSERVED,val updatedAt:Long=0,val locked:Boolean=false,val interpretation:String?=null,val supportingSourceIds:List<String> = emptyList())
-data class InteractionSignal(val sourceId:String,val contactId:String,val category:String,val at:Long,val delta:Double)
+data class InteractionSignal(val sourceId:String,val contactId:String,val category:String,val at:Long,val delta:Double,val timeKnown:Boolean?=null)
 data class VoiceCorrection(val id:String,val peerId:String,val original:String,val actual:String,val at:Long)
-data class PersonalData(val contacts:List<PersonalContact> = emptyList(),val evidence:List<PersonalEvidence> = emptyList(),val memories:List<PersonalMemory> = emptyList(),val signals:List<InteractionSignal> = emptyList(),val corrections:List<VoiceCorrection> = emptyList(),val classified:Set<String> = emptySet(),val aliases:Map<String,String> = emptyMap(),val blocked:Set<String> = emptySet())
-data class RealityMemoryState(val schema:Int=1,val learningEnabled:Boolean=true,val paused:Boolean=false,val revision:Long=0,val data:PersonalData=PersonalData(),val undo:PersonalData?=null,val learningPolicy:Int=2)
+data class PersonalData(val contacts:List<PersonalContact> = emptyList(),val evidence:List<PersonalEvidence> = emptyList(),val memories:List<PersonalMemory> = emptyList(),val signals:List<InteractionSignal> = emptyList(),val corrections:List<VoiceCorrection> = emptyList(),val classified:Set<String> = emptySet(),val aliases:Map<String,String> = emptyMap(),val blocked:Set<String> = emptySet(),val dismissedSignals:Set<String> = emptySet())
+data class RealityMemoryState(val schema:Int=1,val learningEnabled:Boolean=true,val paused:Boolean=false,val revision:Long=0,val data:PersonalData=PersonalData(),val undo:PersonalData?=null,val learningPolicy:Int=3)
 interface RealityPersistence { fun load():RealityMemoryState?; fun save(state:RealityMemoryState) }
 data class PersonalProposal(val sourceId:String,val kind:PersonalKind,val quote:String,val relationship:String?=null,val supportingSourceIds:List<String> = emptyList())
 data class LearningSlice(val revision:Long,val evidence:List<PersonalEvidence>)
-data class LearningReceipt(val added:Int,val contactId:String?,val revision:Long)
+data class LearningReceipt(val added:Int,val contactId:String?,val revision:Long,val memoriesAdded:Int=0,val signalsAdded:Int=0)
 
 /** Names are deliberate identity keys, not a fuzzy guess at a real person. Group members have a separate namespace. */
 object PersonalIdentity {
@@ -77,26 +77,22 @@ class RealityMemoryRepository(private val persistence:RealityPersistence) {
         if(added.isEmpty() && contacts==data.contacts)return LearningReceipt(0,root,old.revision)
         val automatic=added.flatMap { e -> LocalPersonalLearning.memories(e,contacts,now) }
         val memories=(data.memories+automatic).distinctBy { it.id }
-        var signals=data.signals
-        for(e in added) {
-            // Unknown time cannot establish a new daily interaction; old imported messages cannot inflate today's trend.
-            val at=e.time?.epochMillis ?: continue
-            if(e.speaker!=Speaker.OTHER || at>now+60_000 || now-at>24*3600_000L)continue
-            val category=InteractionTrend.category(e.text) ?: continue
-            val previous=signals.filter { it.contactId==e.ownerId }
-            val delta=InteractionTrend.delta(previous,category,at)
-            signals=signals+InteractionSignal(e.id,e.ownerId,category,at,delta)
-        }
+        val signals=InteractionTrend.collect(data.signals,added,now,data.dismissedSignals)
+        val memoriesAdded=memories.size-data.memories.size;val signalsAdded=signals.size-data.signals.size
         data=data.copy(contacts=contacts,evidence=data.evidence+added,memories=memories,signals=signals)
         change(data)
-        return LearningReceipt(added.size,root,state().revision)
+        return LearningReceipt(added.size,root,state().revision,memoriesAdded,signalsAdded)
     }
     /** Once per learning policy, reorganize existing raw evidence without undoing user edits/deletions. */
     @Synchronized fun upgradeLearning(now:Long=System.currentTimeMillis()):Boolean {
-        val s=state();if(s.learningPolicy>=2 || !s.learningEnabled || s.paused)return false
+        val s=state();if(s.learningPolicy>=3 || !s.learningEnabled || s.paused)return false
         val d=s.data
         val automatic=d.evidence.filter { it.id !in d.blocked }.flatMap { LocalPersonalLearning.memories(it,d.contacts,now) }.filter { it.id !in d.blocked }
-        commit(s.copy(learningPolicy=2,revision=s.revision+1,data=d.copy(memories=(d.memories+automatic).distinctBy { it.id },classified=emptySet())))
+        // A missing v2 signal for an originally eligible message may have been dismissed.
+        // Only backfill evidence the old policy could never have scored.
+        val backfill=d.evidence.filter { e -> e.id !in d.blocked && (e.time?.epochMillis==null || now-(e.time.epochMillis)>24*3600_000L || InteractionTrend.legacyCategory(e.text)==null) }
+        val signals=InteractionTrend.collect(d.signals,backfill,now,d.dismissedSignals)
+        commit(s.copy(learningPolicy=3,revision=s.revision+1,data=d.copy(memories=(d.memories+automatic).distinctBy { it.id },signals=signals,classified=if(s.learningPolicy<2)emptySet() else d.classified)))
         return true
     }
     @Synchronized fun pending(max:Int=24):LearningSlice {
@@ -146,7 +142,7 @@ class RealityMemoryRepository(private val persistence:RealityPersistence) {
         if(d.corrections.any { it.id==id })return
         change(d.copy(corrections=d.corrections+VoiceCorrection(id,peerId,original,actual,System.currentTimeMillis())))
     }
-    @Synchronized fun dismissSignal(sourceId:String) { val d=state().data;change(d.copy(signals=d.signals.filterNot { it.sourceId==sourceId })) }
+    @Synchronized fun dismissSignal(sourceId:String) { val d=state().data;change(d.copy(signals=d.signals.filterNot { it.sourceId==sourceId },dismissedSignals=d.dismissedSignals+sourceId)) }
     @Synchronized fun deleteMemory(id:String) { val d=state().data;val item=d.memories.find { it.id==id } ?: return;change(d.copy(memories=d.memories.filterNot { it.id==id },blocked=d.blocked+id+listOfNotNull(item.sourceId))) }
     @Synchronized fun forget(id:String) {
         val d=state().data;val contact=d.contacts.find { it.id==id }
@@ -173,6 +169,7 @@ object LocalPersonalLearning {
     }
     private const val firstPerson="我(?:本人|自己)?(?:真的|比较|一直|平时|非常|特别|也|更|还|其实|很|最|挺|超|蛮|就|向来|有点){0,3}"
     fun permitted(kind:PersonalKind,text:String):Boolean {
+        if(kind==PersonalKind.RELATIONSHIP && directPartnerAddress(text))return true
         if(text.contains(Regex("[?？]|吗$|他说|她说|你说|假如|如果|例如|比如|指令|忽略|system|prompt|\\b(if|he says|she says|you said)\\b",RegexOption.IGNORE_CASE)))return false
         val fragment=text.trim().contains(Regex("^(?:不吃|不喝|不喜欢|讨厌|最爱|喜欢|爱吃|爱喝|每[天晚周]|通常|习惯|一般都|总是|慢热|内向|外向)"))
         val english=text.contains(Regex("\\bI\\s+(?:really\\s+|usually\\s+|always\\s+)?",RegexOption.IGNORE_CASE))
@@ -187,6 +184,11 @@ object LocalPersonalLearning {
             PersonalKind.FACT -> text.startsWith("我")
             PersonalKind.VOICE -> false // voice samples come from actual ME messages/corrections, never model classifications
         }
+    }
+    private fun directPartnerAddress(text:String):Boolean {
+        val s=text.trim()
+        if(s.contains(Regex("他说|她说|你说|如果|假如|不是|分手|离婚|[\"“”‘’]")))return false
+        return Regex("^(老婆|老公|媳妇)(?:$|[，,：:！!～~]|呀|啊|呢|你|我|吃|在|晚安|早|睡|亲|抱)").containsMatchIn(s)
     }
     fun classify(e:PersonalEvidence)=if(e.text.length>300)null else listOf(PersonalKind.DISLIKE,PersonalKind.LIKE,PersonalKind.HABIT,PersonalKind.BOUNDARY,PersonalKind.RELATIONSHIP,PersonalKind.TRAIT).firstOrNull { permitted(it,e.text) }
     private fun clauses(source:String):List<Pair<String,String>> {
@@ -209,7 +211,7 @@ object LocalPersonalLearning {
 
 /** An interaction estimate, not a measurement of another person's feelings. No points for read/refresh/send alone. */
 object InteractionTrend {
-    fun category(text:String):String? {
+    fun legacyCategory(text:String):String? {
         if(text.contains(Regex("[?？]|他说|她说|你说|如果|假如")))return null
         return when {
             text.contains(Regex("别再联系我|不要再找我|我不想见你|我(?:不喜欢|讨厌)你(?:了)?(?:$|[，。！!\\s])"))->"boundary"
@@ -217,6 +219,31 @@ object InteractionTrend {
             text.contains(Regex("我(?:想|喜欢|爱)你(?:了|啦|呀|啊|呢|哦|～|~)?(?:$|[，。！!\\s])|很想见你")) && !text.contains("不")->"closeness"
             else->null
         }
+    }
+    fun category(text:String):String? {
+        legacyCategory(text)?.let { return it }
+        if(text.contains(Regex("他说|她说|你说|如果|假如|不是|不想|别再|不要再|[\"“”]")))return null
+        return when {
+            text.contains(Regex("注意安全|早点休息|记得吃饭|多喝水|去吃点早饭|可以再睡会|别熬夜|照顾好自己"))->"care"
+            text.contains(Regex("谢谢啦|谢谢呀|谢谢哦|谢谢了|辛苦啦|辛苦了"))->"appreciation"
+            text.contains(Regex("(?:你|您)(?:吃饭了吗|吃了吗|到家了吗|睡了吗|今天怎么样)"))->"engagement"
+            else->null
+        }
+    }
+    fun collect(existing:List<InteractionSignal>,evidence:List<PersonalEvidence>,now:Long,dismissed:Set<String>):List<InteractionSignal> {
+        var signals=existing
+        val seen=(existing.map { it.sourceId }+dismissed).toMutableSet()
+        for(e in evidence.sortedBy { it.time?.epochMillis ?: it.readAt }) {
+            if(e.speaker!=Speaker.OTHER || !seen.add(e.id))continue
+            val at=e.time?.epochMillis ?: e.readAt
+            if(at>now+60_000)continue
+            val category=category(e.text) ?: continue
+            val previous=signals.filter { it.contactId==e.ownerId }
+            val weight=if(e.time==null || now-at>24*3600_000L) .25 else 1.0
+            val delta=delta(previous,category,at)*weight
+            signals=signals+InteractionSignal(e.id,e.ownerId,category,at,delta,e.time!=null)
+        }
+        return signals
     }
     fun score(signals:List<InteractionSignal>)=(50.0+signals.sumOf { it.delta }).coerceIn(0.0,100.0)
     private fun day(at:Long)=Instant.ofEpochMilli(at).atZone(ZoneId.of("Asia/Shanghai")).toLocalDate()
