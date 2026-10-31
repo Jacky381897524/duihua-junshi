@@ -398,8 +398,14 @@ class ChatCaptureService:AccessibilityService() {
         val merged=conversation.current ?: run { finishRead(ticket,"未取得可分析的对话，请重新读取"); return }
         visualFill?.let { ref -> merged.identity?.let { savedFillReferences[merged.packageName+":"+it.id]=ref } }
         graph.controller.observe(merged,"正在生成六条候选…")
+        // Reattach the last successful batch to this proven identity before a new
+        // request. A provider error must not erase that saved batch from the panel.
+        graph.replySessions.findByIdentity(merged)?.let { saved ->
+            val target=saved.target?.takeIf { target -> merged.messages.any { it.id==target.messageId } }
+            graph.controller.restore(saved.copy(snapshot=merged,target=target),merged.windowId)
+        }
         worker.execute { Logs.recover(LogStep.LOCAL_TASK) { graph.recent.remember(merged) } }
-        val proof=fillReference?.viewport?.let { v -> CachedHeaderProof(fillReference.stamp,v.width,v.height) }
+        val proof=fillReference?.viewport?.let { v -> CachedHeaderProof(fillReference.stamp,v.width,v.height,fillReference.conversationStamp) }
         graph.currentObjectId=null; graph.controller.analyze(merged,objectId=null,diagnosticParent=readLog,headerProof=proof)
         finishRead(ticket)
     }
@@ -424,6 +430,7 @@ class ChatCaptureService:AccessibilityService() {
                         val positionScale=original.height.toDouble()/scaled.height
                         val titleStamp=VisualFillReference.stamp(original)
                         val footerStamp=VisualFillReference.footerStamp(original)
+                        val conversationStamp=VisualFillReference.conversationStamp(original)
                         val nativeInput=w.nodes.filter { it.editable && !it.text.orEmpty().contains("搜索") && ImeFillPolicy.composerAllowed(it.bounds,w.viewport) }.map { it.bounds }.distinct().singleOrNull()
                         val localInput=if(nativeInput==null)Logs.recover(LogStep.READ_PARSE,visionLog) {
                             com.loveadvisor.core.input.WechatComposerLocator.locate(w.packageName,original.width,original.height,original::getPixel)?.let { r ->
@@ -442,7 +449,7 @@ class ChatCaptureService:AccessibilityService() {
                             if(!cancel.cancelled && lease==navigation && manualRead.accepts(ticket) && overlayAllowed()) {
                                 lastComposerDiagnosticStatus=when { nativeInput!=null -> "原生文字输入区域";localInput!=null -> "本地识别空白文字输入区域";modelInput!=null -> "视觉返回文字输入区域";else -> "本次未确认文字输入区域" }
                                 Logs.event(LogStep.VISION_RESULT,LogState.OK,operation=visionLog,metrics=mapOf(LogMetric.MESSAGE_COUNT to visual.messages.size.toLong(),LogMetric.HAS_INPUT to if(input!=null)1L else 0L));Logs.end(visionLog,LogState.OK)
-                                pendingVision=VisionReply(visual,w.windowId,cancel,ticket,lease,titleStamp?.let { VisualFillReference(w.windowId,lease,it,input,footerStamp,w.viewport) })
+                                pendingVision=VisionReply(visual,w.windowId,cancel,ticket,lease,titleStamp?.let { VisualFillReference(w.windowId,lease,it,input,footerStamp,w.viewport,conversationStamp=conversationStamp) })
                                 observe() // One local verification read; no second screenshot or automatic retry.
                             } else Logs.end(visionLog,LogState.CANCELLED,LogReason.RESULT_STALE)
                         }
@@ -587,7 +594,8 @@ class ChatCaptureService:AccessibilityService() {
                             val known=if(headerOnly)previous?.identity?.displayTitle else previous?.replyStyleTitle ?: previous?.identity?.displayTitle
                             if(known!=null && previous!=null && previous===conversation.current && previous.packageName==pkg && previous.windowId==windowId &&
                                 previousImage!=null && previousImage===visualFill && previousImage.windowId==windowId && previousImage.generation==generation &&
-                                VisualFillReference.stamp(original)==previousImage.stamp) {
+                                VisualFillReference.stamp(original)==previousImage.stamp &&
+                                (!graph.replySessions.hasAmbiguousTitle(pkg,known) || previousImage.conversationStamp!=null && previousImage.conversationStamp==VisualFillReference.conversationStamp(original))) {
                                 original.recycle();finish(known,localOcr=previous.source==CaptureSource.OCR);return@imageWork
                             }
                             val v=window.viewport
@@ -598,9 +606,9 @@ class ChatCaptureService:AccessibilityService() {
                                 val localInput=if(nativeInput==null)com.loveadvisor.core.input.WechatComposerLocator.locate(pkg,original.width,original.height,original::getPixel)?.let { r ->
                                     RectI(v.left+(r.left*v.width.toDouble()/original.width).toInt(),v.top+(r.top*v.height.toDouble()/original.height).toInt(),v.left+(r.right*v.width.toDouble()/original.width).toInt(),v.top+(r.bottom*v.height.toDouble()/original.height).toInt())
                                 }?.takeIf { ImeFillPolicy.composerAllowed(it,v) } else null
-                                VisualFillReference(windowId,generation,stamp,nativeInput ?: localInput,VisualFillReference.footerStamp(original),v)
+                                VisualFillReference(windowId,generation,stamp,nativeInput ?: localInput,VisualFillReference.footerStamp(original),v,conversationStamp=VisualFillReference.conversationStamp(original))
                             } else null
-                            val cached=if(reference!=null && pkg!=null)graph.replySessions.findByHeaderProof(pkg,CachedHeaderProof(reference.stamp,v.width,v.height)) else null
+                            val cached=if(reference!=null && pkg!=null)graph.replySessions.findByHeaderProof(pkg,CachedHeaderProof(reference.stamp,v.width,v.height,reference.conversationStamp)) else null
                             if(cached!=null) {
                                 Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.STEP,LogReason.CACHE_HEADER_PROOF_MATCH,log)
                                 original.recycle();finish(cached.snapshot.identity?.displayTitle,localOcr=true,reference=reference);return@imageWork
@@ -612,11 +620,12 @@ class ChatCaptureService:AccessibilityService() {
                             val header=Bitmap.createBitmap(original,x,y,right-x,bottom-y);cropped=header
                             if(header!==original)original.recycle()
                             val recognizer=MlKitOcr();ocr=recognizer
-                            val cachedTitles=if(headerOnly)graph.replySessions.all().filter { it.snapshot.packageName==pkg }.mapNotNull { it.snapshot.identity?.displayTitle } else emptyList()
+                            val cachedEntries=if(headerOnly)graph.replySessions.all().filter { it.snapshot.packageName==pkg } else emptyList()
+                            val cachedTitles=cachedEntries.mapNotNull { it.snapshot.identity?.displayTitle }
                             recognizer.recognize(header,cancel,{ boxes,_ ->
                                 val matched=boxes?.let { ReplyStyleHeader.cachedTitle(it,cachedTitles,header.width,header.height) }
                                 val title=matched ?: boxes?.let { ReplyStyleHeader.title(it) }
-                                if(headerOnly)Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.STEP,if(matched!=null)LogReason.CACHE_HEADER_OCR_MATCH else LogReason.CACHE_HEADER_OCR_MISS,log,metrics=mapOf(LogMetric.COUNT to (boxes?.size ?: 0).toLong(),LogMetric.CACHED to cachedTitles.size.toLong()))
+                                if(headerOnly)Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.STEP,if(matched!=null)LogReason.CACHE_HEADER_OCR_MATCH else LogReason.CACHE_HEADER_OCR_MISS,log,metrics=mapOf(LogMetric.COUNT to (boxes?.size ?: 0).toLong(),LogMetric.RESULT_COUNT to cachedTitles.size.toLong(),LogMetric.CACHE_DUPLICATE_COUNT to cachedTitles.groupingBy { it }.eachCount().values.sumOf { (it-1).coerceAtLeast(0) }.toLong(),LogMetric.CACHE_PROOF_COUNT to cachedEntries.count { it.headerProof?.conversationStamp!=null }.toLong()))
                                 finish(title,localOcr=true,reference=reference)
                             },{
                                 if(!header.isRecycled)header.recycle();recognizer.close()
@@ -645,7 +654,8 @@ class ChatCaptureService:AccessibilityService() {
             retryHeaderIfRequested()
             if(lease!=navigation || revision!=headerNavigationRevision || pkg!=foregroundPackage || id!=foregroundWindowId || !overlayAllowed())return@readStyleNickname
             val verified=title.takeIf { actual==pkg }
-            val result=graph.controller.completePanelRestore(check,verified,nativeTitle=!lastStyleNicknameFromOcr)
+            val proof=freshFill?.viewport?.let { v -> CachedHeaderProof(freshFill!!.stamp,v.width,v.height,freshFill!!.conversationStamp) }
+            val result=graph.controller.completePanelRestore(check,verified,nativeTitle=!lastStyleNicknameFromOcr,proof=proof)
             when(result) {
                 PanelReplyRestoration.Result.RESTORED -> graph.tracker.lastSnapshot?.let { applyCachedSnapshot(it,freshFill) }
                 PanelReplyRestoration.Result.RETAINED -> {
@@ -661,7 +671,7 @@ class ChatCaptureService:AccessibilityService() {
             val currentSnapshot=graph.tracker.lastSnapshot
             if(verified!=null && verified==currentSnapshot?.identity?.displayTitle && freshFill?.viewport!=null) {
                 val ref=freshFill!!;val viewport=ref.viewport!!
-                graph.replySessions.bindHeaderProof(currentSnapshot,CachedHeaderProof(ref.stamp,viewport.width,viewport.height))
+                graph.replySessions.bindHeaderProof(currentSnapshot,CachedHeaderProof(ref.stamp,viewport.width,viewport.height,ref.conversationStamp))
             }
             Logs.event(LogStep.REPLY_CACHE_RESTORE,if(result==PanelReplyRestoration.Result.UNAVAILABLE)LogState.SKIP else LogState.OK,
                 reason=when {

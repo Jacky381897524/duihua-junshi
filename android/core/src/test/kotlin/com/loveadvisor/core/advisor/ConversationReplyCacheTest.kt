@@ -27,6 +27,16 @@ class ConversationReplyCacheTest {
         cache.remember(saved("a","同名").copy(headerProof=proof));cache.remember(saved("b","同名"))
         assertNull(cache.findByHeaderProof("com.tencent.mm",proof))
     }
+    @Test fun repeatedTitleRequiresAUniqueMatchingConversationFingerprint() {
+        val cache=ConversationReplyCache();val base=CachedHeaderProof("a".repeat(64),1080,2344)
+        val first=base.copy(conversationStamp="b".repeat(64));val second=base.copy(conversationStamp="c".repeat(64))
+        cache.remember(saved("a","同名").copy(headerProof=first));cache.remember(saved("b","同名").copy(headerProof=second))
+        assertEquals("b",cache.findByHeaderProof("com.tencent.mm",second)!!.snapshot.identity!!.id)
+        assertEquals("b",cache.findByHeaderProof("com.tencent.mm",second.copy(stamp="e".repeat(64)))!!.snapshot.identity!!.id)
+        assertNull(cache.findByHeaderProof("com.tencent.mm",base))
+        assertNull(cache.findByHeaderProof("com.tencent.mm",base.copy(conversationStamp="d".repeat(64))))
+        cache.remember(saved("c","同名").copy(headerProof=second));assertNull(cache.findByHeaderProof("com.tencent.mm",second))
+    }
     @Test fun bindingHeaderProofCannotTargetOtherIdentityOrInvalidFingerprint() {
         val cache=ConversationReplyCache();val item=saved("a");cache.remember(item)
         val proof=CachedHeaderProof("a".repeat(64),1080,2344)
@@ -71,6 +81,17 @@ class ConversationReplyCacheTest {
         val next=a.copy(batch=a.batch.copy(replies=a.batch.replies.map { it.copy(text=it.text+"新的") }))
         cache.remember(next);assertEquals(2,cache.all().size);assertEquals(next,cache.find(a.snapshot.packageName,"a"));assertEquals(b,cache.find(b.snapshot.packageName,"b"))
         assertFalse(cache.remember(a.copy(batch=a.batch.copy(replies=emptyList()))));assertEquals(next,cache.find(a.snapshot.packageName,"a"))
+    }
+    @Test fun previousBatchRemainsUsableWhenNewGenerationFails() {
+        val cache=ConversationReplyCache();val saved=saved("a");cache.remember(saved)
+        val newer=saved.snapshot.copy(messages=saved.snapshot.messages+ChatMessage("new",Speaker.OTHER,null,"新的聊天内容"))
+        assertNotNull(cache.findByIdentity(newer))
+        assertNull(cache.findByIdentity(newer.copy(identity=newer.identity!!.copy(id="other"))))
+        val tracker=SessionTracker();val coordinator=BatchCoordinator(tracker,RequestGate(tracker))
+        assertTrue(coordinator.restore(cache.findByIdentity(newer)!!.copy(snapshot=newer),newer.windowId))
+        val request=coordinator.begin(newer)!!;coordinator.fail(request.requestTicket,"服务商返回 402")
+        assertEquals(saved.batch,coordinator.state.current!!.batch)
+        assertTrue(tracker.isCurrent(coordinator.state.current!!.ticket.session))
     }
     @Test fun persistedResultsRestoreWithANewWindowTicketAndRejectOldAsyncResults() {
         val cache=ConversationReplyCache();val a=saved("a");cache.remember(a)

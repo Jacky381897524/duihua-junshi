@@ -13,17 +13,9 @@ class RecentConversations {
     }
     fun cleanup(now:Long) { if(now-lastCleanup>=12*3600000L || lastCleanup==0L) { entries=entries.map { it.copy(messages=it.messages.takeLast(ConversationContextPolicy.forSnapshot(it))) }; lastCleanup=now } }
     fun match(visible:ChatSnapshot):ChatSnapshot? {
-        val messages=visible.messages
-        val participants=messages.map { if(it.speaker==Speaker.ME) "me" else it.sender?.let { name -> "other:$name" } ?: "other" }.distinct()
-        if(messages.size<3 || participants.size<2) return null
-        fun equal(a:ChatMessage,b:ChatMessage)=ConversationContextPolicy.same(a,b)
         val matches=entries.filter { entry ->
             if(entry.packageName!=visible.packageName || entry.identity?.kind!=visible.identity?.kind || entry.identity?.displayTitle!=visible.identity?.displayTitle) false else {
-                (3..minOf(entry.messages.size,messages.size)).any { count ->
-                    val rows=messages.takeLast(count)
-                    rows.sumOf { it.text.length }>=60 && rows.map { it.text }.distinct().size>=3 &&
-                        (0..entry.messages.size-count).any { start -> rows.indices.all { equal(entry.messages[start+it],rows[it]) } }
-                }
+                ConversationContextPolicy.strongOverlap(entry.messages,visible.messages)
             }
         }
         return matches.singleOrNull()

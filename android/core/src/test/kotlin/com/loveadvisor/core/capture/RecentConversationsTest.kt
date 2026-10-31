@@ -4,6 +4,13 @@ import com.loveadvisor.core.model.*
 import org.junit.Assert.*
 import org.junit.Test
 class RecentConversationsTest {
+    @Test fun uniqueOldPassageStillMatchesAfterNewMessagesArrive() {
+        val store=RecentConversations();val s=AdvisorFixtures.snapshot().copy(messages=(1..4).map { ChatMessage("$it",if(it%2==0)Speaker.ME else Speaker.OTHER,null,"独特对话内容第${it}句足够识别") })
+        store.remember(s)
+        val newer=s.copy(identity=s.identity!!.copy(id="new"),messages=s.messages+ChatMessage("new",Speaker.OTHER,null,"后来又说了一句"))
+        assertEquals(s.identity!!.id,store.match(newer)?.identity?.id)
+        assertNull(store.match(newer.copy(messages=(1..4).map { ChatMessage("$it",if(it%2==0)Speaker.ME else Speaker.OTHER,null,listOf("嗯","好","好的","行")[it-1]) })))
+    }
     @Test fun identicalForwardedConversationOnAnotherAppDoesNotRestoreWechatHistory() {
         val store=RecentConversations()
         val snapshot=AdvisorFixtures.snapshot().copy(messages=(1..4).map { ChatMessage("$it",if(it%2==0)Speaker.ME else Speaker.OTHER,null,"独特聊天消息${it}，这里包含足够长的实际对话细节用于匹配上下文") })

@@ -85,6 +85,32 @@ class PanelReplyRestorationTest {
         assertEquals(b.batch,coordinator.state.current!!.batch);assertNotEquals(a.batch,coordinator.state.current!!.batch)
         assertTrue(tracker.isCurrent(coordinator.state.current!!.ticket.session))
     }
+    @Test fun repeatedDisplayTitleUsesUniqueConversationProofBeforeRetainingOldBatch() {
+        val source=AdvisorFixtures.snapshot();val proof=CachedHeaderProof("a".repeat(64),1080,2344,"b".repeat(64))
+        val a=generate();cache.remember(SavedConversationReplies(source,a.batch,headerProof=proof))
+        val other=source.copy(identity=source.identity!!.copy(id="other"))
+        val bProof=proof.copy(conversationStamp="c".repeat(64))
+        val b=SavedConversationReplies(other,AdvisorFixtures.valid().copy(replies=AdvisorFixtures.valid().replies.map { it.copy(text=it.text+"另一人") }),headerProof=bProof)
+        cache.remember(b);val check=restoration.begin("com.tencent.mm",1)
+        assertEquals(PanelReplyRestoration.Result.RESTORED,restoration.complete(check,other.identity!!.displayTitle,false,bProof))
+        assertEquals("other",tracker.lastSnapshot!!.identity!!.id);assertEquals(b.batch,coordinator.state.current!!.batch)
+    }
+    @Test fun sevenContactsCanSwitchRepeatedlyWhilePanelRemainsOpen() {
+        generate();val base=AdvisorFixtures.snapshot()
+        val items=(0..6).map { i ->
+            val snapshot=base.copy(identity=base.identity!!.copy(id="person$i",displayTitle="对象$i"))
+            val proof=CachedHeaderProof("$i".repeat(64),1080,2344,"${i+1}".repeat(64))
+            SavedConversationReplies(snapshot,AdvisorFixtures.valid().copy(replies=AdvisorFixtures.valid().replies.map { it.copy(text=it.text+"对象$i") }),headerProof=proof).also { assertTrue(cache.remember(it)) }
+        }
+        repeat(5) { for(index in listOf(0,1,2,3,4,5,6,0,5,2)) {
+            val expected=items[index];val check=restoration.begin("com.tencent.mm",1)
+            val found=cache.findByHeaderProof("com.tencent.mm",expected.headerProof!!)!!
+            val result=restoration.complete(check,found.snapshot.identity!!.displayTitle,false,expected.headerProof)
+            assertTrue(result==PanelReplyRestoration.Result.RESTORED || result==PanelReplyRestoration.Result.RETAINED)
+            assertEquals(expected.snapshot.identity!!.id,tracker.lastSnapshot!!.identity!!.id)
+            assertEquals(expected.batch,coordinator.state.current!!.batch)
+        } }
+    }
 
     @Test fun anotherApplicationOrWindowCannotKeepTheOldFillTicket() {
         val a=generate()

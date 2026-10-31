@@ -34,12 +34,16 @@ class PanelReplyRestoration(
         return check
     }
 
-    @Synchronized fun complete(check:Check,title:String?,nativeTitle:Boolean):Result {
+    @Synchronized fun complete(check:Check,title:String?,nativeTitle:Boolean,proof:CachedHeaderProof?=null):Result {
         if(pending!==check || tracker.currentToken!=check.token || tracker.lastSnapshot!=check.snapshot ||
             coordinator.state.current!==check.state.current || coordinator.state.loading)return Result.STALE
         pending=null
         val name=title?.trim()?.takeIf { it.isNotEmpty() }
         val retained=check.state.current!=null && check.snapshot!=null
+        val byProof=proof?.let { cache.findByHeaderProof(check.packageName,it) }
+        if(byProof!=null && byProof.snapshot.identity?.displayTitle==name && byProof.snapshot.identity?.id!=check.snapshot?.identity?.id && coordinator.restore(byProof,check.windowId)) {
+            cache.touch(byProof);return Result.RESTORED
+        }
         if(retained && name!=null && name==check.snapshot?.identity?.displayTitle) {
             val previous=check.state.error?.takeUnless { it==checkingRetained || it==checkingCache || it==unverified }
             coordinator.status(previous ?: "已保留本对象上次候选 · 未调用模型")

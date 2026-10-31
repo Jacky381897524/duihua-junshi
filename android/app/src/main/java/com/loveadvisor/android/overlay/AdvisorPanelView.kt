@@ -247,7 +247,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             val lp=action.layoutParams as LinearLayout.LayoutParams
             lp.width=sizing.actionWidth;lp.height=sizing.actionHeight;lp.leftMargin=sizing.gap
         }
-        val inset=dp(if(resources.configuration.fontScale>1.3f)2 else 10)
+        val inset=dp(if(resources.configuration.fontScale>1.3f)2 else 6)
         if(headerInset!=inset) {
             listOf(analyze,read).forEach { it.background=android.graphics.drawable.InsetDrawable(ViewStyles.shape(context,palette.card,12f,palette.border),0,inset,0,inset) }
             headerInset=inset

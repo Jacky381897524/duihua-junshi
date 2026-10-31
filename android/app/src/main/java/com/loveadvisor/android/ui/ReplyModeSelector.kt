@@ -19,7 +19,7 @@ class ReplyModeSelector(context:Context,private val settings:AppSettings,compact
     private var unsubscribe:(()->Unit)?=null
     init {
         orientation=VERTICAL
-        addView(track,LayoutParams(-1,dp(48)))
+        addView(track,LayoutParams(-1,if(compact)ViewStyles.dp(context,34f*resources.configuration.fontScale.coerceAtLeast(1f)) else dp(48)))
         addView(PanelPalette(context).text("祛味：减少AI生硬感\n真实：模仿更接近你的口吻",if(compact)9.5f else 11f,PanelPalette(context).muted),LayoutParams(-1,-2).apply { topMargin=dp(3) })
         render(false)
     }

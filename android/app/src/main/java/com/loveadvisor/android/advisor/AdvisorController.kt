@@ -94,8 +94,8 @@ class AdvisorController(private val graph:AppGraph) {
         return check
     }
     /** Caller synchronizes the capture context before publishing a restored batch. */
-    fun completePanelRestore(check:PanelReplyRestoration.Check,title:String?,nativeTitle:Boolean):PanelReplyRestoration.Result {
-        val result=panelRestoration.complete(check,title,nativeTitle)
+    fun completePanelRestore(check:PanelReplyRestoration.Check,title:String?,nativeTitle:Boolean,proof:CachedHeaderProof?=null):PanelReplyRestoration.Result {
+        val result=panelRestoration.complete(check,title,nativeTitle,proof)
         if(result==PanelReplyRestoration.Result.RESTORED)graph.tracker.lastSnapshot?.let {
             lastContext=Context(it,"","",null,graph.coordinator.targetFor(it))
         }
