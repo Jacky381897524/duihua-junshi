@@ -7,6 +7,34 @@ import org.junit.Test
 
 class ConversationReplyCacheTest {
     private fun saved(id:String,title:String=id)=SavedConversationReplies(AdvisorFixtures.snapshot().let { it.copy(identity=it.identity!!.copy(id=id,displayTitle=title)) },AdvisorFixtures.valid())
+    @Test fun uniqueMatchingHeaderProofRestoresOtherContactAndSurvivesSerialization() {
+        val cache=ConversationReplyCache();val a=saved("a");val b=saved("b")
+        val proof=CachedHeaderProof("a".repeat(64),1080,2344)
+        cache.remember(a);cache.remember(b.copy(headerProof=proof))
+        assertEquals(b.batch,cache.findByHeaderProof("com.tencent.mm",proof)!!.batch)
+        assertNull(cache.findByHeaderProof("other.package",proof))
+        assertNull(cache.findByHeaderProof("com.tencent.mm",proof.copy(width=1000)))
+        val reloaded=ConversationReplyCache(object:ConversationReplyPersistence {
+            override fun load()=ConversationReplyCache.decode(com.google.gson.Gson().toJson(cache.all()))
+            override fun save(entries:List<SavedConversationReplies>) {}
+        })
+        assertEquals("b",reloaded.findByHeaderProof("com.tencent.mm",proof)!!.snapshot.identity!!.id)
+        reloaded.remember(b.copy(batch=b.batch));assertEquals(proof,reloaded.find("com.tencent.mm","b")!!.headerProof)
+        reloaded.remember(a.copy(headerProof=proof));assertNull(reloaded.findByHeaderProof("com.tencent.mm",proof))
+    }
+    @Test fun proofDoesNotDisambiguateDifferentContactsWithSameDisplayTitle() {
+        val cache=ConversationReplyCache();val proof=CachedHeaderProof("a".repeat(64),1080,2344)
+        cache.remember(saved("a","同名").copy(headerProof=proof));cache.remember(saved("b","同名"))
+        assertNull(cache.findByHeaderProof("com.tencent.mm",proof))
+    }
+    @Test fun bindingHeaderProofCannotTargetOtherIdentityOrInvalidFingerprint() {
+        val cache=ConversationReplyCache();val item=saved("a");cache.remember(item)
+        val proof=CachedHeaderProof("a".repeat(64),1080,2344)
+        cache.bindHeaderProof(item.snapshot.copy(identity=item.snapshot.identity!!.copy(displayTitle="other")),proof)
+        assertNull(cache.find("com.tencent.mm","a")!!.headerProof)
+        cache.bindHeaderProof(item.snapshot,proof.copy(stamp="invalid"));assertNull(cache.find("com.tencent.mm","a")!!.headerProof)
+        cache.bindHeaderProof(item.snapshot,proof);assertEquals(proof,cache.find("com.tencent.mm","a")!!.headerProof)
+    }
     @Test fun defaultTenAndConfigurableLimitEvictLeastRecentlyUsed() {
         var maximum=10
         val cache=ConversationReplyCache(limit={ maximum })

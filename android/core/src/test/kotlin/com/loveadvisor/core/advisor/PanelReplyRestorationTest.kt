@@ -73,6 +73,18 @@ class PanelReplyRestorationTest {
         assertEquals(a.batch,coordinator.state.current!!.batch)
         assertEquals(2,cache.all().size)
     }
+    @Test fun anotherCachedHeaderFingerprintCanRestoreWhilePanelStaysOpen() {
+        val a=generate();val source=AdvisorFixtures.snapshot()
+        val bSnapshot=source.copy(identity=source.identity!!.copy(id="b",displayTitle="小林"))
+        val proof=CachedHeaderProof("c".repeat(64),1080,2344)
+        val b=SavedConversationReplies(bSnapshot,AdvisorFixtures.valid().copy(replies=AdvisorFixtures.valid().replies.map { it.copy(text=it.text+"另一对象") }),headerProof=proof)
+        cache.remember(b)
+        val check=restoration.begin("com.tencent.mm",1)
+        val observed=cache.findByHeaderProof("com.tencent.mm",proof)!!.snapshot.identity!!.displayTitle
+        assertEquals(PanelReplyRestoration.Result.RESTORED,restoration.complete(check,observed,false))
+        assertEquals(b.batch,coordinator.state.current!!.batch);assertNotEquals(a.batch,coordinator.state.current!!.batch)
+        assertTrue(tracker.isCurrent(coordinator.state.current!!.ticket.session))
+    }
 
     @Test fun anotherApplicationOrWindowCannotKeepTheOldFillTicket() {
         val a=generate()

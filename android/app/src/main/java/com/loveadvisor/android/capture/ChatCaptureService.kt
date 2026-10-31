@@ -19,6 +19,7 @@ import java.util.concurrent.Executors
 import java.util.UUID
 import com.loveadvisor.core.advisor.ReplyPlan
 import com.loveadvisor.core.advisor.PanelReplyRestoration
+import com.loveadvisor.core.advisor.CachedHeaderProof
 import com.loveadvisor.android.input.VisualFillReference
 import com.loveadvisor.android.input.VerifiedInputMethod
 import com.loveadvisor.core.input.ComposerFocusResult
@@ -113,6 +114,7 @@ class ChatCaptureService:AccessibilityService() {
     private var headerCheckPending=false
     private var lastHeaderCheck=0L
     private var headerRetryRequested=false
+    private var headerNavigationRevision=0L
     private val headerRetry=Runnable { checkCachedHeader(allowTitleOcr=true) }
     private val windowLogTimes=linkedMapOf<String,Long>()
     private fun recordWindowEvent(key:String,now:Long):Boolean {
@@ -174,7 +176,10 @@ class ChatCaptureService:AccessibilityService() {
         val pkg=event.packageName?.toString()
         if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED && event.windowChanges and (AccessibilityEvent.WINDOWS_CHANGE_REMOVED or AccessibilityEvent.WINDOWS_CHANGE_ADDED)!=0) reader.forgetWindow(event.windowId)
         val structural=event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED || event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-        if(ChatApps.supported(pkg) && event.eventType in setOf(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED))scheduleHeaderCheck()
+        if(ChatApps.supported(pkg) && event.eventType in setOf(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)) {
+            if(event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)headerNavigationRevision++
+            scheduleHeaderCheck()
+        }
         if(ChatApps.supported(pkg) && event.eventType==AccessibilityEvent.TYPE_VIEW_SCROLLED && manualRead.active!=null) {
             cancelScreenRead("读取期间屏幕已滚动，本次读取已取消；已保留上次内容")
         }
@@ -394,7 +399,8 @@ class ChatCaptureService:AccessibilityService() {
         visualFill?.let { ref -> merged.identity?.let { savedFillReferences[merged.packageName+":"+it.id]=ref } }
         graph.controller.observe(merged,"正在生成六条候选…")
         worker.execute { Logs.recover(LogStep.LOCAL_TASK) { graph.recent.remember(merged) } }
-        graph.currentObjectId=null; graph.controller.analyze(merged,objectId=null,diagnosticParent=readLog)
+        val proof=fillReference?.viewport?.let { v -> CachedHeaderProof(fillReference.stamp,v.width,v.height) }
+        graph.currentObjectId=null; graph.controller.analyze(merged,objectId=null,diagnosticParent=readLog,headerProof=proof)
         finishRead(ticket)
     }
     private fun captureVision(w:WindowSnapshot,ticket:ManualReadGate.Ticket) {
@@ -536,6 +542,7 @@ class ChatCaptureService:AccessibilityService() {
         if(!headerOnly)Logs.event(LogStep.PAGE_OPEN,reason=LogReason.PAGE_REPLY_STYLE,operation=log)
         val cancel=Cancellation()
         val pkg=foregroundPackage;val windowId=foregroundWindowId;val generation=navigation
+        val foregroundMetadata=lastForegroundWindow
         val previous=conversation.current;val previousImage=visualFill
         var completed=false
         fun current()=!cancel.cancelled && instance===this && overlayAllowed() && generation==navigation && pkg==foregroundPackage && windowId==foregroundWindowId
@@ -558,6 +565,7 @@ class ChatCaptureService:AccessibilityService() {
         main.postDelayed({ if(!completed && !cancel.cancelled)complete(if(current())pkg else null,null) },6500)
         nativeWorker.execute {
             val window=Logs.recover(LogStep.READ_NATIVE,log) { if(headerOnly)reader.readHeader(pkg) else reader.read(expectedPackage=pkg) }
+                ?: foregroundMetadata?.takeIf { headerOnly && it.packageName==pkg && it.windowId==windowId && it.viewport.width>0 && it.viewport.height>0 }
             val native=NativeReplyStyleTitle.read(window)
             main.post {
                 if(!current() || window==null || window.windowId!=windowId || window.packageName!=pkg) { complete(null,null);return@post }
@@ -592,6 +600,11 @@ class ChatCaptureService:AccessibilityService() {
                                 }?.takeIf { ImeFillPolicy.composerAllowed(it,v) } else null
                                 VisualFillReference(windowId,generation,stamp,nativeInput ?: localInput,VisualFillReference.footerStamp(original),v)
                             } else null
+                            val cached=if(reference!=null && pkg!=null)graph.replySessions.findByHeaderProof(pkg,CachedHeaderProof(reference.stamp,v.width,v.height)) else null
+                            if(cached!=null) {
+                                Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.STEP,LogReason.CACHE_HEADER_PROOF_MATCH,log)
+                                original.recycle();finish(cached.snapshot.identity?.displayTitle,localOcr=true,reference=reference);return@imageWork
+                            }
                             val x=((crop.left-v.left)*original.width.toDouble()/v.width).toInt().coerceIn(0,original.width-1)
                             val y=((crop.top-v.top)*original.height.toDouble()/v.height).toInt().coerceIn(0,original.height-1)
                             val right=((crop.right-v.left)*original.width.toDouble()/v.width).toInt().coerceIn(x+1,original.width)
@@ -599,9 +612,15 @@ class ChatCaptureService:AccessibilityService() {
                             val header=Bitmap.createBitmap(original,x,y,right-x,bottom-y);cropped=header
                             if(header!==original)original.recycle()
                             val recognizer=MlKitOcr();ocr=recognizer
-                            recognizer.recognize(header,cancel,{ boxes,_ -> finish(boxes?.let { ReplyStyleHeader.title(it) },localOcr=true,reference=reference) },{
+                            val cachedTitles=if(headerOnly)graph.replySessions.all().filter { it.snapshot.packageName==pkg }.mapNotNull { it.snapshot.identity?.displayTitle } else emptyList()
+                            recognizer.recognize(header,cancel,{ boxes,_ ->
+                                val matched=boxes?.let { ReplyStyleHeader.cachedTitle(it,cachedTitles,header.width,header.height) }
+                                val title=matched ?: boxes?.let { ReplyStyleHeader.title(it) }
+                                if(headerOnly)Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.STEP,if(matched!=null)LogReason.CACHE_HEADER_OCR_MATCH else LogReason.CACHE_HEADER_OCR_MISS,log,metrics=mapOf(LogMetric.COUNT to (boxes?.size ?: 0).toLong(),LogMetric.CACHED to cachedTitles.size.toLong()))
+                                finish(title,localOcr=true,reference=reference)
+                            },{
                                 if(!header.isRecycled)header.recycle();recognizer.close()
-                            })
+                            },lines=headerOnly)
                         } catch(error:Exception) {
                             Logs.failed(LogStep.READ_PARSE,error,log)
                             cropped?.let { if(!it.isRecycled)it.recycle() };if(!original.isRecycled)original.recycle();ocr?.close();finish(null)
@@ -618,12 +637,13 @@ class ChatCaptureService:AccessibilityService() {
         val pkg=foregroundPackage ?: return
         val id=foregroundWindowId ?: return
         val lease=navigation
+        val revision=headerNavigationRevision
         val check=graph.controller.beginPanelRestore(pkg,id)
         var freshFill:VisualFillReference?=null
         cancelCachedHeader=readStyleNickname(headerOnly=true,onVerifiedImage={ freshFill=it }) { actual,title ->
             cancelCachedHeader=null
             retryHeaderIfRequested()
-            if(lease!=navigation || pkg!=foregroundPackage || id!=foregroundWindowId || !overlayAllowed())return@readStyleNickname
+            if(lease!=navigation || revision!=headerNavigationRevision || pkg!=foregroundPackage || id!=foregroundWindowId || !overlayAllowed())return@readStyleNickname
             val verified=title.takeIf { actual==pkg }
             val result=graph.controller.completePanelRestore(check,verified,nativeTitle=!lastStyleNicknameFromOcr)
             when(result) {
@@ -637,6 +657,11 @@ class ChatCaptureService:AccessibilityService() {
                 }
                 PanelReplyRestoration.Result.UNAVAILABLE -> { conversation.clear();identity=null;pastedSnapshot=null;visualFill=null }
                 PanelReplyRestoration.Result.STALE -> return@readStyleNickname
+            }
+            val currentSnapshot=graph.tracker.lastSnapshot
+            if(verified!=null && verified==currentSnapshot?.identity?.displayTitle && freshFill?.viewport!=null) {
+                val ref=freshFill!!;val viewport=ref.viewport!!
+                graph.replySessions.bindHeaderProof(currentSnapshot,CachedHeaderProof(ref.stamp,viewport.width,viewport.height))
             }
             Logs.event(LogStep.REPLY_CACHE_RESTORE,if(result==PanelReplyRestoration.Result.UNAVAILABLE)LogState.SKIP else LogState.OK,
                 reason=when {

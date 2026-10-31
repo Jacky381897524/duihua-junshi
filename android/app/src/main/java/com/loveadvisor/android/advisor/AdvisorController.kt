@@ -24,7 +24,7 @@ class AdvisorController(private val graph:AppGraph) {
     fun listen(listener:(BatchState)->Unit) { listeners.add(listener); listener(graph.coordinator.state) }
     fun unlisten(listener:(BatchState)->Unit) { listeners.remove(listener) }
     fun publish() { listeners.toList().forEach { it(graph.coordinator.state) } }
-    fun analyze(snapshot:ChatSnapshot,goal:String=graph.currentGoal,background:String="",objectId:String?=graph.currentObjectId,replyTarget:ReplyTarget?=null,diagnosticParent:LogOperation?=null) {
+    fun analyze(snapshot:ChatSnapshot,goal:String=graph.currentGoal,background:String="",objectId:String?=graph.currentObjectId,replyTarget:ReplyTarget?=null,diagnosticParent:LogOperation?=null,headerProof:CachedHeaderProof?=null) {
         val pending=graph.coordinator.begin(snapshot,replyTarget) ?: run { Logs.event(LogStep.REPLY_REQUEST,LogState.SKIP,LogReason.BUSY);return }
         lastContext=Context(snapshot,goal,background,objectId,replyTarget)
         cancelOperation();val log=Logs.begin(LogStep.REPLY_REQUEST,diagnosticParent,metrics=mapOf(LogMetric.MESSAGE_COUNT to snapshot.messages.size.toLong(),LogMetric.CHAT_KIND to if(snapshot.identity?.kind==ChatKind.GROUP)2L else 1L));operation=log
@@ -45,7 +45,7 @@ class AdvisorController(private val graph:AppGraph) {
                     if(current.cancelled) { Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED);return@post }
                     when(graph.coordinator.completeResult(pending.requestTicket,batch)) {
                         BatchCompletion.ACCEPTED -> {
-                            graph.replySessions.remember(SavedConversationReplies(snapshot,batch,replyTarget))
+                            graph.replySessions.remember(SavedConversationReplies(snapshot,batch,replyTarget,headerProof=headerProof))
                             Logs.event(LogStep.REPLY_RESULT,LogState.OK,operation=log,metrics=mapOf(LogMetric.RESULT_COUNT to batch.replies.size.toLong()));Logs.end(log,LogState.OK)
                             val currentIds=ConversationTimePolicy.currentMessages(snapshot).map { it.id }.toSet()
                             if(snapshot.source==CaptureSource.PASTE)graph.coordinator.status(if(com.loveadvisor.core.capture.ChatApps.supported(snapshot.packageName))"单句分析 · 填入前核对当前聊天" else "单句分析 · 未确认对象，可复制回复；读取聊天后可验证填入")
