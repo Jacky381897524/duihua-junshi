@@ -85,6 +85,8 @@ class ConversationReplyCacheTest {
     @Test fun previousBatchRemainsUsableWhenNewGenerationFails() {
         val cache=ConversationReplyCache();val saved=saved("a");cache.remember(saved)
         val newer=saved.snapshot.copy(messages=saved.snapshot.messages+ChatMessage("new",Speaker.OTHER,null,"新的聊天内容"))
+        val proof=CachedHeaderProof("a".repeat(64),1080,2344,"b".repeat(64))
+        cache.bindHeaderProof(newer,proof)
         assertNotNull(cache.findByIdentity(newer))
         assertNull(cache.findByIdentity(newer.copy(identity=newer.identity!!.copy(id="other"))))
         val tracker=SessionTracker();val coordinator=BatchCoordinator(tracker,RequestGate(tracker))
@@ -92,6 +94,7 @@ class ConversationReplyCacheTest {
         val request=coordinator.begin(newer)!!;coordinator.fail(request.requestTicket,"服务商返回 402")
         assertEquals(saved.batch,coordinator.state.current!!.batch)
         assertTrue(tracker.isCurrent(coordinator.state.current!!.ticket.session))
+        assertEquals(saved.batch,cache.findByHeaderProof("com.tencent.mm",proof)!!.batch)
     }
     @Test fun persistedResultsRestoreWithANewWindowTicketAndRejectOldAsyncResults() {
         val cache=ConversationReplyCache();val a=saved("a");cache.remember(a)

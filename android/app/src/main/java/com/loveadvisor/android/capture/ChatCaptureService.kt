@@ -397,15 +397,16 @@ class ChatCaptureService:AccessibilityService() {
         conversation.observe(snapshot,System.currentTimeMillis(),entered)
         val merged=conversation.current ?: run { finishRead(ticket,"未取得可分析的对话，请重新读取"); return }
         visualFill?.let { ref -> merged.identity?.let { savedFillReferences[merged.packageName+":"+it.id]=ref } }
+        val proof=fillReference?.viewport?.let { v -> CachedHeaderProof(fillReference.stamp,v.width,v.height,fillReference.conversationStamp) }
         graph.controller.observe(merged,"正在生成六条候选…")
         // Reattach the last successful batch to this proven identity before a new
         // request. A provider error must not erase that saved batch from the panel.
         graph.replySessions.findByIdentity(merged)?.let { saved ->
+            if(proof!=null)graph.replySessions.bindHeaderProof(merged,proof)
             val target=saved.target?.takeIf { target -> merged.messages.any { it.id==target.messageId } }
             graph.controller.restore(saved.copy(snapshot=merged,target=target),merged.windowId)
         }
         worker.execute { Logs.recover(LogStep.LOCAL_TASK) { graph.recent.remember(merged) } }
-        val proof=fillReference?.viewport?.let { v -> CachedHeaderProof(fillReference.stamp,v.width,v.height,fillReference.conversationStamp) }
         graph.currentObjectId=null; graph.controller.analyze(merged,objectId=null,diagnosticParent=readLog,headerProof=proof)
         finishRead(ticket)
     }
