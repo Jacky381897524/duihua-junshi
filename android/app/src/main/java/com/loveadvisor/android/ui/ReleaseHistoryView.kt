@@ -49,6 +49,10 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.7.8", "修复对象切换时的候选混用", listOf(
+                "切换聊天对象时先核对对象；未读取或暂时无法确认时显示待读取，避免展示上一人的候选。",
+                "保留各对象本地候选，返回已读取的对象并确认身份后恢复，无需重新调用模型。"
+            )),
             Release("V1.7.7", "修复聊天时间误判", listOf(
                 "修复较新的对话被误判为超过24小时而无法生成候选回复的问题。",
                 "无法确定日期的时间标记保留为未知；确有依据的过期消息仍会从自动接话中排除。"

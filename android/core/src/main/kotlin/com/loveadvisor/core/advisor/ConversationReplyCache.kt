@@ -42,14 +42,15 @@ class ConversationReplyCache(private val persistence:ConversationReplyPersistenc
     @Synchronized fun findByIdentity(snapshot:ChatSnapshot):SavedConversationReplies? = entries[key(snapshot)]?.takeIf { it.snapshot.identity?.displayTitle==snapshot.identity?.displayTitle }
     @Synchronized fun findByHeaderProof(packageName:String,proof:CachedHeaderProof):SavedConversationReplies? {
         val scoped=entries.values.filter { entry -> entry.snapshot.packageName==packageName && entry.headerProof?.let { it.width==proof.width && it.height==proof.height }==true }
-        // The visible conversation can identify the right cached batch even when a toolbar pixel changes.
+        // Body similarity alone can recur in unrelated chats. Always require
+        // the current header fingerprint as well before restoring a contact.
+        val headerMatches=scoped.filter { it.headerProof?.stamp==proof.stamp }
         if(proof.conversationStamp!=null) {
-            val bodyMatches=scoped.filter { it.headerProof?.conversationStamp==proof.conversationStamp }
+            val bodyMatches=headerMatches.filter { it.headerProof?.conversationStamp==proof.conversationStamp }
             if(bodyMatches.size==1)return bodyMatches.single()
             if(bodyMatches.size>1)return null
         }
-        val matches=scoped.filter { it.headerProof?.stamp==proof.stamp }
-        val unique=matches.singleOrNull()
+        val unique=headerMatches.singleOrNull()
         if(unique!=null && find(packageName,unique.snapshot.identity!!.displayTitle!!)!=null)return unique
         // For repeated names, a matching header is insufficient.
         return null

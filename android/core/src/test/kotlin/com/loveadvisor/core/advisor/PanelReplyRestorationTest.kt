@@ -25,16 +25,21 @@ class PanelReplyRestorationTest {
         assertEquals(token,tracker.currentToken)
     }
 
-    @Test fun missingOrUnmatchedOcrKeepsCurrentRepliesAcrossRepeatedCollapseAndReopen() {
+    @Test fun missingOcrKeepsCurrentRepliesAcrossRepeatedCollapseAndReopen() {
         val visible=generate();val snapshot=tracker.lastSnapshot
-        repeat(12) { round ->
+        repeat(12) {
             val check=restoration.begin("com.tencent.mm",1)
-            assertEquals(PanelReplyRestoration.Result.RETAINED,restoration.complete(check,if(round%2==0)null else "识别错的昵称",false))
+            assertEquals(PanelReplyRestoration.Result.RETAINED,restoration.complete(check,null,false))
             assertSame(visible,coordinator.state.current)
             assertEquals(snapshot,tracker.lastSnapshot)
             assertTrue(tracker.isCurrent(visible.ticket.session))
         }
         assertEquals(1,cache.all().size)
+    }
+    @Test fun differentOcrTitleNeverKeepsPreviousContactWhenReopening() {
+        generate();val check=restoration.begin("com.tencent.mm",1)
+        assertEquals(PanelReplyRestoration.Result.UNAVAILABLE,restoration.complete(check,"未读取的新对象",false))
+        assertNull(coordinator.state.current);assertNotNull(cache.find("com.tencent.mm","小雨"))
     }
 
     @Test fun matchingHeaderPreservesReplyTargetAndRefreshHistory() {
@@ -72,6 +77,54 @@ class PanelReplyRestorationTest {
         assertEquals(PanelReplyRestoration.Result.RESTORED,restoration.complete(toA,"小雨",true))
         assertEquals(a.batch,coordinator.state.current!!.batch)
         assertEquals(2,cache.all().size)
+    }
+    @Test fun unseenOrUnreadableContactClearsVisibleBatchAndReturningRestoresEveryCachedContact() {
+        val a=generate();val source=AdvisorFixtures.snapshot()
+        val bSnapshot=source.copy(identity=source.identity!!.copy(id="b",displayTitle="对象B"))
+        val b=SavedConversationReplies(bSnapshot,AdvisorFixtures.valid().copy(replies=AdvisorFixtures.valid().replies.map { it.copy(text=it.text+"对象B") }))
+        cache.remember(b)
+        repeat(4) {
+            val toUnknown=restoration.begin("com.tencent.mm",1,navigationCheck=true)
+            assertNull("身份核对期间不可继续展示上一人的候选",coordinator.state.current)
+            assertTrue(coordinator.state.identityChecking)
+            assertEquals(PanelReplyRestoration.Result.UNAVAILABLE,restoration.complete(toUnknown,"未读取的新对象",false))
+            assertNull(coordinator.state.current);assertNull(tracker.currentToken)
+            assertNotNull(cache.find("com.tencent.mm","小雨"));assertNotNull(cache.find("com.tencent.mm","对象B"))
+            val toB=restoration.begin("com.tencent.mm",1,navigationCheck=true)
+            assertEquals(PanelReplyRestoration.Result.RESTORED,restoration.complete(toB,"对象B",false))
+            assertEquals(b.batch,coordinator.state.current!!.batch)
+            val noTitle=restoration.begin("com.tencent.mm",1,navigationCheck=true)
+            assertEquals(PanelReplyRestoration.Result.UNAVAILABLE,restoration.complete(noTitle,null,false))
+            assertNull(coordinator.state.current)
+            val toA=restoration.begin("com.tencent.mm",1,navigationCheck=true)
+            assertEquals(PanelReplyRestoration.Result.RESTORED,restoration.complete(toA,"小雨",false))
+            assertEquals(a.batch,coordinator.state.current!!.batch)
+        }
+    }
+    @Test fun navigationToAmbiguousSameNameCannotKeepOldPersonsReplies() {
+        val a=generate();val source=AdvisorFixtures.snapshot()
+        cache.remember(SavedConversationReplies(source.copy(identity=source.identity!!.copy(id="other")),a.batch))
+        val check=restoration.begin("com.tencent.mm",1,navigationCheck=true)
+        assertEquals(PanelReplyRestoration.Result.UNAVAILABLE,restoration.complete(check,"小雨",false))
+        assertNull(coordinator.state.current);assertEquals(2,cache.all().size)
+    }
+    @Test fun sameNameCanResumeOnlyWithMatchingHeaderAndConversationProof() {
+        val a=generate();val source=AdvisorFixtures.snapshot()
+        val first=CachedHeaderProof("a".repeat(64),1080,2344,"b".repeat(64))
+        val second=first.copy(conversationStamp="c".repeat(64))
+        cache.remember(SavedConversationReplies(source,a.batch,headerProof=first))
+        cache.remember(SavedConversationReplies(source.copy(identity=source.identity!!.copy(id="other")),a.batch,headerProof=second))
+        val check=restoration.begin("com.tencent.mm",1,navigationCheck=true)
+        assertEquals(PanelReplyRestoration.Result.RETAINED,restoration.complete(check,"小雨",false,first))
+        assertSame(a,coordinator.state.current);assertFalse(coordinator.state.identityChecking)
+    }
+    @Test fun navigationCheckHidesThenRestoresSameContactWithoutRegeneration() {
+        val before=generate();val token=tracker.currentToken
+        val check=restoration.begin("com.tencent.mm",1,navigationCheck=true)
+        assertNull(coordinator.state.current);assertTrue(coordinator.state.identityChecking)
+        assertEquals(PanelReplyRestoration.Result.RETAINED,restoration.complete(check,"小雨",false))
+        assertSame(before,coordinator.state.current);assertEquals(token,tracker.currentToken)
+        assertFalse(coordinator.state.identityChecking)
     }
     @Test fun anotherCachedHeaderFingerprintCanRestoreWhilePanelStaysOpen() {
         val a=generate();val source=AdvisorFixtures.snapshot()

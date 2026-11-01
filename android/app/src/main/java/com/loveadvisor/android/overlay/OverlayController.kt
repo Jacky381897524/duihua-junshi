@@ -84,7 +84,11 @@ class OverlayController(private val service:ChatCaptureService) {
     private val listener:(BatchState)->Unit={ render(it) }
     private val stopMemoryUpdates=graph.personalMemory.repository.subscribe { main.post { updateInteraction() } }
     init { graph.controller.listen(listener) }
-    private fun updateInteraction() { val view=panel ?: return;service.interactionForPanel { value -> if(panel===view)view.setInteraction(value) } }
+    private fun updateInteraction() {
+        val view=panel ?: return
+        if(state.identityChecking) { view.setInteraction(com.loveadvisor.core.memory.InteractionPresentation());return }
+        service.interactionForPanel { value -> if(panel===view && !state.identityChecking)view.setInteraction(value) }
+    }
     private fun create() {
         if(bubble!=null) return
         val size=ViewStyles.dp(service,40f)
@@ -314,7 +318,7 @@ class OverlayController(private val service:ChatCaptureService) {
             panelDetachments++;Logs.event(LogStep.OVERLAY_HIDE,LogState.OK,metrics=mapOf(LogMetric.ATTEMPT to panelDetachments))
         }
     }
-    private fun readSnapshot()=service.currentChatSnapshot?.takeIf { graph.tracker.currentToken!=null && graph.tracker.lastSnapshot==it }
+    private fun readSnapshot()=service.currentChatSnapshot?.takeIf { !state.identityChecking && graph.tracker.currentToken!=null && graph.tracker.lastSnapshot==it }
     private fun showMessageAnalysis() {
         val view=panel ?: return
         val snapshot=readSnapshot()?.takeUnless { it.source==com.loveadvisor.core.model.CaptureSource.PASTE }
@@ -333,8 +337,8 @@ class OverlayController(private val service:ChatCaptureService) {
         view.showPage("judgment-list",list,closed={ list.close();controller.cancel();analysisSession=null })
     }
     fun render(value:BatchState) {
-        updateInteraction()
         state=value
+        updateInteraction()
         if(analysisSession?.let { !graph.tracker.isCurrent(it) }==true) { panel?.closeStyleEditor();analysisController?.invalidate() }
         panel?.setReadContext(readSnapshot()?.identity?.displayTitle);panel?.setAnalysisAvailable(readSnapshot()!=null);panel?.render(value);updateCapsuleStatus();layout()
     }

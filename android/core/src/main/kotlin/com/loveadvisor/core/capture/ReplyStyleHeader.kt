@@ -20,10 +20,13 @@ object ReplyStyleHeader {
         if(cropWidth<=0 || cropHeight<=0)return null
         fun ambiguousKey(value:String)=NicknameText.suggestionKey(value).filterNot { it.isWhitespace() }.lowercase(java.util.Locale.ROOT)
         val eligible=titles.filter { NicknameText.valid(it) && !TextSceneParser.isUi(it) && it !in setOf("消息","联系人","通讯录","好友","设置") }
+        // OCR may insert or omit a space between Latin and Chinese text. Ignore
+        // only whitespace for comparison, and reject collisions instead of guessing.
+        fun matchKey(value:String)=NicknameText.canonical(value).filterNot { it.isWhitespace() }
         val seen=boxes.filter { box ->
             val b=box.bounds;val x=(b.left+b.right)/2.0/cropWidth;val y=(b.top+b.bottom)/2.0/cropHeight
             x in .18.. .68 && y in .05.. .9
-        }.flatMap { it.text.lineSequence().map(String::trim).filter(String::isNotEmpty).toList() }.map(NicknameText::canonical).toSet()
-        return eligible.filter { name -> NicknameText.canonical(name) in seen && eligible.count { ambiguousKey(it)==ambiguousKey(name) }==1 }.singleOrNull()
+        }.flatMap { it.text.lineSequence().map(String::trim).filter(String::isNotEmpty).toList() }.map(::matchKey).toSet()
+        return eligible.filter { name -> matchKey(name) in seen && eligible.count { ambiguousKey(it)==ambiguousKey(name) }==1 }.singleOrNull()
     }
 }

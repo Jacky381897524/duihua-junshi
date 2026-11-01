@@ -84,7 +84,7 @@ class ChatCaptureService:AccessibilityService() {
         }
     }
     private var pastedSnapshot:ChatSnapshot?=null
-    val currentChatSnapshot get()=pastedSnapshot?.takeIf { graph.tracker.lastSnapshot==it } ?: conversation.current
+    val currentChatSnapshot get()=if(graph.coordinator.state.identityChecking)null else (pastedSnapshot?.takeIf { graph.tracker.lastSnapshot==it } ?: conversation.current)
     val glassWindow get()=lastForegroundWindow?.takeIf { overlayAllowed() }
     private var lastForegroundWindow:WindowSnapshot?=null
     private var projecting=false
@@ -114,7 +114,9 @@ class ChatCaptureService:AccessibilityService() {
     private var headerCheckPending=false
     private var lastHeaderCheck=0L
     private var headerRetryRequested=false
+    private var unknownHeaderRetries=0
     private var headerNavigationRevision=0L
+    private var identityNavigationRevision=0L
     private val headerRetry=Runnable { checkCachedHeader(allowTitleOcr=true) }
     private val windowLogTimes=linkedMapOf<String,Long>()
     private fun recordWindowEvent(key:String,now:Long):Boolean {
@@ -177,7 +179,7 @@ class ChatCaptureService:AccessibilityService() {
         if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED && event.windowChanges and (AccessibilityEvent.WINDOWS_CHANGE_REMOVED or AccessibilityEvent.WINDOWS_CHANGE_ADDED)!=0) reader.forgetWindow(event.windowId)
         val structural=event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED || event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         if(ChatApps.supported(pkg) && event.eventType in setOf(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)) {
-            if(event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)headerNavigationRevision++
+            if(event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) { headerNavigationRevision++;unknownHeaderRetries=0 }
             scheduleHeaderCheck()
         }
         if(ChatApps.supported(pkg) && event.eventType==AccessibilityEvent.TYPE_VIEW_SCROLLED && manualRead.active!=null) {
@@ -394,6 +396,7 @@ class ChatCaptureService:AccessibilityService() {
         val entered=identity==null
         if(entered) graph.recent.match(observed)?.let { stored -> conversation.restore(stored.copy(windowId=observed.windowId)); snapshot=snapshot.copy(identity=stored.identity) }
         identity=snapshot.identity
+        identityNavigationRevision=headerNavigationRevision
         conversation.observe(snapshot,System.currentTimeMillis(),entered)
         val merged=conversation.current ?: run { finishRead(ticket,"未取得可分析的对话，请重新读取"); return }
         visualFill?.let { ref -> merged.identity?.let { savedFillReferences[merged.packageName+":"+it.id]=ref } }
@@ -535,6 +538,10 @@ class ChatCaptureService:AccessibilityService() {
     }
     fun captureNow() {
         cancelCachedHeader?.invoke();cancelCachedHeader=null
+        if(graph.coordinator.state.identityChecking) {
+            conversation.clear();identity=null;visualFill=null
+            graph.controller.invalidate("请读取当前对话")
+        }
         pastedSnapshot=null
         Logs.event(LogStep.READ_TAP)
         if(!overlayAllowed()) { notifyUser("请打开已支持的聊天应用聊天后点击读取信息"); return }
@@ -577,7 +584,7 @@ class ChatCaptureService:AccessibilityService() {
             val native=NativeReplyStyleTitle.read(window)
             main.post {
                 if(!current() || window==null || window.windowId!=windowId || window.packageName!=pkg) { complete(null,null);return@post }
-                if(native!=null) { finish(native);return@post }
+                if(native!=null && (!headerOnly || !graph.replySessions.hasAmbiguousTitle(pkg,native))) { finish(native);return@post }
                 val bars=getSystemService(android.view.WindowManager::class.java).maximumWindowMetrics.windowInsets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.statusBars()).top
                 val crop=ReplyStyleHeader.crop(pkg,window.viewport,bars,resources.displayMetrics.density)
                 if(crop==null) { finish(null);return@post }
@@ -642,13 +649,14 @@ class ChatCaptureService:AccessibilityService() {
         return { cancel.cancel();Logs.end(log,LogState.CANCELLED,LogReason.USER_CANCELLED) }
     }
     /** Opening the panel may perform one local title-strip OCR, never a chat/vision/model request. */
-    fun prepareCachedPanel() {
+    fun prepareCachedPanel(navigationCheck:Boolean=false) {
         if(!graph.replySessions.hasEntries() || manualRead.active!=null || graph.coordinator.state.loading || cancelCachedHeader!=null || !overlayAllowed())return
         val pkg=foregroundPackage ?: return
         val id=foregroundWindowId ?: return
         val lease=navigation
         val revision=headerNavigationRevision
-        val check=graph.controller.beginPanelRestore(pkg,id)
+        val navigationUnverified=navigationCheck || headerNavigationRevision!=identityNavigationRevision
+        val check=graph.controller.beginPanelRestore(pkg,id,navigationUnverified)
         var freshFill:VisualFillReference?=null
         cancelCachedHeader=readStyleNickname(headerOnly=true,onVerifiedImage={ freshFill=it }) { actual,title ->
             cancelCachedHeader=null
@@ -669,6 +677,7 @@ class ChatCaptureService:AccessibilityService() {
                 PanelReplyRestoration.Result.UNAVAILABLE -> { conversation.clear();identity=null;pastedSnapshot=null;visualFill=null }
                 PanelReplyRestoration.Result.STALE -> return@readStyleNickname
             }
+            if((result==PanelReplyRestoration.Result.RESTORED || result==PanelReplyRestoration.Result.RETAINED) && verified!=null)identityNavigationRevision=revision
             val currentSnapshot=graph.tracker.lastSnapshot
             if(verified!=null && verified==currentSnapshot?.identity?.displayTitle && freshFill?.viewport!=null) {
                 val ref=freshFill!!;val viewport=ref.viewport!!
@@ -682,10 +691,18 @@ class ChatCaptureService:AccessibilityService() {
                     else -> LogReason.NONE
                 },metrics=mapOf(LogMetric.RESULT_COUNT to (graph.coordinator.state.current?.batch?.replies?.size ?: 0).toLong()))
             graph.controller.publish()
+            // The title may be unavailable during a screen transition. Retry
+            // locally without reading chat text or requesting a model; keep this
+            // bounded so an unreadable or protected window cannot loop forever.
+            if(navigationUnverified && result==PanelReplyRestoration.Result.UNAVAILABLE && (verified==null || lastStyleNicknameFromOcr) && unknownHeaderRetries<2) {
+                unknownHeaderRetries++
+                if(!main.hasCallbacks(headerRetry))main.postDelayed(headerRetry,1600)
+            } else if(result==PanelReplyRestoration.Result.RESTORED || result==PanelReplyRestoration.Result.RETAINED)unknownHeaderRetries=0
         }
     }
     private fun applyCachedSnapshot(snapshot:ChatSnapshot,freshFill:VisualFillReference?=null) {
         conversation.restore(snapshot);identity=snapshot.identity;pastedSnapshot=null
+        identityNavigationRevision=headerNavigationRevision
         val pkg=snapshot.packageName
         visualFill=freshFill ?: savedFillReferences[pkg+":"+snapshot.identity?.id]?.takeIf { it.viewport==null || it.viewport==lastForegroundWindow?.viewport }?.copy(windowId=snapshot.windowId,generation=navigation)
         visualFill?.let { savedFillReferences[pkg+":"+snapshot.identity?.id]=it }
@@ -701,7 +718,12 @@ class ChatCaptureService:AccessibilityService() {
     }
     /** Content changes use metadata only. Navigation can verify a missing title via one local crop. */
     private fun checkCachedHeader(allowTitleOcr:Boolean=false) {
-        if(!wechatForeground || !graph.replySessions.hasEntries() || manualRead.active!=null || graph.coordinator.state.loading || headerCheckPending || cancelCachedHeader!=null || !::overlay.isInitialized || overlay.hasEditorLease())return
+        if(!wechatForeground || !graph.replySessions.hasEntries() || !::overlay.isInitialized || !overlay.hasRetainedPanel() || overlay.hasEditorLease())return
+        if(manualRead.active!=null || graph.coordinator.state.loading) {
+            if(!main.hasCallbacks(headerRetry))main.postDelayed(headerRetry,800)
+            return
+        }
+        if(headerCheckPending || cancelCachedHeader!=null) { headerRetryRequested=true;return }
         val now=SystemClock.uptimeMillis();if(now-lastHeaderCheck<1500) { if(!main.hasCallbacks(headerRetry))main.postDelayed(headerRetry,1500-(now-lastHeaderCheck));return }
         lastHeaderCheck=now;headerCheckPending=true
         val pkg=foregroundPackage;val id=foregroundWindowId;val lease=navigation
@@ -712,13 +734,18 @@ class ChatCaptureService:AccessibilityService() {
             main.post {
                 headerCheckPending=false
                 if(allowTitleOcr && title==null && lease==navigation && pkg==foregroundPackage && id==foregroundWindowId && overlayAllowed() && overlay.hasRetainedPanel()) {
-                    prepareCachedPanel();return@post
+                    prepareCachedPanel(navigationCheck=true);return@post
                 }
-                if(lease==navigation && pkg==foregroundPackage && id==foregroundWindowId && overlayAllowed() && header?.windowId==id && title!=null && title!=identity?.displayTitle) {
-                    if(!restoreCached(pkg,title,id)) {
-                        conversation.clear();identity=null;pastedSnapshot=null;visualFill=null
-                        graph.controller.invalidate("此对象暂无已读候选；其他对象候选已保留")
-                    }
+                if(allowTitleOcr && title!=null && pkg!=null && graph.replySessions.hasAmbiguousTitle(pkg,title) && lease==navigation && pkg==foregroundPackage && id==foregroundWindowId && overlayAllowed()) {
+                    prepareCachedPanel(navigationCheck=true);return@post
+                }
+                if(lease==navigation && pkg==foregroundPackage && id==foregroundWindowId && overlayAllowed() && header?.windowId==id && title!=null) {
+                    if(title!=identity?.displayTitle || graph.coordinator.state.identityChecking) {
+                        if(!restoreCached(pkg,title,id)) {
+                            conversation.clear();identity=null;pastedSnapshot=null;visualFill=null
+                            graph.controller.invalidate("此对象暂无已读候选；其他对象候选已保留")
+                        }
+                    } else identityNavigationRevision=headerNavigationRevision
                 }
                 retryHeaderIfRequested()
             }

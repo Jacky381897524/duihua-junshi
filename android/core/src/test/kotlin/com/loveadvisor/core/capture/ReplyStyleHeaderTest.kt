@@ -17,6 +17,12 @@ class ReplyStyleHeaderTest {
         assertNull(ReplyStyleHeader.cachedTitle(listOf(name,OcrTextBox("潘佳琪",RectI(170,40,230,65))),hints,500,100))
         assertNull(ReplyStyleHeader.cachedTitle(listOf(name.copy(text="消息")),listOf("消息"),500,100))
     }
+    @Test fun whitespaceDifferencesInMixedChineseNamesAreMatchedOnlyWhenUnique() {
+        val recognized=OcrTextBox("Ny 赵嘉豪",RectI(160,35,260,65))
+        assertEquals("Ny赵嘉豪",ReplyStyleHeader.cachedTitle(listOf(recognized),listOf("Ny赵嘉豪","Ny赵崇康"),500,100))
+        assertNull(ReplyStyleHeader.cachedTitle(listOf(recognized),listOf("Ny赵嘉豪","Ny 赵嘉豪"),500,100))
+        assertNull(ReplyStyleHeader.cachedTitle(listOf(recognized),listOf("Ny赵崇康"),500,100))
+    }
     @Test fun cropStaysInToolbarAndExcludesLeftBackAndAvatarArea() {
         assertEquals(RectI(270,95,907,249),ReplyStyleHeader.crop(ChatApps.WECHAT,RectI(0,0,1080,2344),95,2.75f))
         assertEquals(RectI(120,100,840,212),ReplyStyleHeader.crop(ChatApps.QQ,RectI(0,100,1000,1600),80,2f))

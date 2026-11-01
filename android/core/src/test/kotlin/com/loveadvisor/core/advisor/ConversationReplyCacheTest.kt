@@ -32,7 +32,7 @@ class ConversationReplyCacheTest {
         val first=base.copy(conversationStamp="b".repeat(64));val second=base.copy(conversationStamp="c".repeat(64))
         cache.remember(saved("a","同名").copy(headerProof=first));cache.remember(saved("b","同名").copy(headerProof=second))
         assertEquals("b",cache.findByHeaderProof("com.tencent.mm",second)!!.snapshot.identity!!.id)
-        assertEquals("b",cache.findByHeaderProof("com.tencent.mm",second.copy(stamp="e".repeat(64)))!!.snapshot.identity!!.id)
+        assertNull(cache.findByHeaderProof("com.tencent.mm",second.copy(stamp="e".repeat(64))))
         assertNull(cache.findByHeaderProof("com.tencent.mm",base))
         assertNull(cache.findByHeaderProof("com.tencent.mm",base.copy(conversationStamp="d".repeat(64))))
         cache.remember(saved("c","同名").copy(headerProof=second));assertNull(cache.findByHeaderProof("com.tencent.mm",second))

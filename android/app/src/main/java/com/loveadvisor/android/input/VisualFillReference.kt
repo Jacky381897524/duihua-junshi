@@ -12,10 +12,12 @@ data class VisualFillReference(val windowId:Int,val generation:Long,val stamp:St
             return if(height<=0)null else areaStamp(bitmap,0,bitmap.height-height,bitmap.width,height)?.let { "${bitmap.width}x${bitmap.height}:$it" }
         }
         fun stamp(bitmap:Bitmap):String? {
-            val left=(bitmap.width*.18).toInt();val top=(bitmap.width*.11).toInt()
-            val width=(bitmap.width*.64).toInt();val height=(bitmap.width*.09).toInt()
+            // Include the toolbar title: the old lower strip could contain only
+            // the shared chat background, making two contacts look identical.
+            val left=(bitmap.width*.18).toInt();val top=(bitmap.width*.06).toInt()
+            val width=(bitmap.width*.64).toInt();val height=(bitmap.width*.12).toInt()
             if(width<=0 || height<=0 || top+height>bitmap.height)return null
-            return areaStamp(bitmap,left,top,width,height)
+            return areaStamp(bitmap,left,top,width,height,requireDetail=true)
         }
         /** Fingerprint visible chat pixels only; never retain or transmit the image. */
         fun conversationStamp(bitmap:Bitmap):String? {
