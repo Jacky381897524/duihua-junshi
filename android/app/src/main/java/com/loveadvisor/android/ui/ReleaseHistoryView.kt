@@ -8,7 +8,7 @@ import android.widget.LinearLayout
 class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
-        addView(ViewStyles.text(context, "从首次开发到 V1.7.3 · 共 ${releases.size} 个版本，点击版本展开", 13f, ViewStyles.MUTED))
+        addView(ViewStyles.text(context, "版本更新记录 · 共 ${releases.size} 条，点击版本展开", 13f, ViewStyles.MUTED))
         releases.forEachIndexed { index, release ->
             if (index > 0) addView(View(context).apply {
                 setBackgroundColor(ViewStyles.themed(context, ViewStyles.BG))
@@ -49,6 +49,10 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.7.7", "修复聊天时间误判", listOf(
+                "修复较新的对话被误判为超过24小时而无法生成候选回复的问题。",
+                "无法确定日期的时间标记保留为未知；确有依据的过期消息仍会从自动接话中排除。"
+            )),
             Release("V1.7.3", "收起再展开保留候选", listOf(
                 "修复同一聊天收起面板后再次展开，候选被先清空的问题。核对标题期间保留六条候选、已读上下文、选句目标和换批历史。",
                 "本地标题暂不可读或OCR未匹配缓存时，保留标明已读对象的候选；不自动重新读取或调用模型。填入仍实时核对当前对象、输入框和草稿。",

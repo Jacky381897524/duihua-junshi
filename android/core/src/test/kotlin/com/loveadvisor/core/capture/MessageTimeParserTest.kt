@@ -20,10 +20,19 @@ class MessageTimeParserTest {
         assertNull(MessageTimeParser.parse("明天出门",now,zone).epochMillis)
         assertFalse(MessageTimeParser.isSeparator("下午"))
     }
-    @Test fun nativeClockInAnOldDateSectionDoesNotBecomeToday() {
+    @Test fun nativeClockAfterAnOldDateSectionDoesNotInheritAnUncertainDate() {
         fun node(text:String,y:Int)=NodeRecord(null,text,"TextView",false,RectI(380,y,620,y+30))
         val time=MessageTimeParser.before(listOf(node("前天 09:00",200),node("10:00",300)),RectI(130,400,600,460),RectI(0,0,1000,2000),now,zone)
         assertEquals("10:00",time?.label)
-        assertEquals(Instant.parse("2025-12-30T02:00:00Z").toEpochMilli(),time?.epochMillis)
+        assertNull(time?.epochMillis)
+    }
+    @Test fun todaySectionCanDateAFollowingBareClock() {
+        val previous=MessageTimeParser.parse("今天 09:00",now,zone)
+        assertEquals(Instant.parse("2026-01-01T02:00:00Z").toEpochMilli(),MessageTimeParser.parse("10:00",now,zone,previous).epochMillis)
+    }
+    @Test fun afternoonClockAfterYesterdayIsNotMisdatedAsYesterday() {
+        val at2053=Instant.parse("2026-01-01T12:53:00Z").toEpochMilli()
+        val yesterday=MessageTimeParser.parse("昨天 10:00",at2053,zone)
+        assertNull(MessageTimeParser.parse("13:50",at2053,zone,yesterday).epochMillis)
     }
 }

@@ -27,8 +27,10 @@ object MessageTimeParser {
                     if(g[2].isEmpty() && date>today)date=date.minusYears(1)
                     date
                 }
-                // A bare clock elsewhere on the screen cannot establish today's date.
-                else -> previous?.epochMillis?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() } ?: return@runCatching null
+                // A bare clock after an old section may belong to a later day.
+                // Only a preceding explicit today section fixes its date safely.
+                else -> previous?.epochMillis?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+                    ?.takeIf { it==today } ?: return@runCatching null
             }
             if(g[6].isEmpty()) {
                 if(g[1].isEmpty() && g[3].isEmpty())return@runCatching null

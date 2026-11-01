@@ -13,7 +13,7 @@ class ConversationTimeRegressionTest {
     private fun snapshot(kind:ChatKind=ChatKind.DIRECT):ChatSnapshot {
         val now=System.currentTimeMillis()
         val rows=listOf(
-            mapOf("id" to "old","speaker" to "OTHER","sender" to "甲","text" to "前天的电影几点开场", "kind" to "TEXT","time" to mapOf("label" to "前天 18:00","epochMillis" to now-48*3600000L)),
+            mapOf("id" to "old","speaker" to "OTHER","sender" to "甲","text" to "前天的电影几点开场", "kind" to "TEXT","observedAtMillis" to now-47*3600000L,"time" to mapOf("label" to "前天 18:00","epochMillis" to now-48*3600000L)),
             mapOf("id" to "new","speaker" to "OTHER","sender" to "乙","text" to "我刚下班", "kind" to "TEXT","time" to mapOf("label" to "今天","epochMillis" to now-60000)))
         return gson.fromJson(gson.toJson(mapOf("packageName" to "com.tencent.mm","windowId" to 7,"identity" to ConversationIdentity("c","对象",kind,true),"source" to "NODES","contextLimit" to 50,"messages" to rows)),ChatSnapshot::class.java)
     }
@@ -63,5 +63,15 @@ class ConversationTimeRegressionTest {
         } catch(e:IllegalArgumentException) { assertTrue(e.message.orEmpty().contains("指定回复")) }
         assertTrue(wire.requests.isEmpty())
         assertEquals(2,original.messages.size)
+    }
+    @Test fun afternoonMessageWithUncertainDateStillGeneratesRepliesAt2053() {
+        val now=System.currentTimeMillis()
+        val original=snapshot()
+        val latest=original.messages.last().copy(time=MessageTime("13:50",null),observedAtMillis=now)
+        val wire=Wire()
+        val input=AdvisorInput(ProviderPresets.OPENROUTER.reply("fake"),original.copy(messages=listOf(latest),readAtMillis=now))
+        val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(input,JevProfile(apiKey="fake"),emptyList(),Cancellation())
+        assertEquals(6,batch.replies.size)
+        assertEquals(2,wire.requests.size)
     }
 }

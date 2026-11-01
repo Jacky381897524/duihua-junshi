@@ -8,7 +8,7 @@ import org.junit.Test
 
 class ConversationTimePolicyTest {
     private val now=System.currentTimeMillis()
-    private fun row(id:String,hoursAgo:Long?)=ChatMessage(id,Speaker.OTHER,null,"消息$id",time=hoursAgo?.let { MessageTime("可见时间",now-it*3600000) })
+    private fun row(id:String,hoursAgo:Long?)=ChatMessage(id,Speaker.OTHER,null,"消息$id",time=hoursAgo?.let { MessageTime("可见时间",now-it*3600000) },observedAtMillis=hoursAgo?.takeIf { it>24 }?.let { now-it*3600000+60000 } ?: now)
     private fun snapshot(vararg rows:ChatMessage)=AdvisorFixtures.snapshot().copy(messages=rows.toList(),readAtMillis=now)
     @Test fun cutoffDoesNotDeleteSavedMessagesAndExplicitOldTargetsKeepAllReadContext() {
         val read=snapshot(row("old",48),row("current",1))
@@ -24,7 +24,7 @@ class ConversationTimePolicyTest {
         assertEquals(listOf("unknown"),ConversationTimePolicy.currentMessages(snapshot(row("unknown",null)),now).map { it.id })
     }
     @Test fun twoDayOldReadIsHistoricalEvenWhenPrintedMessageTimesWereUnknown() {
-        val read=snapshot(row("unknown",null)).copy(readAtMillis=now-48*3600000)
+        val read=snapshot(row("unknown",null).copy(observedAtMillis=now-48*3600000)).copy(readAtMillis=now-48*3600000)
         assertTrue(ConversationTimePolicy.currentMessages(read,now).isEmpty())
         assertNull(read.messages.single().time)
     }
@@ -75,5 +75,26 @@ class ConversationTimePolicyTest {
         val next=coordinator.begin(later)!!
         assertNull(next.analysis)
         assertTrue(next.previous.isEmpty())
+    }
+    @Test fun oldSeparatorAloneNeverExpiresFreshlyReadMessages() {
+        val older=MessageTime("昨天 12:00",now-30*3600000)
+        val read=snapshot(row("first",null).copy(time=older),row("second",null).copy(time=older))
+        assertEquals(listOf("first","second"),ConversationTimePolicy.forReply(read,now=now).messages.map { it.id })
+        assertFalse(ConversationTimePolicy.expired(read.messages.last(),now,read.readAtMillis))
+    }
+    @Test fun subsequentOldSeparatorCanProveEarlierSectionExpiredButNotItsOwnMessages() {
+        val read=snapshot(row("first",null).copy(time=MessageTime("前天",now-48*3600000)),
+            row("second",null).copy(time=MessageTime("昨天",now-30*3600000)),
+            row("third",null).copy(time=MessageTime("昨天",now-30*3600000)))
+        assertEquals(listOf("second","third"),ConversationTimePolicy.currentMessages(read,now).map { it.id })
+    }
+    @Test fun conflictingOldObservationAndRecentSeparatorDoesNotBlockReply() {
+        val read=snapshot(row("same words",1).copy(observedAtMillis=now-48*3600000))
+        assertEquals(1,ConversationTimePolicy.forReply(read,now=now).messages.size)
+    }
+    @Test fun oldObservationIsExpiredOnlyPastTheInclusiveBoundary() {
+        val boundary=snapshot(row("boundary",null).copy(observedAtMillis=now-24*3600000))
+        assertEquals(1,ConversationTimePolicy.currentMessages(boundary,now).size)
+        assertTrue(ConversationTimePolicy.currentMessages(boundary,now+1).isEmpty())
     }
 }

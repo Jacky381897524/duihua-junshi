@@ -7,16 +7,28 @@ class ExpiredConversationException:IllegalArgumentException("已读话题已超�
 /** Filters only model input. The saved read and explicit historical targets remain available. */
 object ConversationTimePolicy {
     const val maxAgeMillis=24*3600000L
-    const val instruction="消息time仅来自屏幕可见的聊天时间分隔标记，epochMillis是分段时间依据而非逐条精确发送时间；不能把readAtMillis读取时间当作消息发送时间。当前时间以evaluationTime为准。自动接话只分析提供的当前消息，不复活已结束或过期的话题，不把昨天/前天的活动、情绪或约定说成正在发生。未知时间保持未知，不猜日期。手动REPLY_TARGET允许回复历史消息：结合全部已读上下文，按实际时间自然重提或回顾，不能假装还在原时刻，也不能忽略后续已发生的回应。"
+    const val instruction="消息time仅来自该消息之前屏幕可见的聊天时间分隔标记，不是每条消息的发送时间；旧分隔标记之后仍可能有新消息，不能因此断定后续消息过期。readAtMillis和firstObservedAt是读取时间，不是发送时间。当前时间以evaluationTime为准。自动接话优先最近对话，不复活已结束或过期的话题，不把昨天/前天的活动、情绪或约定说成正在发生。时间不确定时保持未知，不猜日期。手动REPLY_TARGET允许回复历史消息：结合全部已读上下文，按实际时间自然重提或回顾，不能假装还在原时刻，也不能忽略后续已发生的回应。"
     fun expired(message:ChatMessage,now:Long=System.currentTimeMillis(),readAtMillis:Long=0):Boolean {
-        // First observation bounds unknown send times from above; it is never presented as the send time.
-        val latest=listOfNotNull(message.time?.epochMillis,message.observedAtMillis.takeIf { it>0 },readAtMillis.takeIf { it>0 }).filter { it>0 }.minOrNull()
-        return latest!=null && latest<=now && now-latest>maxAgeMillis
+        // A prior separator is a lower bound, not an upper bound on a bubble's send time.
+        // Only an actual observation bounds the send time from above. Conflicting
+        // evidence is treated as unknown rather than blocking a potentially new reply.
+        val observed=listOf(message.observedAtMillis,readAtMillis).filter { it>0 && it<=now }.minOrNull() ?: return false
+        val separator=message.time?.epochMillis
+        if(separator!=null && separator>observed)return false
+        return now-observed>maxAgeMillis
     }
     fun currentMessages(snapshot:ChatSnapshot,now:Long=System.currentTimeMillis()):List<ChatMessage> {
-        // An undated prefix before a proven expired section cannot be newer than that section.
-        val lastExpired=snapshot.messages.indexOfLast { expired(it,now,snapshot.readAtMillis) }
-        return snapshot.messages.filterIndexed { index,message -> index>lastExpired || !expired(message,now,snapshot.readAtMillis) && message.time?.epochMillis!=null }
+        return snapshot.messages.filterIndexed { index,message ->
+            if(expired(message,now,snapshot.readAtMillis))return@filterIndexed false
+            // A subsequent, distinct separator bounds earlier messages from above.
+            // Its date-only value is the end of the day, so it remains conservative.
+            val start=message.time?.epochMillis
+            val next=snapshot.messages.drop(index+1).firstNotNullOfOrNull { later ->
+                later.time?.epochMillis?.takeIf { it>0 && it!=start }
+            }
+            val consistent=next!=null && (start==null || next>start)
+            !consistent || next!!>now || now-next<=maxAgeMillis
+        }
     }
     fun forReply(snapshot:ChatSnapshot,target:ReplyTarget?=null,now:Long=System.currentTimeMillis()):ChatSnapshot {
         val current=currentMessages(snapshot,now)
