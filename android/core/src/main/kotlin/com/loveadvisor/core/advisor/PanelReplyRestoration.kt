@@ -35,7 +35,7 @@ class PanelReplyRestoration(
         if(navigationCheck)coordinator.holdForIdentityCheck(checkingCache)
         val check=Check(packageName,windowId,tracker.currentToken,tracker.lastSnapshot,original,navigationCheck,coordinator.state.current)
         pending=check
-        if(!navigationCheck)coordinator.status(if(retain)checkingRetained else checkingCache)
+        if(!navigationCheck)coordinator.identityStatus(IdentityCheckStatus.CHECKING)
         return check
     }
 
@@ -50,6 +50,7 @@ class PanelReplyRestoration(
             if(retained && byProof.snapshot.identity?.id==check.snapshot?.identity?.id) {
                 if(check.navigationCheck && !coordinator.resumeAfterIdentityCheck(check.state.current!!))return Result.STALE
                 coordinator.status("已保留本对象上次候选 · 未调用模型")
+                coordinator.identityStatus(IdentityCheckStatus.VERIFIED)
                 return Result.RETAINED
             }
             if(coordinator.restore(byProof,check.windowId)) { cache.touch(byProof);return Result.RESTORED }
@@ -59,6 +60,7 @@ class PanelReplyRestoration(
             if(check.navigationCheck && !coordinator.resumeAfterIdentityCheck(check.state.current!!))return Result.STALE
             val previous=check.state.error?.takeUnless { it==checkingRetained || it==checkingCache || it==unverified }
             coordinator.status(previous ?: "已保留本对象上次候选 · 未调用模型")
+            coordinator.identityStatus(IdentityCheckStatus.VERIFIED)
             return Result.RETAINED
         }
         val saved=name?.let { cache.find(check.packageName,it) }
@@ -67,7 +69,7 @@ class PanelReplyRestoration(
         // navigation check, however, an unknown or different OCR title must not
         // leave another contact's replies on screen. The cache remains untouched.
         if(retained && !ambiguous && !check.navigationCheck && name==null) {
-            coordinator.status(unverified)
+            coordinator.identityStatus(IdentityCheckStatus.UNAVAILABLE)
             return Result.RETAINED
         }
         // Even a previously unpersisted successful batch can be restored later.
@@ -75,7 +77,8 @@ class PanelReplyRestoration(
             cache.remember(SavedConversationReplies(check.snapshot,check.state.current.batch,coordinator.targetFor(check.snapshot)))
         }
         coordinator.invalidate()
-        coordinator.status("此对象暂无可确认的本地候选，点击读取信息；其他对象候选已保留")
+        coordinator.status("点击读取信息后生成候选；其他对象候选已保留")
+        coordinator.identityStatus(IdentityCheckStatus.UNAVAILABLE)
         return Result.UNAVAILABLE
     }
 }

@@ -15,6 +15,26 @@ object ReplyStyleHeader {
     fun title(boxes:List<OcrTextBox>):String?=boxes.singleOrNull()?.text?.trim()?.takeIf {
         NicknameText.valid(it) && '\n' !in it && '\r' !in it && !TextSceneParser.isUi(it) && it !in setOf("消息","联系人","通讯录","好友","设置")
     }
+    private fun toolbarRows(boxes:List<OcrTextBox>,width:Int,height:Int):List<List<OcrTextBox>> {
+        if(width<=0 || height<=0)return emptyList()
+        val central=boxes.filter { b -> val r=b.bounds;val x=(r.left+r.right)/2.0/width
+            x in .12.. .82 && r.top>=0 && r.bottom<=height && !TextSceneParser.isUi(b.text) && b.text.isNotBlank()
+        }.sortedBy { it.bounds.top }
+        val rows=mutableListOf<MutableList<OcrTextBox>>()
+        central.forEach { box ->
+            val row=rows.lastOrNull()
+            if(row!=null && minOf(row.first().bounds.bottom,box.bounds.bottom)-maxOf(row.first().bounds.top,box.bounds.top)>minOf(row.first().bounds.height,box.bounds.height)*.5)row.add(box)
+            else rows.add(mutableListOf(box))
+        }
+        return rows.map { it.sortedBy { b -> b.bounds.left } }
+    }
+    fun toolbarTitle(boxes:List<OcrTextBox>,width:Int,height:Int):String? {
+        val rows=toolbarRows(boxes,width,height)
+        if(rows.size!=1)return null
+        val row=rows.single()
+        if(row.zipWithNext().any { (a,b) -> a.bounds.right>b.bounds.left })return null
+        return title(listOf(OcrTextBox(row.joinToString(" ") { it.text.trim() },row.first().bounds)))
+    }
     /** Match only a unique existing cached title, never guess from similar OCR text. */
     fun cachedTitle(boxes:List<OcrTextBox>,titles:List<String>,cropWidth:Int,cropHeight:Int):String? {
         if(cropWidth<=0 || cropHeight<=0)return null
@@ -23,10 +43,11 @@ object ReplyStyleHeader {
         // OCR may insert or omit a space between Latin and Chinese text. Ignore
         // only whitespace for comparison, and reject collisions instead of guessing.
         fun matchKey(value:String)=NicknameText.canonical(value).filterNot { it.isWhitespace() }
-        val seen=boxes.filter { box ->
+        val seen=(boxes.filter { box ->
             val b=box.bounds;val x=(b.left+b.right)/2.0/cropWidth;val y=(b.top+b.bottom)/2.0/cropHeight
             x in .18.. .68 && y in .05.. .9
-        }.flatMap { it.text.lineSequence().map(String::trim).filter(String::isNotEmpty).toList() }.map(::matchKey).toSet()
+        }.flatMap { it.text.lineSequence().map(String::trim).filter(String::isNotEmpty).toList() }+
+            toolbarRows(boxes,cropWidth,cropHeight).filter { row -> row.zipWithNext().none { (a,b) -> a.bounds.right>b.bounds.left } }.map { row -> row.joinToString("") { it.text } }).map(::matchKey).toSet()
         return eligible.filter { name -> matchKey(name) in seen && eligible.count { ambiguousKey(it)==ambiguousKey(name) }==1 }.singleOrNull()
     }
 }

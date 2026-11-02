@@ -32,7 +32,7 @@ class PersonalMemoryActivity:BaseActivity() {
     override fun onDestroy() { if(android.os.Build.VERSION.SDK_INT>=33)backCallback?.let { onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it) };super.onDestroy() }
     private fun reload() {
         page("真实与记忆","正在读取本地资料…")
-        work("memory",{ repository.state() },{ state -> shownData=state.data;if(selected==null)overview(state) else details(state,selected!!) })
+        work("memory",{ repository.upgradeLearning();repository.state() },{ state -> shownData=state.data;if(selected==null)overview(state) else details(state,selected!!) })
     }
     private fun date(at:Long?)=if(at==null || at<=0)"时间未知" else SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.CHINA).format(Date(at))
     private fun title(contact:PersonalContact)=contact.nickname+(if(contact.groupRoom)" · 群聊" else "")+contact.group?.takeUnless { contact.groupRoom }?.let { " · 群：$it" }.orEmpty()+" · "+ChatApps.label(contact.platform)
@@ -74,8 +74,9 @@ class PersonalMemoryActivity:BaseActivity() {
             body.addView(ViewStyles.text(this,"关系：${relation(contact!!,s)}",16f,bold=true))
             body.addView(ViewStyles.button(this,"确认或更正关系") { textDialog("与你的实际关系",contact.relationship.takeUnless { it=="未知" }.orEmpty(),"例如：同事、朋友、家人、恋人；以你确认为准") { label -> perform { repository.relationship(id,label) } } })
             val signals=s.data.signals.filter { it.contactId==id }
+            val inspected=s.data.evidence.count { it.peerId==id && it.speaker==com.loveadvisor.core.model.Speaker.OTHER }
             val estimate=if(signals.isEmpty())"暂不足以估计" else "${"%.1f".format(Locale.ROOT,InteractionTrend.score(signals))}/100 · ${signals.size}条互动依据 · 最近已知时间${date(signals.filter { it.timeKnown!=false }.maxOfOrNull { it.at })}"
-            body.addView(ViewStyles.text(this,"好感度（互动趋势估计）：$estimate\n仅根据明确互动变化；不是对方真实内心。重复证据不计分，同类互动递减，每日正向增幅最多3。",13f,ViewStyles.MUTED))
+            body.addView(ViewStyles.text(this,"好感度（互动趋势估计）：$estimate\n已检查${inspected}条对方原话；关心、主动询问、邀约、安慰、玩笑和有内容的接话可成为依据，普通消息不直接加分。重复证据不计分，同类互动递减，每日正向增幅最多3。",13f,ViewStyles.MUTED))
             if(signals.isNotEmpty())body.addView(ViewStyles.button(this,"查看 / 纠正好感变化依据") {
                 val rows=signals.takeLast(50).asReversed()
                 AlertDialog.Builder(this).setTitle("互动依据 · 点击可纠正").setItems(rows.map { signal -> "${if(signal.timeKnown==false)"消息时间未知，读取于${date(signal.at)}" else date(signal.at)} · ${"%+.2f".format(Locale.ROOT,signal.delta)} · ${s.data.evidence.find { it.id==signal.sourceId }?.text?.take(35).orEmpty()}" }.toTypedArray()) { _,i ->

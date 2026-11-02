@@ -49,6 +49,12 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.7.9", "稳定对象核对与互动记忆", listOf(
+                "聊天应用按钮集中到一个可展开入口；默认、袪味、真实模式采用更明显的选中样式。",
+                "对象核对用标题旁的动态圆圈显示，成功后变绿；相同核对结果不反复清空面板或切换提示。",
+                "整理同一会话的重复缓存并保留已确认的标题指纹，改善多次切换后的候选恢复。",
+                "扩展日常互动依据，已有原话在本地重新整理；重复读取不重复加分，已纠正的依据仍保留纠正。"
+            )),
             Release("V1.7.8", "修复对象切换时的候选混用", listOf(
                 "切换聊天对象时先核对对象；未读取或暂时无法确认时显示待读取，避免展示上一人的候选。",
                 "保留各对象本地候选，返回已读取的对象并确认身份后恢复，无需重新调用模型。"

@@ -23,14 +23,15 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
         gate.cancel(); active=null
         val keep=state.current?.takeIf { tracker.sameConversation(it.ticket.session) }
         if(keep==null) { history.clear(); historySession=null }
-        state=BatchState(keep,loading=false,error=message)
+        state=BatchState(keep,loading=false,error=message,identityStatus=IdentityCheckStatus.VERIFIED)
     }
     @Synchronized fun status(message:String,failure:Boolean=false) { state=state.copy(error=message,isFailure=failure) }
     /** Hide replies while a navigation check resolves their owner; preserve the session in memory. */
-    @Synchronized fun holdForIdentityCheck(message:String) { state=state.copy(current=null,error=message,isFailure=false,identityChecking=true) }
+    @Synchronized fun identityStatus(value:IdentityCheckStatus) { state=state.copy(identityStatus=value) }
+    @Synchronized fun holdForIdentityCheck(message:String) { state=state.copy(current=null,isFailure=false,identityChecking=true,identityStatus=IdentityCheckStatus.CHECKING) }
     @Synchronized fun resumeAfterIdentityCheck(visible:VisibleBatch):Boolean {
         if(!state.identityChecking || state.loading || !tracker.sameConversation(visible.ticket.session))return false
-        state=state.copy(current=visible,identityChecking=false)
+        state=state.copy(current=visible,identityChecking=false,identityStatus=IdentityCheckStatus.VERIFIED)
         return true
     }
     @Synchronized fun cancelPending(message:String) { gate.cancel(); active=null; state=state.copy(loading=false,error=message,isFailure=false) }
@@ -50,7 +51,7 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
         timeScope=scope
         val previous=state.current?.takeIf { it.ticket.session==token && !changed }
         val ticket=gate.begin(token); active=ticket
-        state=state.copy(current=state.current?.takeIf { tracker.sameConversation(it.ticket.session) },loading=true,error=null,isFailure=false,identityChecking=false)
+        state=state.copy(current=state.current?.takeIf { tracker.sameConversation(it.ticket.session) },loading=true,error=null,isFailure=false,identityChecking=false,identityStatus=IdentityCheckStatus.VERIFIED)
         return RefreshRequest(ticket,previous==null,history.previousTexts,previous?.batch?.analysis)
     }
     fun complete(ticket:RequestTicket,batch:AdvisorBatch):Boolean=completeResult(ticket,batch)==BatchCompletion.ACCEPTED
@@ -62,7 +63,7 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
             else -> null
         }
         if(error!=null) { fail(ticket,error); return BatchCompletion.REJECTED }
-        state=BatchState(VisibleBatch(ticket,batch)); active=null; history.add(batch); return BatchCompletion.ACCEPTED
+        state=BatchState(VisibleBatch(ticket,batch),identityStatus=IdentityCheckStatus.VERIFIED); active=null; history.add(batch); return BatchCompletion.ACCEPTED
     }
     @Synchronized fun fail(ticket:RequestTicket,message:String) {
         if(active!=ticket || !gate.accept(ticket)) return
@@ -81,7 +82,7 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
         val ticket=gate.begin(token);gate.cancel()
         target=saved.target;timeScope=ConversationTimePolicy.scopeKey(snapshot,target)
         history.clear();history.add(saved.batch);historySession=token
-        state=BatchState(VisibleBatch(ticket,saved.batch),error="已恢复本对象上次候选 · 未调用模型")
+        state=BatchState(VisibleBatch(ticket,saved.batch),error="已恢复本对象上次候选 · 未调用模型",identityStatus=IdentityCheckStatus.VERIFIED)
         return true
     }
 }

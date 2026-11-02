@@ -16,6 +16,7 @@ data class CapsuleMenuControls(val locked:Boolean,val scale:Float,val toggleLock
 class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,private val onFill:(ReplyPlan,SessionToken)->Unit,private val onRefresh:()->Unit,onRead:()->Unit,onMenu:(View)->Unit,onClose:()->Unit,private val isCurrent:(SessionToken)->Boolean,private val reduced:()->Boolean,private val onDetails:((ReplyPlan,SessionToken,(ReplyDetail?,String?)->Unit)->Unit)?=null,dragMode:PanelDragMode=PanelDragMode.TITLE,private val onResize:()->Unit={},private val frosted:Boolean=false,private val onEditingFocus:(Boolean)->Unit={},onAnalyze:()->Unit={}):FrameLayout(context) {
     val dragHandle:View
     private val palette=PanelPalette(context,frosted)
+    private val identityIcon=IdentityCheckView(context,palette,reduced)
     private val scoreLabel=if(com.loveadvisor.android.AppGraph.get(context).settings.load().judgeProvider=="CUSTOM")"评分" else "Jev"
     private val column=ViewStyles.column(context)
     private val summary:TextView; private val status:TextView; private val scroll:ScrollView
@@ -34,6 +35,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private val cards:LinearLayout; private val refresh:Button; private val read:Button; private val count:TextView
     private var displayed:VisibleBatch?=null
     private var reading=false; private var loading=false; private var filling=false
+    private var checkingIdentity=false
     private var menuLayer:View?=null
     private var menuContent:LinearLayout?=null
     private var menuFinished:(()->Unit)?=null
@@ -55,7 +57,10 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             column.addView(row,LinearLayout.LayoutParams(-1,dp(24)))
             grip
         } else title
-        header.addView(title,LinearLayout.LayoutParams(0,-1,1f))
+        val titleGroup=ViewStyles.row(context).apply { gravity=Gravity.CENTER_VERTICAL }
+        titleGroup.addView(title,LinearLayout.LayoutParams(-2,-2))
+        titleGroup.addView(identityIcon,LinearLayout.LayoutParams(dp(18),dp(18)).apply { leftMargin=dp(7) })
+        header.addView(titleGroup,LinearLayout.LayoutParams(0,-1,1f))
         val menu=palette.button("⋯") {}; menu.contentDescription="更多设置"
         menu.setOnClickListener { com.loveadvisor.android.diagnostics.DiagnosticLogs.dispatch("更多设置") { onMenu(menu) } }
         header.addView(menu,LinearLayout.LayoutParams(textRowHeight(28),textRowHeight(28)))
@@ -113,13 +118,14 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private fun invalidateHeight() { cachedWidth=-1 }
     private fun rowParams(height:Int,bottom:Int)=LinearLayout.LayoutParams(-1,height).apply { bottomMargin=dp(bottom) }
     private fun updateButtons() {
-        analyze.alpha=if(analysisAvailable && !reading && !loading && !filling)1f else .45f
+        analyze.alpha=if(analysisAvailable && !reading && !loading && !filling && !checkingIdentity)1f else .45f
+        analyze.isEnabled=analysisAvailable && !reading && !loading && !filling && !checkingIdentity
         read.isEnabled=!reading && !loading && !filling; read.text=if(reading) "读取中…" else if(shortActionLabels)"读取" else "读取信息"
-        refresh.isEnabled=!reading && !loading && !filling && displayed?.let { isCurrent(it.ticket.session) }==true
+        refresh.isEnabled=!reading && !loading && !filling && !checkingIdentity && displayed?.let { isCurrent(it.ticket.session) }==true
         refresh.text=if(loading) "正在生成六条…" else "刷新换一批 · 6 条"
         for(i in 0 until cards.childCount) (cards.getChildAt(i) as? ReplyCardView)?.let { card ->
-            card.copyButton.isEnabled=!filling
-            card.fillButton?.let { button -> button.isEnabled=!filling && !reading && !loading && displayed?.let { isCurrent(it.ticket.session) && com.loveadvisor.core.capture.ChatApps.supported(it.ticket.session.packageName) }==true;button.alpha=if(button.isEnabled)1f else .45f }
+            card.copyButton.isEnabled=!filling && !checkingIdentity
+            card.fillButton?.let { button -> button.isEnabled=!filling && !reading && !loading && !checkingIdentity && displayed?.let { isCurrent(it.ticket.session) && com.loveadvisor.core.capture.ChatApps.supported(it.ticket.session.packageName) }==true;button.alpha=if(button.isEnabled)1f else .45f }
         }
     }
     fun setReading(value:Boolean) { reading=value; updateButtons() }
@@ -265,6 +271,8 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     }
     override fun onSizeChanged(w:Int,h:Int,oldw:Int,oldh:Int) { super.onSizeChanged(w,h,oldw,oldh); post { updateCount() } }
     fun render(state:BatchState) {
+        identityIcon.render(state.identityStatus)
+        checkingIdentity=state.identityStatus==IdentityCheckStatus.CHECKING
         invalidateHeight()
         loading=state.loading
         val visible=state.current
@@ -301,5 +309,5 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         updateButtons()
     }
     fun compact(enabled:Boolean) { if(compacted==enabled)return;compacted=enabled;summary.maxLines=if(enabled) 1 else 2; status.maxLines=if(enabled) 1 else 2;invalidateHeight() }
-    fun stopAnimations() { interaction.stop();OverlayAnimator.stop(this); for(i in 0 until cards.childCount) OverlayAnimator.stop(cards.getChildAt(i)) }
+    fun stopAnimations() { identityIcon.stop();interaction.stop();OverlayAnimator.stop(this); for(i in 0 until cards.childCount) OverlayAnimator.stop(cards.getChildAt(i)) }
 }

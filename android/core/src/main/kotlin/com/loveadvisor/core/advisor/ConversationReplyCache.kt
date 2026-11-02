@@ -6,12 +6,15 @@ import com.google.gson.Gson
 /** One last successful batch per confirmed conversation, independent of copy/fill actions. */
 /** A non-reversible local fingerprint of the header, scoped to the window dimensions. */
 data class CachedHeaderProof(val stamp:String,val width:Int,val height:Int,val conversationStamp:String?=null)
-data class SavedConversationReplies(val snapshot:ChatSnapshot,val batch:AdvisorBatch,val target:ReplyTarget?=null,val savedAt:Long=System.currentTimeMillis(),val headerProof:CachedHeaderProof?=null)
+data class SavedConversationReplies(val snapshot:ChatSnapshot,val batch:AdvisorBatch,val target:ReplyTarget?=null,val savedAt:Long=System.currentTimeMillis(),val headerProof:CachedHeaderProof?=null,val headerHistory:List<CachedHeaderProof>?=emptyList())
 interface ConversationReplyPersistence { fun load():List<SavedConversationReplies>;fun save(entries:List<SavedConversationReplies>) }
 class ConversationReplyCache(private val persistence:ConversationReplyPersistence?=null,private val limit:()->Int={10}) {
     private val entries=linkedMapOf<String,SavedConversationReplies>()
-    init { persistence?.load()?.filter(::valid)?.sortedBy { it.savedAt }?.forEach { entries[key(it.snapshot)]=it }; trim() }
+    init { persistence?.load()?.filter(::valid)?.sortedBy { it.savedAt }?.forEach(::put); trim() }
     private fun key(s:ChatSnapshot)="${s.packageName}\u0000${s.identity?.kind}\u0000${s.identity?.id}"
+    private fun sameConversation(a:ChatSnapshot,b:ChatSnapshot)=key(a)==key(b) ||
+        a.packageName==b.packageName && a.identity?.kind==b.identity?.kind && a.identity?.displayTitle==b.identity?.displayTitle &&
+            com.loveadvisor.core.capture.ConversationContextPolicy.strongOverlap(a.messages,b.messages)
     private fun trim():Boolean { var changed=false;while(entries.size>limit().coerceIn(1,20)) { entries.remove(entries.keys.first());changed=true };return changed }
     @Synchronized fun enforceLimit() { if(trim())persistence?.save(entries.values.toList()) }
     // Gson can construct partial/null fields from damaged or older documents. Skip a bad
@@ -25,7 +28,18 @@ class ConversationReplyCache(private val persistence:ConversationReplyPersistenc
     }.getOrDefault(false)
     @Synchronized fun remember(value:SavedConversationReplies):Boolean {
         if(!valid(value))return false
-        val id=key(value.snapshot);val old=entries.remove(id)
+        put(value)
+        trim()
+        persistence?.save(entries.values.toList())
+        return true
+    }
+    private fun put(value:SavedConversationReplies) {
+        // Repeated manual reads can receive new ephemeral IDs. A shared, substantial
+        // bidirectional passage proves continuity; a matching nickname alone cannot.
+        val matches=entries.filterValues { sameConversation(it.snapshot,value.snapshot) }
+        val old=matches.values.maxByOrNull { it.savedAt }
+        matches.keys.forEach(entries::remove)
+        val id=key(value.snapshot)
         val previous=old?.headerProof.takeIf { old?.snapshot?.identity?.displayTitle==value.snapshot.identity?.displayTitle }
         val current=value.headerProof
         val proof=when {
@@ -33,20 +47,19 @@ class ConversationReplyCache(private val persistence:ConversationReplyPersistenc
             current.conversationStamp==null && previous!=null && current.stamp==previous.stamp && current.width==previous.width && current.height==previous.height -> current.copy(conversationStamp=previous.conversationStamp)
             else -> current
         }
-        entries[id]=value.copy(headerProof=proof)
-        trim()
-        persistence?.save(entries.values.toList())
-        return true
+        val history=(matches.values.flatMap(::proofs)+proofs(value)+listOfNotNull(proof)).distinct().takeLast(4)
+        entries[id]=value.copy(headerProof=proof,headerHistory=history)
     }
     @Synchronized fun find(packageName:String,title:String):SavedConversationReplies? = entries.values.filter { it.snapshot.packageName==packageName && it.snapshot.identity?.displayTitle==title.trim() }.singleOrNull()
     @Synchronized fun findByIdentity(snapshot:ChatSnapshot):SavedConversationReplies? = entries[key(snapshot)]?.takeIf { it.snapshot.identity?.displayTitle==snapshot.identity?.displayTitle }
+    private fun proofs(entry:SavedConversationReplies)=(entry.headerHistory.orEmpty()+listOfNotNull(entry.headerProof)).distinct()
     @Synchronized fun findByHeaderProof(packageName:String,proof:CachedHeaderProof):SavedConversationReplies? {
-        val scoped=entries.values.filter { entry -> entry.snapshot.packageName==packageName && entry.headerProof?.let { it.width==proof.width && it.height==proof.height }==true }
+        val scoped=entries.values.filter { entry -> entry.snapshot.packageName==packageName && proofs(entry).any { it.width==proof.width && it.height==proof.height } }
         // Body similarity alone can recur in unrelated chats. Always require
         // the current header fingerprint as well before restoring a contact.
-        val headerMatches=scoped.filter { it.headerProof?.stamp==proof.stamp }
+        val headerMatches=scoped.filter { entry -> proofs(entry).any { it.stamp==proof.stamp && it.width==proof.width && it.height==proof.height } }
         if(proof.conversationStamp!=null) {
-            val bodyMatches=headerMatches.filter { it.headerProof?.conversationStamp==proof.conversationStamp }
+            val bodyMatches=headerMatches.filter { entry -> proofs(entry).any { it.stamp==proof.stamp && it.width==proof.width && it.height==proof.height && it.conversationStamp==proof.conversationStamp } }
             if(bodyMatches.size==1)return bodyMatches.single()
             if(bodyMatches.size>1)return null
         }
@@ -60,7 +73,7 @@ class ConversationReplyCache(private val persistence:ConversationReplyPersistenc
         if(!Regex("[0-9a-f]{64}").matches(proof.stamp) || proof.conversationStamp?.let { !Regex("[0-9a-f]{64}").matches(it) }==true || proof.width<=0 || proof.height<=0)return
         val id=key(snapshot);val existing=entries[id] ?: return
         if(existing.snapshot.identity?.displayTitle!=snapshot.identity?.displayTitle || existing.headerProof==proof)return
-        entries[id]=existing.copy(headerProof=proof);persistence?.save(entries.values.toList())
+        entries[id]=existing.copy(headerProof=proof,headerHistory=(proofs(existing)+proof).distinct().takeLast(4));persistence?.save(entries.values.toList())
     }
     @Synchronized fun touch(value:SavedConversationReplies) {
         val id=key(value.snapshot);val existing=entries.remove(id) ?: return

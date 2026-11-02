@@ -5,6 +5,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ReplyStyleHeaderTest {
+    @Test fun separatedLatinAndChineseTitlePartsCanIdentifyTheFullCachedName() {
+        val parts=listOf(OcrTextBox("Ny",RectI(140,25,180,60)),OcrTextBox("赵嘉豪",RectI(185,25,285,60)))
+        assertEquals("Ny 赵嘉豪",ReplyStyleHeader.toolbarTitle(parts,500,100))
+        assertEquals("Ny赵嘉豪",ReplyStyleHeader.cachedTitle(parts,listOf("Ny赵嘉豪","Ny赵崇康"),500,100))
+        assertNull(ReplyStyleHeader.cachedTitle(parts,listOf("Ny赵崇康"),500,100))
+    }
     @Test fun cachedTitlesCanBeFoundAmongMultipleToolbarLinesWithoutGuessing() {
         val name=OcrTextBox("My Faraway Near",RectI(160,35,260,65))
         val other=OcrTextBox("22",RectI(0,30,30,60))

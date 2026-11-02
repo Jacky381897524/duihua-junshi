@@ -11,6 +11,7 @@ class PermissionsActivity:BaseActivity() {
     private val statusHandler=android.os.Handler(android.os.Looper.getMainLooper())
     private var statusView:android.widget.TextView?=null
     private var resumed=false
+    private var appsExpanded=false
     private val refreshStatus=object:Runnable {
         override fun run() {
             if(!resumed)return
@@ -42,7 +43,17 @@ class PermissionsActivity:BaseActivity() {
         body.addView(ViewStyles.button(this,"打开应用系统设置") { if(!settings.appDetails())toast("无法打开应用设置，请长按对话军师图标进入应用信息") })
         body.addView(ViewStyles.text(this,"不同手机可能称为“悬浮窗”“显示在其他应用上层”或“在其他应用上层显示”。如服务经常断开，可在应用系统设置中允许后台运行；具体选项由手机系统提供。",13f,ViewStyles.MUTED))
         body.addView(ViewStyles.text(this,"图标在已启用的聊天应用前台显示；切到其他 App 自动隐藏。读取只在点击读取信息时发生。",13f,ViewStyles.MUTED))
-        ChatApps.packages.forEach { pkg -> body.addView(ViewStyles.button(this,"打开${ChatApps.label(pkg)}") { val launch=packageManager.getLaunchIntentForPackage(pkg); if(launch!=null) startActivity(launch) else toast("未找到已安装的${ChatApps.label(pkg)}") }) }
+        val appList=ViewStyles.column(this).apply { visibility=if(appsExpanded)android.view.View.VISIBLE else android.view.View.GONE }
+        val appEntry=ViewStyles.button(this,if(appsExpanded)"打开聊天应用  −" else "打开聊天应用  ＋") {}
+        appEntry.setOnClickListener {
+            appsExpanded=!appsExpanded
+            appList.visibility=if(appsExpanded)android.view.View.VISIBLE else android.view.View.GONE
+            appEntry.text=if(appsExpanded)"打开聊天应用  −" else "打开聊天应用  ＋"
+            appEntry.stateDescription=if(appsExpanded)"已展开" else "已收起"
+        }
+        body.addView(appEntry)
+        ChatApps.packages.forEach { pkg -> appList.addView(ViewStyles.button(this,ChatApps.label(pkg)) { val launch=packageManager.getLaunchIntentForPackage(pkg); if(launch!=null) startActivity(launch) else toast("未找到已安装的${ChatApps.label(pkg)}") }) }
+        body.addView(appList)
         body.addView(ViewStyles.text(this,"在系统列表中启用“对话军师”。聊天文字会发送给你配置的 AI 服务；原生读取不可靠时，聊天窗口截图会发送给你选择的视觉服务。私聊最近50条、群聊默认100条已读上下文加密保存在本机。",14f,ViewStyles.MUTED))
     }
 }

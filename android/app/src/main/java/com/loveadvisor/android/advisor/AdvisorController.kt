@@ -88,9 +88,10 @@ class AdvisorController(private val graph:AppGraph) {
     }
     fun pauseCapture(message:String) { cancelOperation();graph.coordinator.pauseCapture(message); publish() }
     fun invalidate(reason:String="会话已变化") { cancelOperation(LogReason.CONTEXT_CHANGED);graph.coordinator.invalidate();Logs.event(LogStep.UI_ACTION,LogState.WARN,LogReason.CONTEXT_CHANGED);publish() }
-    fun beginPanelRestore(packageName:String,windowId:Int,navigationCheck:Boolean=false):PanelReplyRestoration.Check {
+    fun identityStatus(value:IdentityCheckStatus) { if(graph.coordinator.state.identityStatus!=value) { graph.coordinator.identityStatus(value);publish() } }
+    fun beginPanelRestore(packageName:String,windowId:Int,navigationCheck:Boolean=false,announce:Boolean=true):PanelReplyRestoration.Check {
         val check=panelRestoration.begin(packageName,windowId,navigationCheck)
-        publish()
+        if(announce)publish()
         return check
     }
     /** Caller synchronizes the capture context before publishing a restored batch. */

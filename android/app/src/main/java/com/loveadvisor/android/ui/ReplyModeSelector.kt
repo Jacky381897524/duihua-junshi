@@ -40,7 +40,12 @@ class ReplyModeSelector(context:Context,private val settings:AppSettings,compact
     override fun onDetachedFromWindow() { unsubscribe?.invoke();unsubscribe=null;track.stop();super.onDetachedFromWindow() }
     private inner class Track(context:Context):FrameLayout(context) {
         private val palette=PanelPalette(context)
-        private val pill=View(context).apply { background=ViewStyles.shape(context,palette.selected,12f,palette.blue) }
+        private val pill=View(context).apply {
+            background=android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR,intArrayOf(0xFF397EF5.toInt(),0xFF405FB4.toInt())).apply {
+                cornerRadius=dp(11).toFloat();setStroke(dp(1),0xFFACD0FF.toInt())
+            }
+            elevation=dp(2).toFloat()
+        }
         private val labels=mutableListOf<TextView>()
         private var selected=-1
         private var position=0f
@@ -50,7 +55,7 @@ class ReplyModeSelector(context:Context,private val settings:AppSettings,compact
         init {
             background=ViewStyles.shape(context,palette.card,14f,palette.border)
             addView(pill,LayoutParams(1,-1).apply { setMargins(dp(3),dp(3),dp(3),dp(3)) })
-            val row=LinearLayout(context)
+            val row=LinearLayout(context).apply { elevation=dp(3).toFloat() }
             listOf("默认","袪味","真实").forEachIndexed { index,label ->
                 val text=palette.text(label,13f).apply {
                     gravity=Gravity.CENTER;isClickable=true;isFocusable=true;contentDescription="$label，回复表达模式"
@@ -63,7 +68,13 @@ class ReplyModeSelector(context:Context,private val settings:AppSettings,compact
         fun select(value:Int,animate:Boolean) {
             if(selected==value && !dragging && (animate || position==value.toFloat()))return
             val initial=selected<0;selected=value
-            labels.forEachIndexed { i,label -> label.isSelected=i==value;label.stateDescription=if(i==value)"已选中" else "未选中";label.setTextColor(if(i==value)palette.blue else palette.muted) }
+            labels.forEachIndexed { i,label ->
+                val active=i==value
+                label.isSelected=active;label.stateDescription=if(active)"已选中" else "未选中"
+                label.setTextColor(if(active)android.graphics.Color.WHITE else palette.muted)
+                label.setTypeface(null,if(active)android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                label.text=(if(active)"✓ " else "")+listOf("默认","袪味","真实")[i]
+            }
             stop()
             if(animate && !initial && isAttachedToWindow && !settings.load().reducedMotion && ValueAnimator.areAnimatorsEnabled()) {
                 animation=ValueAnimator.ofFloat(position,value.toFloat()).apply { duration=180;addUpdateListener { position=it.animatedValue as Float;place() };start() }

@@ -8,6 +8,41 @@ import java.time.Instant
 import java.time.ZoneId
 
 class RealityMemoryTest {
+    @Test fun everydayInteractionsAndContextualAnswersAreLearnedWithoutScoringEveryMessage() {
+        val repo=RealityMemoryRepository(Disk())
+        val rows=listOf(
+            ChatMessage("1",Speaker.OTHER,null,"你在干嘛呢"),
+            ChatMessage("2",Speaker.OTHER,null,"哈哈哈哈你太逗了"),
+            ChatMessage("3",Speaker.OTHER,null,"晚上要不要一起吃饭"),
+            ChatMessage("4",Speaker.ME,null,"今天工作怎么样？"),
+            ChatMessage("5",Speaker.OTHER,null,"今天客户很多，忙完已经七点了"),
+            ChatMessage("6",Speaker.OTHER,null,"我在呢，慢慢来"),
+            ChatMessage("7",Speaker.OTHER,null,"嗯"))
+        val read=snapshot().copy(messages=rows)
+        repo.ingest(read,now)
+        assertEquals(setOf("engagement","playfulness","invitation","response","support"),repo.state().data.signals.map { it.category }.toSet())
+        assertEquals(5,repo.state().data.signals.size)
+        repo.ingest(read,now+1);assertEquals(5,repo.state().data.signals.size)
+    }
+    @Test fun v3RawEvidenceIsBackfilledOnceAndDismissedSignalsRemainDismissed() {
+        val disk=Disk();val repo=RealityMemoryRepository(disk)
+        repo.ingest(snapshot(text="你在干嘛呢"),now)
+        repo.ingest(snapshot(text="晚上一起吃饭吧"),now)
+        val removed=repo.state().data.signals.first().sourceId
+        repo.dismissSignal(removed)
+        disk.save(repo.state().copy(learningPolicy=3,data=repo.state().data.copy(signals=emptyList())))
+        val loaded=RealityMemoryRepository(disk)
+        assertTrue(loaded.upgradeLearning(now));assertEquals(1,loaded.state().data.signals.size)
+        assertNotEquals(removed,loaded.state().data.signals.single().sourceId)
+        assertFalse(loaded.upgradeLearning(now));assertEquals(4,loaded.state().learningPolicy)
+    }
+    @Test fun unresolvedClockAndDateOnlyTodayDoNotSilentlyDropInteractions() {
+        val repo=RealityMemoryRepository(Disk())
+        repo.ingest(snapshot(text="你在干嘛呢").let { it.copy(messages=it.messages.map { m -> m.copy(time=MessageTime("13:50",null)) }) },now)
+        repo.ingest(snapshot(text="晚上一起吃饭吧").let { it.copy(messages=it.messages.map { m -> m.copy(time=MessageTime("今天",now+3600_000,true)) }) },now)
+        assertEquals(2,repo.state().data.signals.size)
+        assertTrue(repo.state().data.signals.all { it.timeKnown==false && it.at==now })
+    }
     @Test fun oldClassifiedRawEvidenceIsReorganizedOnceWithoutResurrectingDeletedSources() {
         val disk=Disk();val first=RealityMemoryRepository(disk);val s=snapshot(text="每周六都会去跑步")
         first.ingest(s,now);val state=first.state();val json=com.google.gson.JsonParser.parseString(Gson().toJson(state.copy(data=state.data.copy(memories=emptyList(),classified=state.data.evidence.map { it.id }.toSet())))).asJsonObject

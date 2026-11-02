@@ -6,6 +6,33 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ConversationReplyCacheTest {
+    @Test fun repeatedManualReadsWithDifferentIdsKeepOneProvenConversationAndNewestBatch() {
+        val rows=listOf(ChatMessage("1",Speaker.ME,null,"今天工作忙完了吗，一会儿准备去哪里"),ChatMessage("2",Speaker.OTHER,null,"刚刚忙完，准备去楼下吃点东西"),ChatMessage("3",Speaker.ME,null,"那你先去吃，回来再聊今天的趣事"))
+        val original=saved("first","潘佳琪").let { it.copy(snapshot=it.snapshot.copy(messages=rows)) }
+        val recent=original.copy(snapshot=original.snapshot.copy(identity=original.snapshot.identity!!.copy(id="second")),batch=original.batch.copy(replies=original.batch.replies.map { it.copy(text=it.text+"新一批") }),savedAt=original.savedAt+1)
+        val cache=ConversationReplyCache();cache.remember(original);cache.remember(recent)
+        assertEquals(1,cache.all().size);assertFalse(cache.hasAmbiguousTitle("com.tencent.mm","潘佳琪"))
+        assertEquals(recent.batch,cache.find("com.tencent.mm","潘佳琪")!!.batch)
+        val loaded=ConversationReplyCache(object:ConversationReplyPersistence {
+            override fun load()=listOf(original,recent)
+            override fun save(entries:List<SavedConversationReplies>){}
+        })
+        assertEquals(1,loaded.all().size);assertEquals(recent.batch,loaded.find("com.tencent.mm","潘佳琪")!!.batch)
+    }
+    @Test fun verifiedHeaderVariantsSurviveLaterBindingsAndSerialization() {
+        val cache=ConversationReplyCache();val entry=saved("a");cache.remember(entry)
+        val first=CachedHeaderProof("a".repeat(64),1080,2344)
+        val second=first.copy(stamp="b".repeat(64))
+        cache.bindHeaderProof(entry.snapshot,first);cache.bindHeaderProof(entry.snapshot,second)
+        assertEquals(entry.batch,cache.findByHeaderProof("com.tencent.mm",first)!!.batch)
+        assertEquals(entry.batch,cache.findByHeaderProof("com.tencent.mm",second)!!.batch)
+        val loaded=ConversationReplyCache(object:ConversationReplyPersistence {
+            override fun load()=ConversationReplyCache.decode(com.google.gson.Gson().toJson(cache.all()))
+            override fun save(entries:List<SavedConversationReplies>){}
+        })
+        assertNotNull(loaded.findByHeaderProof("com.tencent.mm",first))
+        assertNull(loaded.findByHeaderProof("com.tencent.mobileqq",first))
+    }
     private fun saved(id:String,title:String=id)=SavedConversationReplies(AdvisorFixtures.snapshot().let { it.copy(identity=it.identity!!.copy(id=id,displayTitle=title)) },AdvisorFixtures.valid())
     @Test fun uniqueMatchingHeaderProofRestoresOtherContactAndSurvivesSerialization() {
         val cache=ConversationReplyCache();val a=saved("a");val b=saved("b")
