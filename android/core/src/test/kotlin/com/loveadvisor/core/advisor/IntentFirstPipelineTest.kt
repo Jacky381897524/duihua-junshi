@@ -34,8 +34,11 @@ class IntentFirstPipelineTest {
         assertEquals(6,JsonParser.parseString(wire.requests[2].body).asJsonObject["questions"].asJsonObject.size())
         advisor.generate(input,profile,emptyList(),Cancellation())
         assertEquals(5,wire.requests.size)
+        val reread=input.copy(snapshot=input.snapshot.copy(readAtMillis=System.currentTimeMillis(),messages=input.snapshot.messages.map { it.copy(id="new-${it.id}",observedAtMillis=System.currentTimeMillis()) }))
+        advisor.generate(reread,profile,emptyList(),Cancellation())
+        assertEquals("Identical rereads reuse assessment despite transient IDs and observation time",7,wire.requests.size)
         advisor.generate(input.copy(background="新的已确认事实"),profile,emptyList(),Cancellation())
-        assertEquals(8,wire.requests.size)
+        assertEquals(10,wire.requests.size)
     }
     @Test fun weakDistributionReportsUnknownRatherThanPretendingToKnow() {
         val labels=(0..5).associate { "$it" to "意图$it" }

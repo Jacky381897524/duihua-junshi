@@ -17,6 +17,7 @@ class ChatCompletionClientTest {
             val request=server.requests.single(); assertEquals("POST",request.method); assertEquals("/v1/chat/completions",request.path)
             assertEquals("Bearer FAKE_KEY",request.authorization)
             assertEquals("model-real-id",JsonParser.parseString(request.body).asJsonObject.get("model").asString)
+            assertEquals(request.body.toByteArray(Charsets.UTF_8).size.toString(),request.contentLength)
             assertFalse(request.path.contains("FAKE_KEY"))
         }
     }

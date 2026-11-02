@@ -47,8 +47,8 @@ class PanelReplyRestoration(
         val retained=check.state.current!=null && check.snapshot!=null
         // A matching live toolbar wins over an older body's cached fingerprint.
         // Otherwise scrolling back over an earlier read can restore an older batch.
-        if(retained && !check.navigationCheck && name!=null && name==check.snapshot?.identity?.displayTitle &&
-            proof!=null && cache.matchesIdentityHeader(check.snapshot,proof)) {
+        if(retained && !check.navigationCheck && name!=null && name==check.snapshot?.identity?.displayTitle) {
+            coordinator.status(check.state.error ?: "已保留本对象上次候选 · 未调用模型")
             coordinator.identityStatus(IdentityCheckStatus.VERIFIED)
             return Result.RETAINED
         }

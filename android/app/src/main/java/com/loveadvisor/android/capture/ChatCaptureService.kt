@@ -117,6 +117,7 @@ class ChatCaptureService:AccessibilityService() {
     private var headerRetryRequested=false
     private var unknownHeaderRetries=0
     private var headerNavigationRevision=0L
+    private val headerActivity=com.loveadvisor.core.capture.HeaderActivityTracker()
     private var identityNavigationRevision=0L
     private var checkedHeaderRevision=-1L
     private val headerMemo=HeaderObservationMemo()
@@ -182,7 +183,7 @@ class ChatCaptureService:AccessibilityService() {
         if(event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED && event.windowChanges and (AccessibilityEvent.WINDOWS_CHANGE_REMOVED or AccessibilityEvent.WINDOWS_CHANGE_ADDED)!=0) reader.forgetWindow(event.windowId)
         val structural=event.eventType==AccessibilityEvent.TYPE_WINDOWS_CHANGED || event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         if(ChatApps.supported(pkg) && event.eventType in setOf(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)) {
-            val navigated=event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && CaptureEventPolicy.navigationChanged(pkg,event.className?.toString().orEmpty())
+            val navigated=event.eventType==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && headerActivity.observe(pkg,event.windowId,event.className?.toString().orEmpty())
             if(navigated) { headerNavigationRevision++;unknownHeaderRetries=0 }
             scheduleHeaderCheck(navigated)
         }
@@ -598,7 +599,7 @@ class ChatCaptureService:AccessibilityService() {
                 if(!current() || window==null || window.windowId!=windowId || window.packageName!=pkg) { complete(null,null);return@post }
                 if(native!=null && (!headerOnly || !graph.replySessions.hasAmbiguousTitle(pkg,native))) { finish(native);return@post }
                 val bars=getSystemService(android.view.WindowManager::class.java).maximumWindowMetrics.windowInsets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.statusBars()).top
-                val crop=ReplyStyleHeader.crop(pkg,window.viewport,bars,resources.displayMetrics.density)
+                val crop=if(headerOnly)ReplyStyleHeader.captureCrop(pkg,window.viewport,bars,resources.displayMetrics.density) else ReplyStyleHeader.crop(pkg,window.viewport,bars,resources.displayMetrics.density)
                 if(crop==null) { finish(null);return@post }
                 captureWindow(windowId,cancel) { image ->
                     if(image !is CaptureImageResult.Success) { finish(null);return@captureWindow }
@@ -647,8 +648,12 @@ class ChatCaptureService:AccessibilityService() {
                             recognizer.recognize(header,cancel,{ boxes,_ ->
                                 val matched=boxes?.let { ReplyStyleHeader.cachedTitle(it,cachedTitles,header.width,header.height) }
                                 val title=matched ?: boxes?.let { ReplyStyleHeader.toolbarTitle(it,header.width,header.height) }
+                                val band=boxes?.let { ReplyStyleHeader.fingerprintBand(it,header.width,header.height,title) }
+                                val calibrated=if(headerOnly && reference!=null && title!=null && band!=null)VisualFillReference.stamp(header,band)?.let { stamp ->
+                                    reference.copy(stamp=stamp,headerBounds=RectI(x+band.left,y+band.top,x+band.right,y+band.bottom))
+                                } else null
                                 if(headerOnly)Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.STEP,if(matched!=null)LogReason.CACHE_HEADER_OCR_MATCH else LogReason.CACHE_HEADER_OCR_MISS,log,metrics=mapOf(LogMetric.COUNT to (boxes?.size ?: 0).toLong(),LogMetric.RESULT_COUNT to cachedTitles.size.toLong(),LogMetric.CACHE_DUPLICATE_COUNT to cachedTitles.groupingBy { it }.eachCount().values.sumOf { (it-1).coerceAtLeast(0) }.toLong(),LogMetric.CACHE_PROOF_COUNT to cachedEntries.count { it.headerProof?.conversationStamp!=null }.toLong()))
-                                finish(title,localOcr=true,reference=reference)
+                                finish(title,localOcr=true,reference=calibrated ?: reference)
                             },{
                                 if(!header.isRecycled)header.recycle();recognizer.close()
                             },lines=headerOnly)
@@ -689,7 +694,8 @@ class ChatCaptureService:AccessibilityService() {
             // Apply the ownership decision once, after the image/title is available.
             // Ordinary content events must not clear and rebuild the panel in between.
             val headerChanged=headerMemo.changedHeader(pkg,id,proof) || (proof!=null && visualFill?.windowId==id && proof.stamp!=visualFill?.stamp)
-            val check=graph.controller.beginPanelRestore(pkg,id,navigationUnverified || headerChanged,announce=false)
+            val identityChanged=navigationUnverified || headerChanged && verified!=identity?.displayTitle
+            val check=graph.controller.beginPanelRestore(pkg,id,identityChanged,announce=false)
             val result=graph.controller.completePanelRestore(check,verified,nativeTitle=!lastStyleNicknameFromOcr,proof=proof)
             when(result) {
                 PanelReplyRestoration.Result.RESTORED -> graph.tracker.lastSnapshot?.let { applyCachedSnapshot(it,freshFill) }
@@ -717,7 +723,7 @@ class ChatCaptureService:AccessibilityService() {
                     result==PanelReplyRestoration.Result.RETAINED && verified!=identity?.displayTitle -> LogReason.CACHE_TITLE_UNVERIFIED
                     result==PanelReplyRestoration.Result.RETAINED -> LogReason.CACHE_CURRENT_RETAINED
                     else -> LogReason.NONE
-                },metrics=mapOf(LogMetric.RESULT_COUNT to (graph.coordinator.state.current?.batch?.replies?.size ?: 0).toLong()))
+                },metrics=mapOf(LogMetric.RESULT_COUNT to (graph.coordinator.state.current?.batch?.replies?.size ?: 0).toLong(),LogMetric.NAVIGATION_CHECK to if(identityChanged)1L else 0L,LogMetric.HEADER_CHANGED to if(headerChanged)1L else 0L,LogMetric.TITLE_PRESENT to if(verified!=null)1L else 0L,LogMetric.TITLE_EQUALS_CURRENT to if(verified!=null && verified==originalSnapshot?.identity?.displayTitle)1L else 0L,LogMetric.CACHE_TITLE_COUNT to if(verified==null)0L else graph.replySessions.all().count { it.snapshot.packageName==pkg && it.snapshot.identity?.displayTitle==verified }.toLong()))
             graph.controller.publish()
             // The title may be unavailable during a screen transition. Retry
             // locally without reading chat text or requesting a model; keep this

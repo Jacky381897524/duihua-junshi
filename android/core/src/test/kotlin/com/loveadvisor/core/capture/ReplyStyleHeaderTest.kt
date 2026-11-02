@@ -5,6 +5,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ReplyStyleHeaderTest {
+    @Test fun repeatedCacheRowsDoNotMakeTheSameSpellingAnOcrMiss() {
+        val boxes=listOf(OcrTextBox("23:34",RectI(160,5,230,28)),OcrTextBox("5G",RectI(350,5,390,28)),OcrTextBox("小林",RectI(160,65,230,100)))
+        assertEquals("小林",ReplyStyleHeader.cachedTitle(boxes,List(7) { "小林" }+"小雨",500,160))
+        assertEquals("小林",ReplyStyleHeader.toolbarTitle(boxes,500,160))
+        assertEquals(RectI(0,57,500,108),ReplyStyleHeader.fingerprintBand(boxes,500,160))
+        val cropped=boxes.takeLast(1).map { it.copy(bounds=RectI(160,5,230,40)) }
+        assertEquals("小林",ReplyStyleHeader.toolbarTitle(cropped,500,160))
+        assertEquals(0,ReplyStyleHeader.fingerprintBand(cropped,500,160)!!.top)
+    }
+    @Test fun captureCropIncludesToolbarWhetherSystemBarPixelsArePresentOrAbsent() {
+        assertEquals(RectI(270,0,907,249),ReplyStyleHeader.captureCrop(ChatApps.WECHAT,RectI(0,0,1080,2344),95,2.75f))
+    }
     @Test fun separatedLatinAndChineseTitlePartsCanIdentifyTheFullCachedName() {
         val parts=listOf(OcrTextBox("Ny",RectI(140,25,180,60)),OcrTextBox("赵嘉豪",RectI(185,25,285,60)))
         assertEquals("Ny 赵嘉豪",ReplyStyleHeader.toolbarTitle(parts,500,100))

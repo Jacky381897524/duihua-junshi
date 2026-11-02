@@ -26,7 +26,9 @@ class JdkHttpTransport(private val connectTimeout: Int = 15000, private val read
             request.body?.let {
                 connection.doOutput=true
                 connection.setRequestProperty("Content-Type","application/json; charset=utf-8")
-                connection.outputStream.use { stream -> cancel.check(); stream.write(it.toByteArray(Charsets.UTF_8)) }
+                val bytes=it.toByteArray(Charsets.UTF_8)
+                connection.setFixedLengthStreamingMode(bytes.size)
+                connection.outputStream.use { stream -> cancel.check(); stream.write(bytes) }
             }
             cancel.check()
             val status=connection.responseCode

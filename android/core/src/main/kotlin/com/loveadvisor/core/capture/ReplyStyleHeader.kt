@@ -12,13 +12,28 @@ object ReplyStyleHeader {
         val bottom=minOf(viewport.bottom,top+(56*density).toInt())
         return RectI(viewport.left+(viewport.width*left).toInt(),top,viewport.left+(viewport.width*.84).toInt(),bottom).takeIf { it.width>0 && it.height>0 }
     }
+    /** Window screenshots may already exclude system bars; inspect both possible toolbar origins. */
+    fun captureCrop(packageName:String,viewport:RectI,statusBarBottom:Int,density:Float):RectI? =
+        crop(packageName,viewport,statusBarBottom,density)?.let { it.copy(top=viewport.top) }
+
+    fun fingerprintBand(boxes:List<OcrTextBox>,width:Int,height:Int,expectedTitle:String?=null):RectI? {
+        fun key(s:String)=NicknameText.canonical(s).filterNot { it.isWhitespace() }
+        val rows=toolbarRows(boxes,width,height)
+        val row=if(expectedTitle==null)rows.firstOrNull() else rows.singleOrNull { key(it.joinToString("") { box->box.text })==key(expectedTitle) }
+        if(row==null)return null
+        if(row.zipWithNext().any { (a,b)->a.bounds.right>b.bounds.left })return null
+        val top=row.minOf { it.bounds.top };val bottom=row.maxOf { it.bounds.bottom }
+        val margin=maxOf(2,(bottom-top)/4)
+        return RectI(0,(top-margin).coerceAtLeast(0),width,(bottom+margin).coerceAtMost(height))
+    }
     fun title(boxes:List<OcrTextBox>):String?=boxes.singleOrNull()?.text?.trim()?.takeIf {
         NicknameText.valid(it) && '\n' !in it && '\r' !in it && !TextSceneParser.isUi(it) && it !in setOf("消息","联系人","通讯录","好友","设置")
     }
     private fun toolbarRows(boxes:List<OcrTextBox>,width:Int,height:Int):List<List<OcrTextBox>> {
         if(width<=0 || height<=0)return emptyList()
         val central=boxes.filter { b -> val r=b.bounds;val x=(r.left+r.right)/2.0/width
-            x in .12.. .82 && r.top>=0 && r.bottom<=height && !TextSceneParser.isUi(b.text) && b.text.isNotBlank()
+            x in .12.. .82 && r.top>=0 && r.bottom<=height && !TextSceneParser.isUi(b.text) && b.text.isNotBlank() &&
+                !Regex("^(?:[2345]G|LTE|VoLTE|HD|[0-9]{1,3}%)$",RegexOption.IGNORE_CASE).matches(b.text.trim())
         }.sortedBy { it.bounds.top }
         val rows=mutableListOf<MutableList<OcrTextBox>>()
         central.forEach { box ->
@@ -30,8 +45,7 @@ object ReplyStyleHeader {
     }
     fun toolbarTitle(boxes:List<OcrTextBox>,width:Int,height:Int):String? {
         val rows=toolbarRows(boxes,width,height)
-        if(rows.size!=1)return null
-        val row=rows.single()
+        val row=rows.firstOrNull() ?: return null
         if(row.zipWithNext().any { (a,b) -> a.bounds.right>b.bounds.left })return null
         return title(listOf(OcrTextBox(row.joinToString(" ") { it.text.trim() },row.first().bounds)))
     }
@@ -39,7 +53,7 @@ object ReplyStyleHeader {
     fun cachedTitle(boxes:List<OcrTextBox>,titles:List<String>,cropWidth:Int,cropHeight:Int):String? {
         if(cropWidth<=0 || cropHeight<=0)return null
         fun ambiguousKey(value:String)=NicknameText.suggestionKey(value).filterNot { it.isWhitespace() }.lowercase(java.util.Locale.ROOT)
-        val eligible=titles.filter { NicknameText.valid(it) && !TextSceneParser.isUi(it) && it !in setOf("消息","联系人","通讯录","好友","设置") }
+        val eligible=titles.distinct().filter { NicknameText.valid(it) && !TextSceneParser.isUi(it) && it !in setOf("消息","联系人","通讯录","好友","设置") }
         // OCR may insert or omit a space between Latin and Chinese text. Ignore
         // only whitespace for comparison, and reject collisions instead of guessing.
         fun matchKey(value:String)=NicknameText.canonical(value).filterNot { it.isWhitespace() }

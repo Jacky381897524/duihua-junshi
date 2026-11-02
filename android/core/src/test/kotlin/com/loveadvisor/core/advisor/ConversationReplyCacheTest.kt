@@ -6,6 +6,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ConversationReplyCacheTest {
+    @Test fun reopeningLegacyIdenticalCapturesKeepsOneLatestBatchAndPreservesUnrelatedNames() {
+        val proof=CachedHeaderProof("a".repeat(64),1080,2344,"b".repeat(64))
+        val old=saved("old","同一个对象").copy(headerProof=proof,savedAt=1)
+        val latest=saved("latest","同一个对象").copy(headerProof=proof,savedAt=2)
+        val other=saved("other","另一个对象").copy(headerProof=proof,savedAt=3)
+        val cache=ConversationReplyCache(object:ConversationReplyPersistence {
+            override fun load()=listOf(old,latest,other)
+            override fun save(entries:List<SavedConversationReplies>) {}
+        })
+        assertEquals(2,cache.all().size)
+        assertEquals("latest",cache.find("com.tencent.mm","同一个对象")!!.snapshot.identity!!.id)
+        assertNotNull(cache.find("com.tencent.mm","另一个对象"))
+    }
     @Test fun repeatedManualReadsWithDifferentIdsKeepOneProvenConversationAndNewestBatch() {
         val rows=listOf(ChatMessage("1",Speaker.ME,null,"今天工作忙完了吗，一会儿准备去哪里"),ChatMessage("2",Speaker.OTHER,null,"刚刚忙完，准备去楼下吃点东西"),ChatMessage("3",Speaker.ME,null,"那你先去吃，回来再聊今天的趣事"))
         val original=saved("first","潘佳琪").let { it.copy(snapshot=it.snapshot.copy(messages=rows)) }
@@ -62,7 +75,9 @@ class ConversationReplyCacheTest {
         assertNull(cache.findByHeaderProof("com.tencent.mm",second.copy(stamp="e".repeat(64))))
         assertNull(cache.findByHeaderProof("com.tencent.mm",base))
         assertNull(cache.findByHeaderProof("com.tencent.mm",base.copy(conversationStamp="d".repeat(64))))
-        cache.remember(saved("c","同名").copy(headerProof=second));assertNull(cache.findByHeaderProof("com.tencent.mm",second))
+        cache.remember(saved("c","同名").copy(headerProof=second))
+        assertEquals("c",cache.findByHeaderProof("com.tencent.mm",second)!!.snapshot.identity!!.id)
+        assertEquals(2,cache.all().size) // An identical title+body capture is a duplicate read.
     }
     @Test fun bindingHeaderProofCannotTargetOtherIdentityOrInvalidFingerprint() {
         val cache=ConversationReplyCache();val item=saved("a");cache.remember(item)

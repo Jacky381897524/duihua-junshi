@@ -15,6 +15,11 @@ class ConversationReplyCache(private val persistence:ConversationReplyPersistenc
     private fun sameConversation(a:ChatSnapshot,b:ChatSnapshot)=key(a)==key(b) ||
         a.packageName==b.packageName && a.identity?.kind==b.identity?.kind && a.identity?.displayTitle==b.identity?.displayTitle &&
             com.loveadvisor.core.capture.ConversationContextPolicy.strongOverlap(a.messages,b.messages)
+    private fun sameCapturedView(a:SavedConversationReplies,b:SavedConversationReplies):Boolean =
+        a.snapshot.packageName==b.snapshot.packageName && a.snapshot.identity?.kind==b.snapshot.identity?.kind &&
+        a.snapshot.identity?.displayTitle==b.snapshot.identity?.displayTitle && proofs(a).any { first ->
+            first.conversationStamp!=null && proofs(b).any { second -> first.stamp==second.stamp && first.width==second.width && first.height==second.height && first.conversationStamp==second.conversationStamp }
+        }
     private fun trim():Boolean { var changed=false;while(entries.size>limit().coerceIn(1,20)) { entries.remove(entries.keys.first());changed=true };return changed }
     @Synchronized fun enforceLimit() { if(trim())persistence?.save(entries.values.toList()) }
     // Gson can construct partial/null fields from damaged or older documents. Skip a bad
@@ -37,7 +42,7 @@ class ConversationReplyCache(private val persistence:ConversationReplyPersistenc
         val value=incoming.copy(batch=incoming.batch.copy(personalContext=incoming.batch.personalContext?.copy(interaction=emptyList())))
         // Repeated manual reads can receive new ephemeral IDs. A shared, substantial
         // bidirectional passage proves continuity; a matching nickname alone cannot.
-        val matches=entries.filterValues { sameConversation(it.snapshot,value.snapshot) }
+        val matches=entries.filterValues { sameConversation(it.snapshot,value.snapshot) || sameCapturedView(it,value) }
         val old=matches.values.maxByOrNull { it.savedAt }
         matches.keys.forEach(entries::remove)
         val id=key(value.snapshot)
