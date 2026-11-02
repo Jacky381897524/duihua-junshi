@@ -13,7 +13,6 @@ class ReplyStyleActivity:BaseActivity() {
         page("回复风格设置","统一设置或按对象保存；六条候选和刷新都应用表达偏好。")
         val naturalCard=ViewStyles.card(this);body.addView(naturalCard)
         naturalCard.addView(ReplyModeSelector(this,graph.settings))
-        naturalCard.addView(ViewStyles.button(this,"真实与记忆管理") { open(com.loveadvisor.android.memory.PersonalMemoryActivity::class.java) })
         val globalCard=ViewStyles.card(this);body.addView(globalCard)
         globalCard.addView(ViewStyles.text(this,"全对象回复风格",20f,bold=true))
         globalCard.addView(ViewStyles.text(this,"无需填写联系人名称；没有匹配到专属风格时使用此设置。",13f,ViewStyles.MUTED))

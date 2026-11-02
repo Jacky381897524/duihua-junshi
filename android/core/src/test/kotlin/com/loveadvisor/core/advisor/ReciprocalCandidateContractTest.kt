@@ -29,7 +29,7 @@ class ReciprocalCandidateContractTest {
         val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(input("你帮我看看这份资料？"),JevProfile(apiKey="fake"),emptyList(),Cancellation())
         assertEquals(6,batch.replies.size)
         assertTrue(batch.replies.none { it.strategy in setOf(Strategy.APPRECIATION,Strategy.TEASING,Strategy.INVITATION) })
-        assertEquals("Valid ordinary replies must not trigger paid format repair",2,wire.requests.size)
+        assertEquals("Valid ordinary replies must not trigger paid format repair",3,wire.requests.size)
         assertEquals(replies[1],batch.replies.first().text)
         assertEquals("Keep actual Jev scores; do not relabel heuristic scores",1.0,batch.replies.first().score!!,0.0)
     }
@@ -43,7 +43,7 @@ class ReciprocalCandidateContractTest {
             val wire=Wire(content(texts))
             val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(input(text),JevProfile(apiKey="fake"),emptyList(),Cancellation())
             assertEquals(texts.toSet(),batch.replies.map { it.text }.toSet())
-            assertEquals("Do not force a flirting repair in this scene: $text",2,wire.requests.size)
+            assertEquals("Do not force a flirting repair in this scene: $text",3,wire.requests.size)
         }
     }
 
@@ -54,7 +54,7 @@ class ReciprocalCandidateContractTest {
             val profile=if(custom)JevProfile(apiKey="fake",endpoint="https://judge.example/v1",model="custom",custom=true) else JevProfile(apiKey="fake")
             val request=input("你帮我看看这份资料？",style)
             AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(request,profile,emptyList(),Cancellation())
-            val generation=data(wire.requests.first())
+            val generation=data(wire.requests[1])
             val judgment=if(custom)data(wire.requests.last()) else JsonParser.parseString(wire.requests.last().body).asJsonObject["state"].asJsonObject
             assertNotNull("Generation must receive actionable shared quality criteria",generation["responsePolicy"])
             assertEquals(generation["responsePolicy"],judgment["responsePolicy"])
@@ -63,7 +63,7 @@ class ReciprocalCandidateContractTest {
             assertTrue(dimensions.entrySet().all { it.value.asString.isNotBlank() })
             assertEquals(style,judgment["replyStyle"]?.asString)
             assertEquals(6,judgment["candidates"].asJsonArray.size())
-            assertEquals(2,wire.requests.size)
+            assertEquals(3,wire.requests.size)
         }
     }
 

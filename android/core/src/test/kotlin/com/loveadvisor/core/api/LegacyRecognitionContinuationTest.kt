@@ -34,7 +34,7 @@ class LegacyRecognitionContinuationTest {
         val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(AdvisorInput(profile,snapshot),JevProfile(apiKey="fake"),emptyList(),Cancellation())
         assertEquals(replies.toSet(),batch.replies.map { it.text }.toSet())
         assertEquals(6,batch.replies.size)
-        val request=JsonParser.parseString(requests[1].body).asJsonObject["messages"].asJsonArray
+        val request=JsonParser.parseString(requests[2].body).asJsonObject["messages"].asJsonArray
         val data=JsonParser.parseString(request[1].asJsonObject["content"].asString).asJsonObject
         assertEquals("CONTINUE_SELF",data["responseMode"].asString)
         assertEquals("下雨了 宝贝",data["lastMessageText"].asString)

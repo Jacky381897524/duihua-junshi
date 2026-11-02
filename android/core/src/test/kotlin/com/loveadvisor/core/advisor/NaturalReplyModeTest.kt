@@ -35,11 +35,11 @@ class NaturalReplyModeTest {
             val profile=if(custom)JevProfile(apiKey="fake",endpoint="https://judge.example/v1",model="custom",custom=true) else JevProfile(apiKey="fake")
             val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(input(true,kind,selected),profile,emptyList(),Cancellation())
             assertEquals(texts.toSet(),batch.replies.map { it.text }.toSet())
-            assertEquals(2,wire.requests.size)
+            assertEquals(3,wire.requests.size)
             if(selected || kind==ChatKind.GROUP)assertTrue(batch.replies.all { it.targetMessageId=="target" })
-            val drafting=data(wire.requests.first())
+            val drafting=data(wire.requests[1])
             val body=JsonParser.parseString(wire.requests.last().body).asJsonObject
-            if(!custom)assertEquals(13,body["questions"].asJsonObject.size())
+            if(!custom)assertEquals(6,body["questions"].asJsonObject.size())
             val judgment=if(custom)data(wire.requests.last()) else body["state"].asJsonObject
             assertEquals(drafting["responsePolicy"],judgment["responsePolicy"])
             assertTrue(judgment["responsePolicy"].asJsonObject.has("naturalExpression"))
@@ -53,8 +53,8 @@ class NaturalReplyModeTest {
             AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(input(false,ChatKind.DIRECT,false),JevProfile(apiKey="fake"),emptyList(),Cancellation())
             fail("OFF must retain V1.5.0 strategy validation")
         } catch(_:ApiException) { }
-        assertEquals(2,wire.requests.size)
-        assertTrue(wire.requests.none { it.url==ProviderPresets.JEV_ENDPOINT })
+        assertEquals(3,wire.requests.size)
+        assertEquals(1,wire.requests.count { it.url==ProviderPresets.JEV_ENDPOINT }) // No candidate scoring after invalid drafts.
     }
     @Test fun enabledFullConsultationAlsoAcceptsShortDistinctRepliesWithOneStrategy() {
         val fixture=AdvisorFixtures.valid().copy(replies=AdvisorFixtures.valid().replies.mapIndexed { i,r -> r.copy(strategy=Strategy.ACKNOWLEDGE,text=texts[i],targetMessageId="target") })
@@ -85,7 +85,7 @@ class NaturalReplyModeTest {
                 assertFalse(coordinator.state.loading)
                 assertNull(coordinator.state.error)
                 assertEquals(values.toSet(),coordinator.state.current!!.batch.replies.map { it.text }.toSet())
-                assertEquals(2,wire.requests.size)
+                assertEquals(3,wire.requests.size)
             }
         }
     }
@@ -114,7 +114,7 @@ class NaturalReplyModeTest {
         val natural=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(request,JevProfile(apiKey="fake"),refresh.previous,Cancellation())
         assertTrue(coordinator.complete(refresh.requestTicket,natural))
         assertFalse(coordinator.state.loading)
-        assertEquals(2,wire.requests.size)
+        assertEquals(3,wire.requests.size)
 
         val off=coordinator.begin(request.snapshot)!!
         val legacy=AdvisorFixtures.valid().copy(replies=AdvisorFixtures.valid().replies.map { it.copy(text=it.text+"接着聊") })
@@ -122,7 +122,7 @@ class NaturalReplyModeTest {
         val offBatch=AutomaticAdvisor(ChatCompletionClient(offWire),JevJudgeClient(offWire)).generate(request.copy(naturalRepliesEnabled=false),JevProfile(apiKey="fake"),off.previous,Cancellation())
         assertFalse(offBatch.naturalRepliesEnabled)
         assertTrue(coordinator.complete(off.requestTicket,offBatch))
-        assertEquals(2,offWire.requests.size)
+        assertEquals(3,offWire.requests.size)
         assertFalse(AdvisorValidator().validate(offBatch.copy(replies=offBatch.replies.map { it.copy(strategy=Strategy.ACKNOWLEDGE) })).valid)
     }
 

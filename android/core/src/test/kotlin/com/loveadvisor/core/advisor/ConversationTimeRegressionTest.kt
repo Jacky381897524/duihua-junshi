@@ -32,9 +32,9 @@ class ConversationTimeRegressionTest {
             val wire=Wire(custom)
             val input=AdvisorInput(ProviderPresets.OPENROUTER.reply("fake"),snapshot(kind),naturalRepliesEnabled=natural)
             AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(input,JevProfile(apiKey="fake",custom=custom,endpoint="https://judge.example/v1",model="judge"),emptyList(),Cancellation())
-            assertEquals(2,wire.requests.size)
-            val draft=JsonParser.parseString(JsonParser.parseString(wire.requests[0].body).asJsonObject["messages"].asJsonArray[1].asJsonObject["content"].asString).asJsonObject
-            val judgeBody=JsonParser.parseString(wire.requests[1].body).asJsonObject
+            assertEquals(3,wire.requests.size)
+            val draft=JsonParser.parseString(JsonParser.parseString(wire.requests[1].body).asJsonObject["messages"].asJsonArray[1].asJsonObject["content"].asString).asJsonObject
+            val judgeBody=JsonParser.parseString(wire.requests[2].body).asJsonObject
             val judge=if(custom)JsonParser.parseString(judgeBody["messages"].asJsonArray[1].asJsonObject["content"].asString).asJsonObject else judgeBody["state"].asJsonObject
             assertEquals(listOf("new"),draft["messages"].asJsonArray.map { it.asJsonObject["id"].asString })
             val judged=if(custom)judge["chat"].asJsonArray else judge["chat"].asJsonObject["messages"].asJsonArray
@@ -48,7 +48,7 @@ class ConversationTimeRegressionTest {
             val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(input,JevProfile(apiKey="fake"),emptyList(),Cancellation())
             assertEquals(6,batch.replies.size)
             assertTrue(batch.replies.all { it.targetMessageId=="old" })
-            val draft=JsonParser.parseString(JsonParser.parseString(wire.requests[0].body).asJsonObject["messages"].asJsonArray[1].asJsonObject["content"].asString).asJsonObject
+            val draft=JsonParser.parseString(JsonParser.parseString(wire.requests[1].body).asJsonObject["messages"].asJsonArray[1].asJsonObject["content"].asString).asJsonObject
             assertEquals("true",draft["historicalTarget"].asString)
             assertEquals(listOf("old","new"),draft["messages"].asJsonArray.map { it.asJsonObject["id"].asString })
         }
@@ -72,6 +72,6 @@ class ConversationTimeRegressionTest {
         val input=AdvisorInput(ProviderPresets.OPENROUTER.reply("fake"),original.copy(messages=listOf(latest),readAtMillis=now))
         val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(input,JevProfile(apiKey="fake"),emptyList(),Cancellation())
         assertEquals(6,batch.replies.size)
-        assertEquals(2,wire.requests.size)
+        assertEquals(3,wire.requests.size)
     }
 }

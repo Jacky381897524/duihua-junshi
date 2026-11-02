@@ -30,13 +30,13 @@ class DirectReplyTargetTest {
         }
     }
     private fun data(request:ApiRequest)=JsonParser.parseString(JsonParser.parseString(request.body).asJsonObject["messages"].asJsonArray[1].asJsonObject["content"].asString).asJsonObject
-    @Test fun longSelectedIdsSurviveDraftAliasesRankingAndPublicationWithOnlyTwoRequests() {
+    @Test fun longSelectedIdsSurviveDraftAliasesRankingAndPublicationWithIntentBeforeDraft() {
         val target="message-12345678-1234-1234-1234-123456789abc"
         val sample=snapshot().copy(messages=listOf(ChatMessage(target,Speaker.OTHER,null,"然后呢")))
         val wire=Wire(null)
         val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(AdvisorInput(ProviderPresets.OPENROUTER.reply("fake"),sample,replyTarget=ReplyTarget(target)),JevProfile(apiKey="fake"),emptyList(),Cancellation())
-        assertEquals(2,wire.requests.size);assertTrue(batch.replies.all { it.targetMessageId==target })
-        val draft=data(wire.requests.first());assertNotEquals(target,draft["targetMessageId"].asString)
+        assertEquals(3,wire.requests.size);assertTrue(batch.replies.all { it.targetMessageId==target })
+        val draft=data(wire.requests[1]);assertNotEquals(target,draft["targetMessageId"].asString)
         val state=JsonParser.parseString(wire.requests.last().body).asJsonObject["state"].asJsonObject
         val alias=state["targetMessageId"].asString
         assertEquals(alias,state["chat"].asJsonObject["messages"].asJsonArray[0].asJsonObject["id"].asString)
@@ -49,7 +49,7 @@ class DirectReplyTargetTest {
             val batch=advisor.generate(input,JevProfile(apiKey="fake"),emptyList(),Cancellation())
             assertEquals(ChatKind.DIRECT,batch.kind);assertEquals(6,batch.replies.size)
             assertTrue(batch.replies.all { it.targetMessageId=="question" && it.targetLabel?.contains("然后呢")==true })
-            val reply=data(wire.requests[0]);val judge=JsonParser.parseString(wire.requests[1].body).asJsonObject["state"].asJsonObject
+            val reply=data(wire.requests[1]);val judge=JsonParser.parseString(wire.requests[2].body).asJsonObject["state"].asJsonObject
             for(fields in listOf(reply,judge)) {
                 assertEquals("REPLY_TARGET",fields["responseMode"].asString)
                 assertEquals("question",fields["targetMessageId"].asString);assertEquals("然后呢",fields["targetMessageText"].asString)
@@ -66,7 +66,7 @@ class DirectReplyTargetTest {
             fail("must reject a candidate batch that changed the selected message")
         } catch(e:IllegalArgumentException) { fail("direct selection must be supported: ${e.message}") }
         catch(e:ApiException) { assertTrue(e.message.orEmpty().contains("选中")) }
-        assertTrue(wire.requests.isNotEmpty());assertTrue(wire.requests.none { it.url==ProviderPresets.JEV_ENDPOINT })
+        assertTrue(wire.requests.isNotEmpty());assertEquals(1,wire.requests.count { it.url==ProviderPresets.JEV_ENDPOINT }) // Only pre-analysis; invalid drafts never reach scoring.
     }
     @Test fun refreshKeepsDirectTargetUntilAutomaticModeIsSelected() {
         val s=snapshot();val tracker=SessionTracker();val coordinator=BatchCoordinator(tracker,RequestGate(tracker));val target=ReplyTarget("question")
@@ -91,7 +91,7 @@ class DirectReplyTargetTest {
         val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(AdvisorInput(ProviderPresets.OPENROUTER.reply("fake"),s),JevProfile(apiKey="fake"),emptyList(),Cancellation())
         assertTrue(batch.replies.all { it.targetMessageId==null })
         val judged=JsonParser.parseString(wire.requests.last().body).asJsonObject["state"].asJsonObject
-        for(fields in listOf(data(wire.requests.first()),judged))assertEquals("然后呢\n小宝宝",fields["lastTurnText"].asString)
+        for(fields in listOf(data(wire.requests[1]),judged))assertEquals("然后呢\n小宝宝",fields["lastTurnText"].asString)
     }
     @Test fun ownMissingAndAmbiguousMessagesCannotBecomeReplyTargets() {
         val base=snapshot()

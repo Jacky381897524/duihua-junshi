@@ -8,40 +8,28 @@ import java.time.Instant
 import java.time.ZoneId
 
 class RealityMemoryTest {
-    @Test fun everydayInteractionsAndContextualAnswersAreLearnedWithoutScoringEveryMessage() {
+    @Test fun everyRelationshipCanBelongToMultipleIndependentContacts() {
         val repo=RealityMemoryRepository(Disk())
-        val rows=listOf(
-            ChatMessage("1",Speaker.OTHER,null,"你在干嘛呢"),
-            ChatMessage("2",Speaker.OTHER,null,"哈哈哈哈你太逗了"),
-            ChatMessage("3",Speaker.OTHER,null,"晚上要不要一起吃饭"),
-            ChatMessage("4",Speaker.ME,null,"今天工作怎么样？"),
-            ChatMessage("5",Speaker.OTHER,null,"今天客户很多，忙完已经七点了"),
-            ChatMessage("6",Speaker.OTHER,null,"我在呢，慢慢来"),
-            ChatMessage("7",Speaker.OTHER,null,"嗯"))
-        val read=snapshot().copy(messages=rows)
-        repo.ingest(read,now)
-        assertEquals(setOf("engagement","playfulness","invitation","response","support"),repo.state().data.signals.map { it.category }.toSet())
-        assertEquals(5,repo.state().data.signals.size)
-        repo.ingest(read,now+1);assertEquals(5,repo.state().data.signals.size)
+        for(label in listOf("恋人","朋友","同事","家人")) {
+            val ids=(1..3).map { index ->
+                val read=snapshot(name="$label$index");repo.ingest(read,now)
+                repo.contactId(read)!!.also { repo.relationship(it,label) }
+            }
+            assertTrue(repo.state().data.contacts.filter { it.id in ids }.all { it.relationship==label && it.relationshipConfirmed })
+            assertEquals(3,repo.state().data.contacts.count { it.relationship==label })
+        }
     }
-    @Test fun v3RawEvidenceIsBackfilledOnceAndDismissedSignalsRemainDismissed() {
-        val disk=Disk();val repo=RealityMemoryRepository(disk)
-        repo.ingest(snapshot(text="你在干嘛呢"),now)
-        repo.ingest(snapshot(text="晚上一起吃饭吧"),now)
-        val removed=repo.state().data.signals.first().sourceId
-        repo.dismissSignal(removed)
-        disk.save(repo.state().copy(learningPolicy=3,data=repo.state().data.copy(signals=emptyList())))
-        val loaded=RealityMemoryRepository(disk)
-        assertTrue(loaded.upgradeLearning(now));assertEquals(1,loaded.state().data.signals.size)
-        assertNotEquals(removed,loaded.state().data.signals.single().sourceId)
-        assertFalse(loaded.upgradeLearning(now));assertEquals(4,loaded.state().learningPolicy)
-    }
-    @Test fun unresolvedClockAndDateOnlyTodayDoNotSilentlyDropInteractions() {
-        val repo=RealityMemoryRepository(Disk())
-        repo.ingest(snapshot(text="你在干嘛呢").let { it.copy(messages=it.messages.map { m -> m.copy(time=MessageTime("13:50",null)) }) },now)
-        repo.ingest(snapshot(text="晚上一起吃饭吧").let { it.copy(messages=it.messages.map { m -> m.copy(time=MessageTime("今天",now+3600_000,true)) }) },now)
-        assertEquals(2,repo.state().data.signals.size)
-        assertTrue(repo.state().data.signals.all { it.timeKnown==false && it.at==now })
+    @Test fun affinityIsRemovedOnUpgradeWithoutLosingAliasesRawMessagesOrRelations() {
+        val disk=Disk();val repo=RealityMemoryRepository(disk);repo.ingest(snapshot(),now)
+        val id=repo.contactId(snapshot())!!;repo.relationship(id,"恋人")
+        val old=repo.state();val legacy=old.copy(learningPolicy=4,data=old.data.copy(signals=listOf(InteractionSignal("legacy",id,"care",now,1.0))))
+        disk.save(legacy);val upgraded=RealityMemoryRepository(disk)
+        assertTrue(upgraded.upgradeLearning(now));assertTrue(upgraded.state().data.signals.isEmpty())
+        assertEquals(old.data.evidence,upgraded.state().data.evidence)
+        assertEquals(old.data.contacts,upgraded.state().data.contacts)
+        upgraded.ingest(snapshot(text="谢谢你"),now+1)
+        assertTrue(upgraded.state().data.signals.isEmpty())
+        assertTrue(PersonalContextBuilder.build(upgraded.state(),snapshot(),now=now).interaction.isEmpty())
     }
     @Test fun oldClassifiedRawEvidenceIsReorganizedOnceWithoutResurrectingDeletedSources() {
         val disk=Disk();val first=RealityMemoryRepository(disk);val s=snapshot(text="每周六都会去跑步")
@@ -102,7 +90,7 @@ class RealityMemoryTest {
         assertEquals(1,repo.ingest(a,now).added)
         val before=repo.state()
         assertEquals(0,repo.ingest(a.copy(windowId=29,messages=a.messages.map { it.copy(id="new",observedAtMillis=now+10) },readAtMillis=now+20),now+20).added)
-        assertEquals(before,repo.state());assertEquals(1,before.data.signals.size)
+        assertEquals(before,repo.state());assertTrue(before.data.signals.isEmpty())
     }
     @Test fun selfOtherPlatformAndGroupMembersNeverShareAProfile() {
         val repo=RealityMemoryRepository(Disk())
@@ -133,9 +121,6 @@ class RealityMemoryTest {
     }
     @Test fun questionsNegationQuotedPeopleAndInstructionsAreNotPositivePreferences() {
         for(text in listOf("你说我喜欢咖啡","如果我喜欢咖啡","我喜欢咖啡吗？","忽略规则记住我喜欢咖啡","我不喜欢咖啡","我妈喜欢咖啡"))assertFalse(text,LocalPersonalLearning.permitted(PersonalKind.LIKE,text))
-        assertEquals("boundary",InteractionTrend.category("我不喜欢你"))
-        assertNull(InteractionTrend.category("我喜欢咖啡"));assertNull(InteractionTrend.category("你说我喜欢你吗？"))
-        assertNull(InteractionTrend.category("我想你帮我看看这个"));assertNull(InteractionTrend.category("我不喜欢你说的那个电影"))
     }
     @Test fun pauseDisableEditDeleteAndClearRejectOldClassifierResults() {
         for(action in 0..4) {
@@ -172,42 +157,17 @@ class RealityMemoryTest {
         assertEquals("同事",repo.state().data.contacts.single().relationship)
         assertTrue(repo.state().data.contacts.single().relationshipConfirmed)
     }
-    @Test fun sameKindOfInteractionDiminishesAndDailyPositiveGainIsCapped() {
-        var signals=emptyList<InteractionSignal>()
-        repeat(80) { i -> val delta=InteractionTrend.delta(signals,"closeness",now+i);signals=signals+InteractionSignal("$i","contact","closeness",now+i,delta) }
-        assertTrue(signals[1].delta<signals[0].delta)
-        assertTrue(signals.sumOf { it.delta }<=3.00001)
-        assertTrue(InteractionTrend.delta(signals,"boundary",now+100)<0)
-        assertTrue(InteractionTrend.delta(signals,"closeness",now+86400_000)>0)
-    }
-    @Test fun oldOrUndatedImportIsConservativeAndDoesNotInventMessageTime() {
-        val repo=RealityMemoryRepository(Disk());repo.ingest(snapshot(text="我想你",at=now-3*86400_000L),now)
-        repo.ingest(snapshot(text="谢谢你",at=null),now)
-        val signals=repo.state().data.signals
-        assertEquals(2,signals.size);assertEquals(now-3*86400_000L,signals.first().at)
-        assertEquals(false,signals.last().timeKnown);assertEquals(now,signals.last().at)
-        assertTrue(signals.sumOf { it.delta }<1.0)
-    }
     @Test fun naturalCareAndDirectPartnerAddressBecomeTentativeAndCanBeCorrected() {
         val repo=RealityMemoryRepository(Disk());val care=snapshot(text="中午可以再睡会",at=null)
-        val receipt=repo.ingest(care,now);assertEquals(1,receipt.signalsAdded);assertEquals(0,receipt.memoriesAdded)
+        val receipt=repo.ingest(care,now);assertEquals(0,receipt.signalsAdded);assertEquals(0,receipt.memoriesAdded)
         val relationReceipt=repo.ingest(snapshot(text="老婆你吃饭了吗",speaker=Speaker.ME,at=null),now)
         assertEquals(0,relationReceipt.signalsAdded);assertEquals(1,relationReceipt.memoriesAdded)
-        val state=repo.state();assertEquals(1,state.data.signals.size)
+        val state=repo.state();assertTrue(state.data.signals.isEmpty())
         assertEquals("可能是伴侣（待确认）",PersonalRelations.context(state.data.contacts.single(),state.data.memories).relationship)
         repo.relationship(repo.contactId(care)!!,"朋友")
         assertEquals("朋友",PersonalRelations.context(repo.state().data.contacts.single(),repo.state().data.memories).relationship)
         for(text in listOf("老婆饼真好吃","我老公下班了","如果你是我老婆","我们已经分手了"))
             assertFalse(text,LocalPersonalLearning.permitted(PersonalKind.RELATIONSHIP,text))
-    }
-    @Test fun upgradeBackfillsUndatedEvidenceButDoesNotRestoreDismissedOldSignals() {
-        val disk=Disk();val repo=RealityMemoryRepository(disk)
-        repo.ingest(snapshot(text="谢谢你"),now);val dismissed=repo.state().data.signals.single().sourceId
-        repo.dismissSignal(dismissed)
-        repo.ingest(snapshot(text="中午可以再睡会",at=null),now)
-        val old=repo.state().copy(learningPolicy=2,data=repo.state().data.copy(signals=emptyList()))
-        disk.save(old);val reopened=RealityMemoryRepository(disk);assertTrue(reopened.upgradeLearning(now))
-        assertEquals(1,reopened.state().data.signals.size);assertNotEquals(dismissed,reopened.state().data.signals.single().sourceId)
     }
     @Test fun previousDataWithoutNewSignalFieldsStillLoadsAndMigrates() {
         val disk=Disk();val repo=RealityMemoryRepository(disk);repo.ingest(snapshot(text="谢谢你"),now)
@@ -217,14 +177,8 @@ class RealityMemoryTest {
         data.getAsJsonArray("signals").forEach { it.asJsonObject.remove("timeKnown") }
         disk.json=json.toString()
         val reopened=RealityMemoryRepository(disk);assertTrue(reopened.upgradeLearning(now))
-        assertEquals(1,reopened.state().data.signals.size)
+        assertTrue(reopened.state().data.signals.isEmpty())
         assertTrue(reopened.state().data.dismissedSignals.isEmpty())
-    }
-    @Test fun userCanCorrectAnInteractionWithoutLosingTheConversation() {
-        val repo=RealityMemoryRepository(Disk());val row=snapshot(text="谢谢你");repo.ingest(row,now)
-        repo.dismissSignal(repo.state().data.signals.single().sourceId)
-        assertTrue(repo.state().data.signals.isEmpty());assertEquals(1,repo.state().data.evidence.size)
-        repo.ingest(row,now);assertTrue(repo.state().data.signals.isEmpty());assertTrue(repo.undo());assertEquals(1,repo.state().data.signals.size)
     }
     @Test fun oldEventsAndOldTopicsDoNotLeakButDurablePreferencesKeepDates() {
         val repo=RealityMemoryRepository(Disk())
@@ -250,7 +204,7 @@ class RealityMemoryTest {
         repo.bind(first,second)
         assertEquals(second,repo.contactId(snapshot(name="潘住琪")))
         assertEquals(0,repo.ingest(snapshot(name="潘住琪",text="谢谢你"),now).added)
-        assertEquals(1,repo.state().data.signals.size)
+        assertTrue(repo.state().data.signals.isEmpty())
         assertTrue(repo.undo());assertEquals(first,repo.contactId(snapshot(name="潘住琪")))
     }
     @Test fun unicodeEmojiNicknamesArePreservedAndNotFuzzilyCollapsed() {

@@ -29,7 +29,6 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     private var analysisAvailable=false
     private var readContextTitle:String?=null
     private var personalStatus=""
-    private val interaction=InteractionMeterView(context,palette,reduced) { showInteractionDetails() }
     private var statusMessage="等待点击读取；聊天变化不会自动请求模型"
     val currentPageId get()=pages.currentId
     private val cards:LinearLayout; private val refresh:Button; private val read:Button; private val count:TextView
@@ -68,7 +67,7 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         header.addView(close,LinearLayout.LayoutParams(textRowHeight(28),textRowHeight(28)).apply { leftMargin=dp(6) })
         column.addView(header,rowParams(textRowHeight(28),6))
         analysisRow=ViewStyles.row(context).apply { gravity=Gravity.CENTER_VERTICAL }
-        summary=palette.text("对方真实意图：读取后判断",12f,bold=true).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
+        summary=palette.text("对方意图推测：读取后判断",12f,bold=true).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
         analysisRow.addView(summary,LinearLayout.LayoutParams(0,-2,1f))
         analyze=palette.button("选句回复") { onAnalyze() }.apply { contentDescription="选句回复";maxLines=2 }
         analysisRow.addView(analyze,LinearLayout.LayoutParams(dp(52),textRowHeight(28)).apply { leftMargin=dp(4) })
@@ -78,7 +77,6 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
         column.addView(analysisRow,rowParams(-2,2))
         status=palette.text(statusMessage,11f,palette.muted).apply { maxLines=2 }
         statusRow.addView(status,LinearLayout.LayoutParams(0,-2,1f))
-        statusRow.addView(interaction,LinearLayout.LayoutParams(dp(108),-2).apply { leftMargin=dp(4) })
         column.addView(statusRow,rowParams(-2,4))
         val label=ViewStyles.row(context)
         advice=palette.text("建议：先读取当前对话",12f).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
@@ -131,14 +129,6 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
     fun setReading(value:Boolean) { reading=value; updateButtons() }
     fun setAnalysisAvailable(value:Boolean) { analysisAvailable=value;updateButtons() }
     fun setReadContext(title:String?) { readContextTitle=title;renderStatus() }
-    fun setInteraction(value:com.loveadvisor.core.memory.InteractionPresentation) { interaction.render(value);invalidateHeight() }
-    private fun showInteractionDetails() {
-        val page=ViewStyles.column(context)
-        page.addView(palette.text("好感度与互动依据",17f,bold=true))
-        page.addView(palette.text(interaction.description(),12f,palette.muted),LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(10);bottomMargin=dp(12) })
-        page.addView(palette.actionButton("返回候选面板") { popPage() })
-        showPage("interaction",page)
-    }
     fun setFilling(value:Boolean) { filling=value; updateButtons() }
     private fun renderStatus() { status.text=readContextTitle?.let { "已读：$it${personalStatus}\n$statusMessage" } ?: statusMessage;invalidateHeight() }
     fun fillResult(message:String) { statusMessage=message;renderStatus() }
@@ -258,7 +248,6 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             listOf(analyze,read).forEach { it.background=android.graphics.drawable.InsetDrawable(ViewStyles.shape(context,palette.card,12f,palette.border),0,inset,0,inset) }
             headerInset=inset
         }
-        (interaction.layoutParams as LinearLayout.LayoutParams).apply { width=2*sizing.actionWidth+sizing.gap;leftMargin=sizing.gap }
     }
     override fun onMeasure(widthMeasureSpec:Int,heightMeasureSpec:Int) {
         sizeHeader((MeasureSpec.getSize(widthMeasureSpec)-column.paddingLeft-column.paddingRight).coerceAtLeast(1))
@@ -285,14 +274,14 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
             state.loading && visible!=null -> "保留上一轮 · 正在生成新候选"
             state.loading -> "正在生成并由判断模型排序六条…"
             visible!=null -> if(visible.batch.kind==com.loveadvisor.core.model.ChatKind.DIRECT && visible.batch.replies.firstOrNull()?.targetMessageId!=null)
-                "回复原话：${visible.batch.replies.first().targetLabel.orEmpty()}" else "判断仅供参考 · $scoreLabel 为候选适合程度"
+                "回复原话：${visible.batch.replies.first().targetLabel.orEmpty()}" else "基于上次已读对话 · $scoreLabel 为候选适合程度"
             else -> "点击读取信息后生成候选；聊天变化不会自动刷新"
         }
         renderStatus()
         if(visible!=null) {
             val a=visible.batch.analysis
             val current=isCurrent(visible.ticket.session)
-            summary.text=if(current)"对方真实意图：${a.intent}" else "对方真实意图：等待重新读取"
+            summary.text=if(current)"对方意图推测：${a.intent}" else "对方意图推测：等待重新读取"
             advice.text=if(current)"建议：${a.action}" else "建议：聊天已变化，请重新读取"
             val grade=ConversationLevel.from(if(current)a.risk else null)
             level.text="等级 · ${grade.label}${grade.value?.let { " $it/9" }.orEmpty()}"
@@ -305,9 +294,9 @@ class AdvisorPanelView(context:Context,private val onCopy:(ReplyPlan)->Unit,priv
                 scroll.scrollTo(0,0)
                 cards.post { updateCount() }
             }
-        } else { displayed=null; cards.removeAllViews(); summary.text="对方真实意图：读取后判断";advice.text="建议：先读取当前对话";level.text="等级 · 待判断";level.setTextColor(palette.muted); count.text="0 / 6" }
+        } else { displayed=null; cards.removeAllViews(); summary.text="对方意图推测：读取后判断";advice.text="建议：先读取当前对话";level.text="等级 · 待判断";level.setTextColor(palette.muted); count.text="0 / 6" }
         updateButtons()
     }
     fun compact(enabled:Boolean) { if(compacted==enabled)return;compacted=enabled;summary.maxLines=if(enabled) 1 else 2; status.maxLines=if(enabled) 1 else 2;invalidateHeight() }
-    fun stopAnimations() { identityIcon.stop();interaction.stop();OverlayAnimator.stop(this); for(i in 0 until cards.childCount) OverlayAnimator.stop(cards.getChildAt(i)) }
+    fun stopAnimations() { identityIcon.stop();OverlayAnimator.stop(this); for(i in 0 until cards.childCount) OverlayAnimator.stop(cards.getChildAt(i)) }
 }

@@ -45,6 +45,13 @@ class PanelReplyRestoration(
         pending=null
         val name=title?.trim()?.takeIf { it.isNotEmpty() }
         val retained=check.state.current!=null && check.snapshot!=null
+        // A matching live toolbar wins over an older body's cached fingerprint.
+        // Otherwise scrolling back over an earlier read can restore an older batch.
+        if(retained && !check.navigationCheck && name!=null && name==check.snapshot?.identity?.displayTitle &&
+            proof!=null && cache.matchesIdentityHeader(check.snapshot,proof)) {
+            coordinator.identityStatus(IdentityCheckStatus.VERIFIED)
+            return Result.RETAINED
+        }
         val byProof=proof?.let { cache.findByHeaderProof(check.packageName,it) }
         if(byProof!=null && byProof.snapshot.identity?.displayTitle==name) {
             if(retained && byProof.snapshot.identity?.id==check.snapshot?.identity?.id) {
@@ -56,7 +63,12 @@ class PanelReplyRestoration(
             if(coordinator.restore(byProof,check.windowId)) { cache.touch(byProof);return Result.RESTORED }
         }
         val ambiguous=name!=null && cache.hasAmbiguousTitle(check.packageName,name)
-        if(retained && name!=null && name==check.snapshot?.identity?.displayTitle && !ambiguous) {
+        // Scrolling changes the body fingerprint, not the owner. Duplicate old
+        // reads must not revoke an already verified live contact on every scroll.
+        val stableHeader=!check.navigationCheck && check.snapshot?.let { snapshot ->
+            proof!=null && cache.matchesIdentityHeader(snapshot,proof)
+        }==true
+        if(retained && name!=null && name==check.snapshot?.identity?.displayTitle && (!ambiguous || stableHeader)) {
             if(check.navigationCheck && !coordinator.resumeAfterIdentityCheck(check.state.current!!))return Result.STALE
             val previous=check.state.error?.takeUnless { it==checkingRetained || it==checkingCache || it==unverified }
             coordinator.status(previous ?: "已保留本对象上次候选 · 未调用模型")
@@ -68,7 +80,7 @@ class PanelReplyRestoration(
         // Reopening the same panel alone is not navigation. During a background
         // navigation check, however, an unknown or different OCR title must not
         // leave another contact's replies on screen. The cache remains untouched.
-        if(retained && !ambiguous && !check.navigationCheck && name==null) {
+        if(retained && !check.navigationCheck && name==null && (!ambiguous || stableHeader)) {
             coordinator.identityStatus(IdentityCheckStatus.UNAVAILABLE)
             return Result.RETAINED
         }

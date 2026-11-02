@@ -3,10 +3,7 @@ package com.loveadvisor.core.memory
 import com.loveadvisor.core.model.*
 import java.security.MessageDigest
 import java.text.Normalizer
-import java.time.Instant
-import java.time.ZoneId
 import java.util.Locale
-import kotlin.math.sqrt
 
 enum class PersonalKind { LIKE, DISLIKE, HABIT, TRAIT, BOUNDARY, RELATIONSHIP, EVENT, FACT, VOICE }
 enum class EvidenceStatus { OBSERVED, TENTATIVE, CONFIRMED }
@@ -16,7 +13,7 @@ data class PersonalMemory(val id:String,val ownerId:String,val kind:PersonalKind
 data class InteractionSignal(val sourceId:String,val contactId:String,val category:String,val at:Long,val delta:Double,val timeKnown:Boolean?=null)
 data class VoiceCorrection(val id:String,val peerId:String,val original:String,val actual:String,val at:Long)
 data class PersonalData(val contacts:List<PersonalContact> = emptyList(),val evidence:List<PersonalEvidence> = emptyList(),val memories:List<PersonalMemory> = emptyList(),val signals:List<InteractionSignal> = emptyList(),val corrections:List<VoiceCorrection> = emptyList(),val classified:Set<String> = emptySet(),val aliases:Map<String,String> = emptyMap(),val blocked:Set<String> = emptySet(),val dismissedSignals:Set<String> = emptySet())
-data class RealityMemoryState(val schema:Int=1,val learningEnabled:Boolean=true,val paused:Boolean=false,val revision:Long=0,val data:PersonalData=PersonalData(),val undo:PersonalData?=null,val learningPolicy:Int=4)
+data class RealityMemoryState(val schema:Int=1,val learningEnabled:Boolean=true,val paused:Boolean=false,val revision:Long=0,val data:PersonalData=PersonalData(),val undo:PersonalData?=null,val learningPolicy:Int=5)
 interface RealityPersistence { fun load():RealityMemoryState?; fun save(state:RealityMemoryState) }
 data class PersonalProposal(val sourceId:String,val kind:PersonalKind,val quote:String,val relationship:String?=null,val supportingSourceIds:List<String> = emptyList())
 data class LearningSlice(val revision:Long,val evidence:List<PersonalEvidence>)
@@ -77,22 +74,18 @@ class RealityMemoryRepository(private val persistence:RealityPersistence) {
         if(added.isEmpty() && contacts==data.contacts)return LearningReceipt(0,root,old.revision)
         val automatic=added.flatMap { e -> LocalPersonalLearning.memories(e,contacts,now) }
         val memories=(data.memories+automatic).distinctBy { it.id }
-        val signals=InteractionTrend.collect(data.signals,data.evidence+added,now,data.dismissedSignals)
-        val memoriesAdded=memories.size-data.memories.size;val signalsAdded=signals.size-data.signals.size
+        val signals=emptyList<InteractionSignal>() // Legacy field retained only for decoding older files.
+        val memoriesAdded=memories.size-data.memories.size;val signalsAdded=0
         data=data.copy(contacts=contacts,evidence=data.evidence+added,memories=memories,signals=signals)
         change(data)
         return LearningReceipt(added.size,root,state().revision,memoriesAdded,signalsAdded)
     }
     /** Once per learning policy, reorganize existing raw evidence without undoing user edits/deletions. */
     @Synchronized fun upgradeLearning(now:Long=System.currentTimeMillis()):Boolean {
-        val s=state();if(s.learningPolicy>=4 || !s.learningEnabled || s.paused)return false
+        val s=state();if(s.learningPolicy>=5)return false
         val d=s.data
-        val automatic=d.evidence.filter { it.id !in d.blocked }.flatMap { LocalPersonalLearning.memories(it,d.contacts,now) }.filter { it.id !in d.blocked }
-        // A missing v2 signal for an originally eligible message may have been dismissed.
-        // Only backfill evidence the old policy could never have scored.
-        val backfill=d.evidence.filter { e -> e.id !in d.blocked && (s.learningPolicy>=3 || e.time?.epochMillis==null || now-(e.time.epochMillis)>24*3600_000L || InteractionTrend.legacyCategory(e.text)==null) }
-        val signals=InteractionTrend.collect(d.signals,backfill,now,d.dismissedSignals)
-        commit(s.copy(learningPolicy=4,revision=s.revision+1,data=d.copy(memories=(d.memories+automatic).distinctBy { it.id },signals=signals,classified=if(s.learningPolicy<2)emptySet() else d.classified)))
+        val automatic=if(!s.learningEnabled || s.paused)emptyList() else d.evidence.filter { it.id !in d.blocked }.flatMap { LocalPersonalLearning.memories(it,d.contacts,now) }.filter { it.id !in d.blocked }
+        commit(s.copy(learningPolicy=5,revision=s.revision+1,data=d.copy(memories=(d.memories+automatic).distinctBy { it.id },signals=emptyList(),classified=if(s.learningPolicy<2)emptySet() else d.classified),undo=s.undo?.copy(signals=emptyList())))
         return true
     }
     @Synchronized fun pending(max:Int=24):LearningSlice {
@@ -206,63 +199,5 @@ object LocalPersonalLearning {
     fun observations(e:PersonalEvidence):List<Pair<PersonalKind,String>> {
         val split=clauses(e.text).filter { it.first.length in 2..300 }.mapNotNull { (original,classified) -> classify(e.copy(text=classified))?.let { it to original } }
         return split.ifEmpty { classify(e)?.let { listOf(it to e.text) }.orEmpty() }
-    }
-}
-
-/** An interaction estimate, not a measurement of another person's feelings. No points for read/refresh/send alone. */
-object InteractionTrend {
-    fun legacyCategory(text:String):String? {
-        if(text.contains(Regex("[?？]|他说|她说|你说|如果|假如")))return null
-        return when {
-            text.contains(Regex("别再联系我|不要再找我|我不想见你|我(?:不喜欢|讨厌)你(?:了)?(?:$|[，。！!\\s])"))->"boundary"
-            text.contains(Regex("谢谢你|感谢你|辛苦你了"))->"appreciation"
-            text.contains(Regex("我(?:想|喜欢|爱)你(?:了|啦|呀|啊|呢|哦|～|~)?(?:$|[，。！!\\s])|很想见你")) && !text.contains("不")->"closeness"
-            else->null
-        }
-    }
-    fun category(text:String):String? {
-        legacyCategory(text)?.let { return it }
-        if(text.contains(Regex("他说|她说|你说|如果|假如|不是|不想|别再|不要再|[\"“”]")))return null
-        return when {
-            text.contains(Regex("注意安全|早点休息|早点睡|记得吃饭|多喝水|吃点(?:早|午|晚)饭|可以再睡会|别熬夜|照顾好自己|别累着|辛苦一天|路上小心|别饿着|记得吃药"))->"care"
-            text.contains(Regex("谢谢啦|谢谢呀|谢谢哦|谢谢了|辛苦啦|辛苦了"))->"appreciation"
-            text.contains(Regex("(?:你|您)(?:吃饭了吗|吃了吗|到家了吗|睡了吗|今天怎么样|在干嘛|在干什么|忙什么|在忙啥|最近怎么样)|^(?:在干嘛|干嘛呢|怎么啦|怎么了|忙啥呢|吃饭没|到家没|睡了没)[呀啊呢吗？?！!\\s]*$"))->"engagement"
-            text.contains(Regex("一起(?:吃饭|去|回家|散步|看电影|打游戏|玩|聊)|要不要(?:出来|见面|一起)|来找我|我去找你|等你(?:下班|回来)|陪你(?:聊|去|玩)|想见你"))->"invitation"
-            text.contains(Regex("抱抱|心疼你|别难过|我陪着你|我在呢|慢慢来|你已经很棒|相信你"))->"support"
-            text.contains(Regex("对不起|是我不好|刚才语气不好|我刚才太急|不该凶你"))->"repair"
-            text.contains(Regex("哈哈[哈啊]|笑死|笑不活|绷不住|好好笑|被你逗笑"))->"playfulness"
-            else->null
-        }
-    }
-    fun collect(existing:List<InteractionSignal>,evidence:List<PersonalEvidence>,now:Long,dismissed:Set<String>):List<InteractionSignal> {
-        var signals=existing
-        val seen=(existing.map { it.sourceId }+dismissed).toMutableSet()
-        val prior=mutableMapOf<String,PersonalEvidence>()
-        for(e in evidence) {
-            val previousTurn=prior.put(e.peerId,e)
-            if(e.speaker!=Speaker.OTHER || !seen.add(e.id))continue
-            val resolved=e.time?.epochMillis
-            if(resolved!=null && resolved>now+60_000 && e.time?.dateOnly!=true)continue
-            val known=resolved!=null && resolved<=now && e.time?.dateOnly!=true
-            val at=if(known)resolved!! else e.readAt
-            if(at<=0 || at>now+60_000)continue
-            val category=category(e.text) ?: if(previousTurn?.speaker==Speaker.ME && previousTurn.readAt==e.readAt &&
-                previousTurn.text.contains(Regex("[?？]|怎么|什么|哪里|哪儿|有没有|了吗")) && e.text.length>=5 &&
-                !e.text.contains(Regex("不知道|不想聊|别问|随便|没什么|如果|他说|她说|你说")))"response" else continue
-            val previous=signals.filter { it.contactId==e.ownerId }
-            val weight=if(!known || now-at>24*3600_000L) .25 else 1.0
-            val delta=delta(previous,category,at)*weight
-            signals=signals+InteractionSignal(e.id,e.ownerId,category,at,delta,known)
-        }
-        return signals
-    }
-    fun score(signals:List<InteractionSignal>)=(50.0+signals.sumOf { it.delta }).coerceIn(0.0,100.0)
-    private fun day(at:Long)=Instant.ofEpochMilli(at).atZone(ZoneId.of("Asia/Shanghai")).toLocalDate()
-    fun delta(previous:List<InteractionSignal>,category:String,at:Long):Double {
-        val sameDay=previous.filter { day(it.at)==day(at) }
-        val repeats=sameDay.count { it.category==category }
-        val base=when(category) { "boundary"->-2.0;"closeness"->1.5;"response"->.12;"playfulness"->.25;else->.6 }
-        val change=base/sqrt(1.0+repeats)
-        return if(change<=0)change.coerceAtLeast(-3.0) else minOf(change*((100-score(previous))/50).coerceIn(.15,1.0),(3.0-sameDay.sumOf { it.delta.coerceAtLeast(0.0) }).coerceAtLeast(0.0))
     }
 }

@@ -33,7 +33,8 @@ class ConversationReplyCache(private val persistence:ConversationReplyPersistenc
         persistence?.save(entries.values.toList())
         return true
     }
-    private fun put(value:SavedConversationReplies) {
+    private fun put(incoming:SavedConversationReplies) {
+        val value=incoming.copy(batch=incoming.batch.copy(personalContext=incoming.batch.personalContext?.copy(interaction=emptyList())))
         // Repeated manual reads can receive new ephemeral IDs. A shared, substantial
         // bidirectional passage proves continuity; a matching nickname alone cannot.
         val matches=entries.filterValues { sameConversation(it.snapshot,value.snapshot) }
@@ -53,6 +54,8 @@ class ConversationReplyCache(private val persistence:ConversationReplyPersistenc
     @Synchronized fun find(packageName:String,title:String):SavedConversationReplies? = entries.values.filter { it.snapshot.packageName==packageName && it.snapshot.identity?.displayTitle==title.trim() }.singleOrNull()
     @Synchronized fun findByIdentity(snapshot:ChatSnapshot):SavedConversationReplies? = entries[key(snapshot)]?.takeIf { it.snapshot.identity?.displayTitle==snapshot.identity?.displayTitle }
     private fun proofs(entry:SavedConversationReplies)=(entry.headerHistory.orEmpty()+listOfNotNull(entry.headerProof)).distinct()
+    @Synchronized fun matchesIdentityHeader(snapshot:ChatSnapshot,proof:CachedHeaderProof):Boolean =
+        entries[key(snapshot)]?.let { entry -> entry.snapshot.identity?.displayTitle==snapshot.identity?.displayTitle && proofs(entry).any { it.stamp==proof.stamp && it.width==proof.width && it.height==proof.height } }==true
     @Synchronized fun findByHeaderProof(packageName:String,proof:CachedHeaderProof):SavedConversationReplies? {
         val scoped=entries.values.filter { entry -> entry.snapshot.packageName==packageName && proofs(entry).any { it.width==proof.width && it.height==proof.height } }
         // Body similarity alone can recur in unrelated chats. Always require

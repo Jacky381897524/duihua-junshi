@@ -20,10 +20,10 @@ class GroupGenerationTest {
                 val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(AdvisorInput(ProviderPresets.OPENROUTER.reply("fake"),snapshot,replyTarget=target),JevProfile(apiKey="fake"),emptyList(),Cancellation())
                 assertEquals(ChatKind.GROUP,batch.kind);assertEquals(6,batch.replies.size)
                 assertEquals(1,batch.replies.map { it.strategy }.distinct().size)
-                val prompt=JsonParser.parseString(requests[0].body).asJsonObject["messages"].asJsonArray[1].asJsonObject["content"].asString
+                val prompt=JsonParser.parseString(requests[1].body).asJsonObject["messages"].asJsonArray[1].asJsonObject["content"].asString
                 val data=JsonParser.parseString(prompt).asJsonObject
                 assertEquals(limit,data["messages"].asJsonArray.size());assertEquals(if(target!=null)"REPLY_TARGET" else if(lastSpeaker==Speaker.ME)"CONTINUE_SELF" else "REPLY_OTHER",data["responseMode"].asString)
-                val decision=JsonParser.parseString(requests[1].body).asJsonObject["state"].asJsonObject
+                val decision=JsonParser.parseString(requests[2].body).asJsonObject["state"].asJsonObject
                 assertEquals(limit,decision["chat"].asJsonObject["messages"].asJsonArray.size())
                 assertTrue(decision.toString().contains("甲🔥"));assertTrue(decision.toString().contains("targetMessageId"))
                 if(target!=null) {
@@ -31,7 +31,7 @@ class GroupGenerationTest {
                     assertEquals("REPLY_TARGET",decision["responseMode"].asString)
                     assertEquals(target.messageId,decision["targetMessageId"].asString)
                     assertEquals("第1条内容",decision["targetMessageText"].asString)
-                    val instruction=JsonParser.parseString(requests[1].body).asJsonObject["questions"].asJsonObject["true_intent"].asJsonObject["instructions"].asString
+                    val instruction=JsonParser.parseString(requests[0].body).asJsonObject["questions"].asJsonObject["true_intent"].asJsonObject["instructions"].asString
                     assertTrue(instruction.contains("selected target"))
                 }
             }

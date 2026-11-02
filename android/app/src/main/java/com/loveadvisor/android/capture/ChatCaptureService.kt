@@ -437,7 +437,8 @@ class ChatCaptureService:AccessibilityService() {
                         val scaled=if(original.width>1200) Bitmap.createScaledBitmap(original,1200,(original.height*1200f/original.width).toInt(),true) else original
                         if(scaled!==original)scaledToRecycle=scaled
                         val positionScale=original.height.toDouble()/scaled.height
-                        val titleStamp=VisualFillReference.stamp(original)
+                        val titleBounds=titleRegion(original,w.viewport)
+                        val titleStamp=VisualFillReference.stamp(original,titleBounds)
                         val footerStamp=VisualFillReference.footerStamp(original)
                         val conversationStamp=VisualFillReference.conversationStamp(original)
                         val nativeInput=w.nodes.filter { it.editable && !it.text.orEmpty().contains("搜索") && ImeFillPolicy.composerAllowed(it.bounds,w.viewport) }.map { it.bounds }.distinct().singleOrNull()
@@ -458,7 +459,7 @@ class ChatCaptureService:AccessibilityService() {
                             if(!cancel.cancelled && lease==navigation && manualRead.accepts(ticket) && overlayAllowed()) {
                                 lastComposerDiagnosticStatus=when { nativeInput!=null -> "原生文字输入区域";localInput!=null -> "本地识别空白文字输入区域";modelInput!=null -> "视觉返回文字输入区域";else -> "本次未确认文字输入区域" }
                                 Logs.event(LogStep.VISION_RESULT,LogState.OK,operation=visionLog,metrics=mapOf(LogMetric.MESSAGE_COUNT to visual.messages.size.toLong(),LogMetric.HAS_INPUT to if(input!=null)1L else 0L));Logs.end(visionLog,LogState.OK)
-                                pendingVision=VisionReply(visual,w.windowId,cancel,ticket,lease,titleStamp?.let { VisualFillReference(w.windowId,lease,it,input,footerStamp,w.viewport,conversationStamp=conversationStamp) })
+                                pendingVision=VisionReply(visual,w.windowId,cancel,ticket,lease,titleStamp?.let { VisualFillReference(w.windowId,lease,it,input,footerStamp,w.viewport,conversationStamp=conversationStamp,headerBounds=titleBounds) })
                                 observe() // One local verification read; no second screenshot or automatic retry.
                             } else Logs.end(visionLog,LogState.CANCELLED,LogReason.RESULT_STALE)
                         }
@@ -472,6 +473,10 @@ class ChatCaptureService:AccessibilityService() {
                 }
             }
         }
+    }
+    private fun titleRegion(bitmap:Bitmap,viewport:RectI):RectI? {
+        val bar=getSystemService(android.view.WindowManager::class.java).maximumWindowMetrics.windowInsets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.statusBars()).top
+        return com.loveadvisor.core.capture.ToolbarFingerprintRect.resolve(bitmap.width,bitmap.height,viewport,bar,resources.displayMetrics.density)
     }
     private fun captureWindow(windowId:Int,cancel:Cancellation,callback:(CaptureImageResult)->Unit) {
         val log=Logs.begin(LogStep.SCREENSHOT_REQUEST,fillLog ?: readLog,metrics=mapOf(LogMetric.WINDOW_ID to windowId.toLong(),LogMetric.API_LEVEL to Build.VERSION.SDK_INT.toLong()))
@@ -609,19 +614,21 @@ class ChatCaptureService:AccessibilityService() {
                             val known=if(headerOnly)previous?.identity?.displayTitle else previous?.replyStyleTitle ?: previous?.identity?.displayTitle
                             if(known!=null && previous!=null && previous===conversation.current && previous.packageName==pkg && previous.windowId==windowId &&
                                 previousImage!=null && previousImage===visualFill && previousImage.windowId==windowId && previousImage.generation==generation &&
-                                VisualFillReference.stamp(original)==previousImage.stamp &&
-                                (!graph.replySessions.hasAmbiguousTitle(pkg,known) || previousImage.conversationStamp!=null && previousImage.conversationStamp==VisualFillReference.conversationStamp(original))) {
-                                original.recycle();finish(known,localOcr=previous.source==CaptureSource.OCR);return@imageWork
+                                previousImage.headerBounds!=null && VisualFillReference.stamp(original,previousImage.headerBounds)==previousImage.stamp &&
+                                (!graph.replySessions.hasAmbiguousTitle(pkg,known) || identityNavigationRevision==headerNavigationRevision || previousImage.conversationStamp!=null && previousImage.conversationStamp==VisualFillReference.conversationStamp(original))) {
+                                val verifiedReference=previousImage.copy(footerStamp=VisualFillReference.footerStamp(original),conversationStamp=VisualFillReference.conversationStamp(original))
+                                original.recycle();finish(known,localOcr=previous.source==CaptureSource.OCR,reference=verifiedReference);return@imageWork
                             }
                             val v=window.viewport
                             // Rebuild ephemeral fill evidence from this same locally verified image.
                             // No old input coordinates or raw images are loaded from persistent cache.
-                            val reference=if(headerOnly)VisualFillReference.stamp(original)?.let { stamp ->
+                            val headerBounds=titleRegion(original,v)
+                            val reference=if(headerOnly)VisualFillReference.stamp(original,headerBounds)?.let { stamp ->
                                 val nativeInput=window.nodes.filter { it.editable && ImeFillPolicy.composerAllowed(it.bounds,v) }.map { it.bounds }.distinct().singleOrNull()
                                 val localInput=if(nativeInput==null)com.loveadvisor.core.input.WechatComposerLocator.locate(pkg,original.width,original.height,original::getPixel)?.let { r ->
                                     RectI(v.left+(r.left*v.width.toDouble()/original.width).toInt(),v.top+(r.top*v.height.toDouble()/original.height).toInt(),v.left+(r.right*v.width.toDouble()/original.width).toInt(),v.top+(r.bottom*v.height.toDouble()/original.height).toInt())
                                 }?.takeIf { ImeFillPolicy.composerAllowed(it,v) } else null
-                                VisualFillReference(windowId,generation,stamp,nativeInput ?: localInput,VisualFillReference.footerStamp(original),v,conversationStamp=VisualFillReference.conversationStamp(original))
+                                VisualFillReference(windowId,generation,stamp,nativeInput ?: localInput,VisualFillReference.footerStamp(original),v,conversationStamp=VisualFillReference.conversationStamp(original),headerBounds=headerBounds)
                             } else null
                             val cached=if(reference!=null && pkg!=null)graph.replySessions.findByHeaderProof(pkg,CachedHeaderProof(reference.stamp,v.width,v.height,reference.conversationStamp)) else null
                             if(cached!=null) {
@@ -810,7 +817,7 @@ class ChatCaptureService:AccessibilityService() {
         val log=Logs.begin(LogStep.ADVICE_REQUEST)
         worker.execute {
             var error:Exception?=null
-            val detail=try { Logs.within(log) { graph.automaticAdvisor.detail(graph.inputFor(snapshot,"","",null,plan.targetMessageId?.let(::ReplyTarget)).let { input -> if(sourceBatch==null)input else input.copy(naturalRepliesEnabled=sourceBatch.naturalRepliesEnabled,realisticRepliesEnabled=sourceBatch.realisticRepliesEnabled,personalContext=sourceBatch.personalContext) },plan,cancel) } } catch(e:Exception) { error=e;Logs.failed(LogStep.ADVICE_RESULT,e,log);null } finally { releaseLearning() }
+            val detail=try { Logs.within(log) { graph.automaticAdvisor.detail(graph.inputFor(snapshot,"","",null,plan.targetMessageId?.let(::ReplyTarget)).let { input -> if(sourceBatch==null)input else input.copy(naturalRepliesEnabled=sourceBatch.naturalRepliesEnabled,realisticRepliesEnabled=sourceBatch.realisticRepliesEnabled,personalContext=sourceBatch.personalContext?.copy(interaction=emptyList())) },plan,cancel) } } catch(e:Exception) { error=e;Logs.failed(LogStep.ADVICE_RESULT,e,log);null } finally { releaseLearning() }
             main.post {
                 if(graph.tracker.isCurrent(token) && graph.coordinator.state.current?.batch?.replies?.any { it===plan }==true) { Logs.end(log,if(detail!=null)LogState.OK else LogState.FAIL,if(detail!=null)LogReason.NONE else LogReason.STEP_FAILED);callback(detail,error?.let { graph.safeError(it) }) }
                 else Logs.end(log,LogState.CANCELLED,LogReason.RESULT_STALE)
@@ -819,14 +826,6 @@ class ChatCaptureService:AccessibilityService() {
     }
     fun confirmDraft(snapshot:ChatSnapshot) { if(ChatApps.supported(snapshot.packageName)) accept(snapshot,manualRead.begin()) }
     fun captureGeneration()=navigation
-    fun interactionForPanel(callback:(com.loveadvisor.core.memory.InteractionPresentation)->Unit) {
-        val snapshot=currentChatSnapshot;val token=graph.tracker.currentToken
-        if(snapshot==null || token==null) { callback(com.loveadvisor.core.memory.InteractionPresentation());return }
-        worker.execute {
-            val value=try { com.loveadvisor.core.memory.InteractionPresenter.build(graph.personalMemory.repository.state(),snapshot,graph.coordinator.targetFor(snapshot)) } catch(error:Exception) { Logs.failed(LogStep.MEMORY_RETRIEVE,error);com.loveadvisor.core.memory.InteractionPresentation() }
-            main.post { if(instance===this && graph.tracker.isCurrent(token))callback(value) }
-        }
-    }
     fun fillDiagnostic(message:String,reset:Boolean=false) {
         if(reset) { fillTrace.begin();fillLog=Logs.begin(LogStep.FILL_TAP) }
         lastFillDiagnosticStatus=message
@@ -857,7 +856,7 @@ class ChatCaptureService:AccessibilityService() {
         captureWindow(liveWindow,cancel) { image ->
             val matches=if(image is CaptureImageResult.Success) {
                 try {
-                    val titleMatches=VisualFillReference.stamp(image.bitmap)==ref.stamp
+                    val titleMatches=VisualFillReference.stamp(image.bitmap,ref.headerBounds)==ref.stamp
                     val layoutMatches=!requireComposerLayout || ref.viewport==lastForegroundWindow?.viewport && ref.footerStamp!=null && VisualFillReference.footerStamp(image.bitmap)==ref.footerStamp
                     if(!titleMatches)recordStage("title-mismatch")
                     else if(!layoutMatches)recordStage("composer-layout-mismatch")

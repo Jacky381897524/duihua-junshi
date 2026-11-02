@@ -82,7 +82,7 @@ class BatchCoordinator(private val tracker:SessionTracker,private val gate:Reque
         val ticket=gate.begin(token);gate.cancel()
         target=saved.target;timeScope=ConversationTimePolicy.scopeKey(snapshot,target)
         history.clear();history.add(saved.batch);historySession=token
-        state=BatchState(VisibleBatch(ticket,saved.batch),error="已恢复本对象上次候选 · 未调用模型",identityStatus=IdentityCheckStatus.VERIFIED)
+        state=BatchState(VisibleBatch(ticket,saved.batch),error="已恢复上次候选及当时判断 · 未调用模型",identityStatus=IdentityCheckStatus.VERIFIED)
         return true
     }
 }

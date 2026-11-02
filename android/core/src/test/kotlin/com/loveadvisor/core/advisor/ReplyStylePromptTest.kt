@@ -39,7 +39,7 @@ class ReplyStylePromptTest {
             val wire=Wire()
             val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(input(),JevProfile(apiKey="fake"),previous,Cancellation())
             assertEquals(6,batch.replies.size)
-            assertEquals(style,data(wire.requests.first())["replyStyle"]?.asString)
+            assertEquals(style,data(wire.requests[1])["replyStyle"]?.asString)
             assertEquals(ProviderPresets.JEV_ENDPOINT,wire.requests.last().url)
             assertEquals(ProviderPresets.JEV_MODEL,JsonParser.parseString(wire.requests.last().body).asJsonObject["model"].asString)
         }

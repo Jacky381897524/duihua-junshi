@@ -6,6 +6,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PanelReplyRestorationTest {
+    @Test fun scrollingAmbiguousOldReadsKeepsVerifiedLiveHeaderEvenWhenBodyChanges() {
+        val snapshot=AdvisorFixtures.snapshot()
+        val visible=generate(snapshot)
+        val first=CachedHeaderProof("a".repeat(64),1080,2344,"b".repeat(64))
+        cache.bindHeaderProof(snapshot,first)
+        cache.remember(SavedConversationReplies(snapshot.copy(identity=snapshot.identity!!.copy(id="old-read")),visible.batch,headerProof=first.copy(conversationStamp="c".repeat(64))))
+        for(body in listOf("0","1","2","c","3","4","c","5")) {
+            val check=restoration.begin(snapshot.packageName,1)
+            assertEquals(PanelReplyRestoration.Result.RETAINED,restoration.complete(check,snapshot.identity!!.displayTitle,false,first.copy(conversationStamp=body.repeat(64))))
+            assertSame(visible,coordinator.state.current)
+        }
+        val navigation=restoration.begin(snapshot.packageName,1,true)
+        assertEquals(PanelReplyRestoration.Result.UNAVAILABLE,restoration.complete(navigation,snapshot.identity!!.displayTitle,false,first.copy(conversationStamp="d".repeat(64))))
+    }
     private val tracker=SessionTracker()
     private val coordinator=BatchCoordinator(tracker,RequestGate(tracker))
     private val cache=ConversationReplyCache()
@@ -144,7 +158,7 @@ class PanelReplyRestorationTest {
         val other=source.copy(identity=source.identity!!.copy(id="other"))
         val bProof=proof.copy(conversationStamp="c".repeat(64))
         val b=SavedConversationReplies(other,AdvisorFixtures.valid().copy(replies=AdvisorFixtures.valid().replies.map { it.copy(text=it.text+"另一人") }),headerProof=bProof)
-        cache.remember(b);val check=restoration.begin("com.tencent.mm",1)
+        cache.remember(b);val check=restoration.begin("com.tencent.mm",1,navigationCheck=true)
         assertEquals(PanelReplyRestoration.Result.RESTORED,restoration.complete(check,other.identity!!.displayTitle,false,bProof))
         assertEquals("other",tracker.lastSnapshot!!.identity!!.id);assertEquals(b.batch,coordinator.state.current!!.batch)
     }

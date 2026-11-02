@@ -73,17 +73,6 @@ class PersonalMemoryActivity:BaseActivity() {
         if(!self) {
             body.addView(ViewStyles.text(this,"关系：${relation(contact!!,s)}",16f,bold=true))
             body.addView(ViewStyles.button(this,"确认或更正关系") { textDialog("与你的实际关系",contact.relationship.takeUnless { it=="未知" }.orEmpty(),"例如：同事、朋友、家人、恋人；以你确认为准") { label -> perform { repository.relationship(id,label) } } })
-            val signals=s.data.signals.filter { it.contactId==id }
-            val inspected=s.data.evidence.count { it.peerId==id && it.speaker==com.loveadvisor.core.model.Speaker.OTHER }
-            val estimate=if(signals.isEmpty())"暂不足以估计" else "${"%.1f".format(Locale.ROOT,InteractionTrend.score(signals))}/100 · ${signals.size}条互动依据 · 最近已知时间${date(signals.filter { it.timeKnown!=false }.maxOfOrNull { it.at })}"
-            body.addView(ViewStyles.text(this,"好感度（互动趋势估计）：$estimate\n已检查${inspected}条对方原话；关心、主动询问、邀约、安慰、玩笑和有内容的接话可成为依据，普通消息不直接加分。重复证据不计分，同类互动递减，每日正向增幅最多3。",13f,ViewStyles.MUTED))
-            if(signals.isNotEmpty())body.addView(ViewStyles.button(this,"查看 / 纠正好感变化依据") {
-                val rows=signals.takeLast(50).asReversed()
-                AlertDialog.Builder(this).setTitle("互动依据 · 点击可纠正").setItems(rows.map { signal -> "${if(signal.timeKnown==false)"消息时间未知，读取于${date(signal.at)}" else date(signal.at)} · ${"%+.2f".format(Locale.ROOT,signal.delta)} · ${s.data.evidence.find { it.id==signal.sourceId }?.text?.take(35).orEmpty()}" }.toTypedArray()) { _,i ->
-                    val signal=rows[i]
-                    AlertDialog.Builder(this).setTitle("本条互动估计").setMessage(s.data.evidence.find { it.id==signal.sourceId }?.text ?: "来源已删除").setNegativeButton("保留",null).setPositiveButton("忽略本条判断") { _,_->perform { repository.dismissSignal(signal.sourceId) } }.show()
-                }.setNegativeButton("关闭",null).show()
-            })
             body.addView(ViewStyles.button(this,"关联误识别昵称 / 已有对象") { bindDialog(contact,s) })
             body.addView(ViewStyles.button(this,"记录我对候选的实际修改") { correctionDialog(id) })
         }

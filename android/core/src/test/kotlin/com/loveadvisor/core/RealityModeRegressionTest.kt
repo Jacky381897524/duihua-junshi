@@ -30,7 +30,7 @@ class RealityModeRegressionTest {
             return ApiResponse(200,Gson().toJson(content))
         }
     }
-    @Test fun realModePublishesSixShortRepliesInDirectAndGroupWithOnlyOneDraftAndOneJudge() {
+    @Test fun realModePublishesSixShortRepliesInDirectAndGroupWithIntentBeforeDraftAndSeparateScoring() {
         for(kind in listOf(ChatKind.DIRECT,ChatKind.GROUP))for(natural in listOf(false,true)) {
             val snapshot=ChatSnapshot("com.tencent.mm",1,ConversationIdentity("read","小林",kind,true),listOf(ChatMessage("1",Speaker.OTHER,"小林","吃饭了吗")))
             val wire=Wire();val personal=PersonalContext(ownExamples=listOf("嗯嗯 好呀"))
@@ -38,13 +38,13 @@ class RealityModeRegressionTest {
             val tracker=SessionTracker();val coordinator=BatchCoordinator(tracker,RequestGate(tracker));val pending=coordinator.begin(snapshot,input.replyTarget)!!
             val batch=AutomaticAdvisor(ChatCompletionClient(wire),JevJudgeClient(wire)).generate(input,JevProfile(apiKey="fake"),emptyList(),Cancellation())
             assertTrue(batch.realisticRepliesEnabled);assertTrue(coordinator.complete(pending.requestTicket,batch));assertFalse(coordinator.state.loading)
-            assertEquals(6,coordinator.state.current!!.batch.replies.size);assertEquals(2,wire.requests.size)
-            val draft=JsonParser.parseString(wire.requests.first().body).asJsonObject["messages"].asJsonArray
+            assertEquals(6,coordinator.state.current!!.batch.replies.size);assertEquals(3,wire.requests.size)
+            val draft=JsonParser.parseString(wire.requests[1].body).asJsonObject["messages"].asJsonArray
             assertTrue(draft[0].asJsonObject["content"].asString.contains("本次启用真实表达"))
             assertFalse(draft[0].asJsonObject["content"].asString.contains("仅本次启用去AI味"))
             val draftData=JsonParser.parseString(draft[1].asJsonObject["content"].asString).asJsonObject
             val judge=JsonParser.parseString(wire.requests.last().body).asJsonObject
-            assertEquals(13,judge["questions"].asJsonObject.size())
+            assertEquals(6,judge["questions"].asJsonObject.size())
             assertEquals(draftData["personaContext"],judge["state"].asJsonObject["personaContext"])
             assertEquals("REALISTIC",judge["state"].asJsonObject["expressionMode"].asString)
             assertEquals(personal,batch.personalContext)

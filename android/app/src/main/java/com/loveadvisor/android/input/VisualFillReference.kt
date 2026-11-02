@@ -5,13 +5,17 @@ import com.loveadvisor.core.model.RectI
 import java.security.MessageDigest
 
 /** Ephemeral title-strip fingerprint; never saved or sent to a model. */
-data class VisualFillReference(val windowId:Int,val generation:Long,val stamp:String,val composer:RectI?,val footerStamp:String?=null,val viewport:RectI?=null,val keyboardButton:RectI?=null,val conversationStamp:String?=null) {
+data class VisualFillReference(val windowId:Int,val generation:Long,val stamp:String,val composer:RectI?,val footerStamp:String?=null,val viewport:RectI?=null,val keyboardButton:RectI?=null,val conversationStamp:String?=null,val headerBounds:RectI?=null) {
     companion object {
         fun footerStamp(bitmap:Bitmap):String? {
             val height=(bitmap.width*.2).toInt().coerceAtMost(bitmap.height)
             return if(height<=0)null else areaStamp(bitmap,0,bitmap.height-height,bitmap.width,height)?.let { "${bitmap.width}x${bitmap.height}:$it" }
         }
-        fun stamp(bitmap:Bitmap):String? {
+        fun stamp(bitmap:Bitmap,bounds:RectI?=null):String? {
+            if(bounds!=null) {
+                if(bounds.left<0 || bounds.top<0 || bounds.right>bitmap.width || bounds.bottom>bitmap.height || bounds.width<=0 || bounds.height<=0)return null
+                return areaStamp(bitmap,bounds.left,bounds.top,bounds.width,bounds.height,requireDetail=true)
+            }
             // Include the toolbar title: the old lower strip could contain only
             // the shared chat background, making two contacts look identical.
             val left=(bitmap.width*.18).toInt();val top=(bitmap.width*.06).toInt()

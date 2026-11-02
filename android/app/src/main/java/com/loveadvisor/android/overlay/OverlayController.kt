@@ -82,13 +82,7 @@ class OverlayController(private val service:ChatCaptureService) {
         }
     }
     private val listener:(BatchState)->Unit={ render(it) }
-    private val stopMemoryUpdates=graph.personalMemory.repository.subscribe { main.post { updateInteraction() } }
     init { graph.controller.listen(listener) }
-    private fun updateInteraction() {
-        val view=panel ?: return
-        if(state.identityChecking) { view.setInteraction(com.loveadvisor.core.memory.InteractionPresentation());return }
-        service.interactionForPanel { value -> if(panel===view && !state.identityChecking)view.setInteraction(value) }
-    }
     private fun create() {
         if(bubble!=null) return
         val size=ViewStyles.dp(service,40f)
@@ -208,7 +202,6 @@ class OverlayController(private val service:ChatCaptureService) {
         },{ hide() },{ graph.tracker.isCurrent(it) },{ graph.settings.load().reducedMotion },{ plan,token,callback -> service.describe(plan,token,callback) },if(native) PanelDragMode.TOP_GRIP else PanelDragMode.TITLE,onResize={ layout() },frosted=useFrostedWindow,onEditingFocus={ panelEditingFocus(it) },onAnalyze={ showMessageAnalysis() })
         view.contentDescription="聊天候选面板"
         panel=view; panelParams=params(1,1,"LoveAdvisorPanel"); panelOnLeft=null
-        updateInteraction()
         view.setOnApplyWindowInsetsListener { _,insets ->
             val bottom=if(insets.isVisible(WindowInsets.Type.ime()))insets.getInsets(WindowInsets.Type.ime()).bottom else 0
             if(bottom!=imeInsetBottom) { imeInsetBottom=bottom;view.post { resize() } }
@@ -338,7 +331,6 @@ class OverlayController(private val service:ChatCaptureService) {
     }
     fun render(value:BatchState) {
         state=value
-        updateInteraction()
         if(analysisSession?.let { !graph.tracker.isCurrent(it) }==true) { panel?.closeStyleEditor();analysisController?.invalidate() }
         panel?.setReadContext(readSnapshot()?.identity?.displayTitle);panel?.setAnalysisAvailable(readSnapshot()!=null);panel?.render(value);updateCapsuleStatus();layout()
     }
@@ -528,5 +520,5 @@ class OverlayController(private val service:ChatCaptureService) {
             }
         }
     }
-    fun destroy() { stopMemoryUpdates();analysisController?.close();analysisController=null;hide();suppress();capsule?.release();capsule=null;main.removeCallbacksAndMessages(null);bubble?.drawable?.let { (it as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle() }; bubble=null; panel=null; bubbleParams=null; panelParams=null; graph.controller.unlisten(listener) }
+    fun destroy() { analysisController?.close();analysisController=null;hide();suppress();capsule?.release();capsule=null;main.removeCallbacksAndMessages(null);bubble?.drawable?.let { (it as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle() }; bubble=null; panel=null; bubbleParams=null; panelParams=null; graph.controller.unlisten(listener) }
 }

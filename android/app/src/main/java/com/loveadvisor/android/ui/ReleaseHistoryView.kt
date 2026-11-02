@@ -49,6 +49,12 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.7.10", "先判断再接话，稳定候选保留", listOf(
+                "先判断对方当前原话的目的和需求，再生成六条；后续评分沿用该判断。同一上下文刷新复用判断，修正情绪表达和话题收尾的含义。",
+                "已核对的同一对话滑动时不因正文画面变化清空候选；重复读取产生的重名记录不再中断当前面板，真实切换对象仍单独核对。",
+                "移除好感度显示、计分及模型输入，保留双方原话、人物资料与关系；所有关系均可同时关联多个对象。",
+                "移除回复风格设置内重复的真实与记忆管理入口，保留主页入口。面板标注意图为推测，恢复时沿用上次已读判断。"
+            )),
             Release("V1.7.9", "稳定对象核对与互动记忆", listOf(
                 "聊天应用按钮集中到一个可展开入口；默认、袪味、真实模式采用更明显的选中样式。",
                 "对象核对用标题旁的动态圆圈显示，成功后变绿；相同核对结果不反复清空面板或切换提示。",
