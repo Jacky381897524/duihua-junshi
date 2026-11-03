@@ -636,10 +636,10 @@ class ChatCaptureService:AccessibilityService() {
                                 Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.STEP,LogReason.CACHE_HEADER_PROOF_MATCH,log)
                                 original.recycle();finish(cached.snapshot.identity?.displayTitle,localOcr=true,reference=reference);return@imageWork
                             }
-                            val x=((crop.left-v.left)*original.width.toDouble()/v.width).toInt().coerceIn(0,original.width-1)
-                            val y=((crop.top-v.top)*original.height.toDouble()/v.height).toInt().coerceIn(0,original.height-1)
-                            val right=((crop.right-v.left)*original.width.toDouble()/v.width).toInt().coerceIn(x+1,original.width)
-                            val bottom=((crop.bottom-v.top)*original.height.toDouble()/v.height).toInt().coerceIn(y+1,original.height)
+                            val pixelCrop=ReplyStyleHeader.bitmapCrop(crop,v,original.width,original.height)
+                            if(pixelCrop==null) { original.recycle();finish(null);return@imageWork }
+                            val captureWidth=original.width;val captureHeight=original.height
+                            val x=pixelCrop.left;val y=pixelCrop.top;val right=pixelCrop.right;val bottom=pixelCrop.bottom
                             val header=Bitmap.createBitmap(original,x,y,right-x,bottom-y);cropped=header
                             if(header!==original)original.recycle()
                             val recognizer=MlKitOcr();ocr=recognizer
@@ -652,7 +652,7 @@ class ChatCaptureService:AccessibilityService() {
                                 val calibrated=if(headerOnly && reference!=null && title!=null && band!=null)VisualFillReference.stamp(header,band)?.let { stamp ->
                                     reference.copy(stamp=stamp,headerBounds=RectI(x+band.left,y+band.top,x+band.right,y+band.bottom))
                                 } else null
-                                if(headerOnly)Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.STEP,if(matched!=null)LogReason.CACHE_HEADER_OCR_MATCH else LogReason.CACHE_HEADER_OCR_MISS,log,metrics=mapOf(LogMetric.COUNT to (boxes?.size ?: 0).toLong(),LogMetric.RESULT_COUNT to cachedTitles.size.toLong(),LogMetric.CACHE_DUPLICATE_COUNT to cachedTitles.groupingBy { it }.eachCount().values.sumOf { (it-1).coerceAtLeast(0) }.toLong(),LogMetric.CACHE_PROOF_COUNT to cachedEntries.count { it.headerProof?.conversationStamp!=null }.toLong()))
+                                if(headerOnly)Logs.event(LogStep.REPLY_CACHE_RESTORE,LogState.STEP,if(matched!=null)LogReason.CACHE_HEADER_OCR_MATCH else LogReason.CACHE_HEADER_OCR_MISS,log,metrics=mapOf(LogMetric.COUNT to (boxes?.size ?: 0).toLong(),LogMetric.RESULT_COUNT to cachedTitles.size.toLong(),LogMetric.CACHE_DUPLICATE_COUNT to cachedTitles.groupingBy { it }.eachCount().values.sumOf { (it-1).coerceAtLeast(0) }.toLong(),LogMetric.CACHE_PROOF_COUNT to cachedEntries.count { it.headerProof?.conversationStamp!=null }.toLong(),LogMetric.WIDTH to captureWidth.toLong(),LogMetric.HEIGHT to captureHeight.toLong(),LogMetric.VIEWPORT_WIDTH to v.width.toLong(),LogMetric.VIEWPORT_HEIGHT to v.height.toLong()))
                                 finish(title,localOcr=true,reference=calibrated ?: reference)
                             },{
                                 if(!header.isRecycled)header.recycle();recognizer.close()
@@ -694,7 +694,10 @@ class ChatCaptureService:AccessibilityService() {
             // Apply the ownership decision once, after the image/title is available.
             // Ordinary content events must not clear and rebuild the panel in between.
             val headerChanged=headerMemo.changedHeader(pkg,id,proof) || (proof!=null && visualFill?.windowId==id && proof.stamp!=visualFill?.stamp)
-            val identityChanged=navigationUnverified || headerChanged && verified!=identity?.displayTitle
+            // Pixel/layout changes are not navigation. An unreadable title after
+            // IME resize must retain this batch; an actual different title below
+            // still restores that contact or clears an uncached contact normally.
+            val identityChanged=navigationUnverified
             val check=graph.controller.beginPanelRestore(pkg,id,identityChanged,announce=false)
             val result=graph.controller.completePanelRestore(check,verified,nativeTitle=!lastStyleNicknameFromOcr,proof=proof)
             when(result) {

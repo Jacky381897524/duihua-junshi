@@ -6,6 +6,29 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PanelReplyRestorationTest {
+    @Test fun keyboardAndDraftLayoutChangesRetainTheBatchButRealContactChangesStillSwitch() {
+        val a=generate();val source=tracker.lastSnapshot!!;val token=tracker.currentToken
+        val b=SavedConversationReplies(source.copy(identity=source.identity!!.copy(id="b",displayTitle="对象B")),AdvisorFixtures.valid())
+        cache.remember(b)
+        repeat(5) { cycle ->
+            for(height in listOf(2344,1400,1100,2344)) {
+                val check=restoration.begin(source.packageName,1)
+                val proof=CachedHeaderProof("${cycle+1}".repeat(64),1080,height,"${cycle+2}".repeat(64))
+                assertEquals(PanelReplyRestoration.Result.RETAINED,restoration.complete(check,null,false,proof))
+                assertSame(a,coordinator.state.current);assertEquals(token,tracker.currentToken)
+                assertEquals(source,tracker.lastSnapshot)
+            }
+        }
+        val toB=restoration.begin(source.packageName,1)
+        assertEquals(PanelReplyRestoration.Result.RESTORED,restoration.complete(toB,"对象B",true))
+        assertEquals(b.snapshot.identity?.id,tracker.lastSnapshot?.identity?.id)
+        val unknown=restoration.begin(source.packageName,1,true)
+        assertEquals(PanelReplyRestoration.Result.UNAVAILABLE,restoration.complete(unknown,"未读取对象",false))
+        assertNull(coordinator.state.current)
+        val back=restoration.begin(source.packageName,1,true)
+        assertEquals(PanelReplyRestoration.Result.RESTORED,restoration.complete(back,source.identity?.displayTitle,true))
+        assertEquals(a.batch,coordinator.state.current?.batch)
+    }
     @Test fun scrollingAmbiguousOldReadsKeepsVerifiedLiveHeaderEvenWhenBodyChanges() {
         val snapshot=AdvisorFixtures.snapshot()
         val visible=generate(snapshot)

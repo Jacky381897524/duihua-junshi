@@ -55,8 +55,10 @@ class NodeSnapshotReader(private val service:AccessibilityService) {
             val r=Rect();n.getBoundsInScreen(r)
             if(r.bottom<v.top || r.top>v.bottom)return
             // Skip the conversation-list subtree between the navigation bar and composer.
-            if(r.top>v.top+v.height*.16 && r.bottom<v.top+v.height*.72)return
-            val header=r.top>=v.top && r.bottom<v.top+v.height*.16
+            // The keyboard can halve v.height while the app toolbar stays put.
+            val headerBottom=v.top+v.width*.32
+            if(r.top>headerBottom && r.bottom<v.top+v.height*.72)return
+            val header=r.top>=v.top && r.bottom<headerBottom
             val editable=isTextTarget(n) && r.top>v.top+v.height*.55
             if(header || editable)nodes.add(NodeRecord(n.viewIdResourceName,if(header)n.text?.toString() else null,n.className?.toString().orEmpty(),editable,RectI(r.left,r.top,r.right,r.bottom)))
             for(i in 0 until n.childCount.coerceAtMost(60))n.getChild(i)?.let { walk(it,depth+1) }

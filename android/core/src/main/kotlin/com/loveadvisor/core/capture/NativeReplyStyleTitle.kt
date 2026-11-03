@@ -13,7 +13,7 @@ object NativeReplyStyleTitle {
             // An explicit resource ID and navigation-band bounds are required, not arbitrary top text.
             return window.nodes.filter { n -> val id=n.id.orEmpty();val r=n.bounds
                 id.startsWith(window.packageName+":id/") && id.substringAfter(":id/").contains(Regex("(?i)(chat|conversation|toolbar|header|top).*(title|name)")) &&
-                    !n.editable && NicknameText.valid(n.text.orEmpty()) && !TextSceneParser.isUi(n.text.orEmpty()) && r.top>=v.top && r.bottom<v.top+v.height*.13
+                    !n.editable && NicknameText.valid(n.text.orEmpty()) && !TextSceneParser.isUi(n.text.orEmpty()) && r.top>=v.top && r.bottom<v.top+v.width*.30
             }.mapNotNull { it.text }.distinct().singleOrNull()
         }
         if(window.packageName==ChatApps.WECHAT) {
@@ -25,13 +25,14 @@ object NativeReplyStyleTitle {
             return window.nodes.filter {
                 val r=it.bounds;val t=it.text.orEmpty()
                 !it.editable && NicknameText.valid(t) && !TextSceneParser.isUi(t) &&
-                    r.top>=v.top+v.height*.025 && r.bottom<v.top+v.height*.105 &&
+                    // IME resize changes the available height, not toolbar geometry.
+                    r.top>=v.top+v.width*.025 && r.bottom<v.top+v.width*.24 &&
                     (r.left+r.right)/2 in (v.left+v.width*.25).toInt()..(v.left+v.width*.75).toInt()
             }.mapNotNull { it.text }.distinct().singleOrNull()
         }
         return window.nodes.filter {
             it.id=="com.tencent.mobileqq:id/3kc" && !it.editable && NicknameText.valid(it.text.orEmpty()) &&
-                it.bounds.top>=v.top && it.bounds.bottom<v.top+v.height*.15 && it.bounds.left>=v.left+v.width*.1
+                it.bounds.top>=v.top && it.bounds.bottom<v.top+v.width*.32 && it.bounds.left>=v.left+v.width*.1
         }.singleOrNull()?.text
     }
 }

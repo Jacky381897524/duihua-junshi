@@ -49,6 +49,11 @@ class ReleaseHistoryView(context: Context) : LinearLayout(context) {
     companion object {
         // Includes the early 0.x test packages; numbering changed to V1.x at V1.2.12.
         private val releases = listOf(
+            Release("V1.7.12", "修复键盘变化导致候选消失", listOf(
+                "点击输入框、键盘弹出或收起后，标题区域不再随可用窗口高度被缩窄或拉伸。",
+                "同一窗口的标题画面变化不单独视作切换对象；标题暂不可读时保留已生成的候选与判断。实际导航及不同对象仍核对，填入前继续实时验证。",
+                "放宽微信长备注的本地检测范围，裁剪边缘残缺文字不作为新对象名称；诊断增加截图和窗口宽高，不增加模型请求。"
+            )),
             Release("V1.7.11", "修复重复缓存核对与生成提速", listOf(
                 "同名缓存行不再造成昵称文字匹配失败；标题和聊天画面均相同的历史重复读取合并，保留不同对象与真正的同名歧义。",
                 "本地标题识别兼容截图含或不含状态栏两种原点，识别后按实际标题文字行校准指纹，避免把聊天正文当标题。重复窗口焦点事件不当作新导航。",

@@ -5,6 +5,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NativeReplyStyleTitleTest {
+    @Test fun keyboardResizeDoesNotMoveTheWechatTitleOutOfItsNavigationBand() {
+        for(height in listOf(2344,1500,1100,1500,2344)) {
+            val v=RectI(0,0,1080,height)
+            val window=WindowSnapshot(ChatApps.WECHAT,7,v,listOf(
+                NodeRecord("header","同一个聊天对象","TextView",false,RectI(300,115,780,190)),
+                NodeRecord("input","草稿不会改变对象","EditText",true,RectI(120,height-150,850,height-60))
+            ))
+            assertEquals("键盘只改变可用高度，标题仍是原位置", "同一个聊天对象",NativeReplyStyleTitle.read(window))
+        }
+    }
     @Test fun registeredGenericChatRequiresAnExplicitHeaderIdAndAnEditableComposer() {
         val window=WindowSnapshot("com.whatsapp",8,RectI(0,0,1080,2344),listOf(NodeRecord("com.whatsapp:id/conversation_contact_name","Alex","TextView",false,RectI(180,110,780,190)),NodeRecord("input","","EditText",true,RectI(100,2100,900,2200))))
         assertEquals("Alex",NativeReplyStyleTitle.read(window))

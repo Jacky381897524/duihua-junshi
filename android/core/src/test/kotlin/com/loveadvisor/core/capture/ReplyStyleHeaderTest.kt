@@ -15,7 +15,25 @@ class ReplyStyleHeaderTest {
         assertEquals(0,ReplyStyleHeader.fingerprintBand(cropped,500,160)!!.top)
     }
     @Test fun captureCropIncludesToolbarWhetherSystemBarPixelsArePresentOrAbsent() {
-        assertEquals(RectI(270,0,907,249),ReplyStyleHeader.captureCrop(ChatApps.WECHAT,RectI(0,0,1080,2344),95,2.75f))
+        assertEquals(RectI(129,0,972,249),ReplyStyleHeader.captureCrop(ChatApps.WECHAT,RectI(0,0,1080,2344),95,2.75f))
+    }
+    @Test fun keyboardResizeUsesUniformToolbarPixelsEvenBeforeScreenshotDimensionsSettle() {
+        for(height in listOf(2344,1400,1100,1800,2344)) {
+            val v=RectI(0,0,1080,height)
+            val crop=ReplyStyleHeader.captureCrop(ChatApps.WECHAT,v,95,2.75f)!!
+            assertEquals(RectI(129,0,972,249),ReplyStyleHeader.bitmapCrop(crop,v,1080,2344))
+            assertEquals(RectI(64,0,486,124),ReplyStyleHeader.bitmapCrop(crop,v,540,1172))
+        }
+        val split=RectI(80,300,1160,1700)
+        assertEquals(RectI(129,0,972,154),ReplyStyleHeader.bitmapCrop(ReplyStyleHeader.captureCrop(ChatApps.WECHAT,split,95,2.75f)!!,split,1080,2344))
+        assertNull(ReplyStyleHeader.bitmapCrop(RectI(0,0,50,50),split,0,2344))
+    }
+    @Test fun clippedLongRemarksCannotBeMistakenForAnotherShortCachedTitle() {
+        for(rect in listOf(RectI(0,25,260,60),RectI(160,25,500,60))) {
+            val boxes=listOf(OcrTextBox("熟悉的昵称",rect))
+            assertNull(ReplyStyleHeader.toolbarTitle(boxes,500,100))
+            assertNull(ReplyStyleHeader.cachedTitle(boxes,listOf("熟悉的昵称"),500,100))
+        }
     }
     @Test fun separatedLatinAndChineseTitlePartsCanIdentifyTheFullCachedName() {
         val parts=listOf(OcrTextBox("Ny",RectI(140,25,180,60)),OcrTextBox("赵嘉豪",RectI(185,25,285,60)))

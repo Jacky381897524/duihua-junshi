@@ -14,7 +14,21 @@ object ReplyStyleHeader {
     }
     /** Window screenshots may already exclude system bars; inspect both possible toolbar origins. */
     fun captureCrop(packageName:String,viewport:RectI,statusBarBottom:Int,density:Float):RectI? =
-        crop(packageName,viewport,statusBarBottom,density)?.let { it.copy(top=viewport.top) }
+        crop(packageName,viewport,statusBarBottom,density)?.let {
+            if(packageName==ChatApps.WECHAT)it.copy(left=viewport.left+(viewport.width*.12).toInt(),right=viewport.left+(viewport.width*.90).toInt(),top=viewport.top)
+            else it.copy(top=viewport.top)
+        }
+
+    /** Map a window-space toolbar with one pixel scale, even during keyboard animation. */
+    fun bitmapCrop(crop:RectI,viewport:RectI,width:Int,height:Int):RectI? {
+        if(width<=0 || height<=0 || viewport.width<=0 || viewport.height<=0)return null
+        val scale=width.toDouble()/viewport.width
+        val left=((crop.left-viewport.left)*scale).toInt().coerceIn(0,width)
+        val top=((crop.top-viewport.top)*scale).toInt().coerceIn(0,height)
+        val right=((crop.right-viewport.left)*scale).toInt().coerceIn(0,width)
+        val bottom=((crop.bottom-viewport.top)*scale).toInt().coerceIn(0,height)
+        return RectI(left,top,right,bottom).takeIf { it.width>0 && it.height>0 }
+    }
 
     fun fingerprintBand(boxes:List<OcrTextBox>,width:Int,height:Int,expectedTitle:String?=null):RectI? {
         fun key(s:String)=NicknameText.canonical(s).filterNot { it.isWhitespace() }
@@ -46,6 +60,8 @@ object ReplyStyleHeader {
     fun toolbarTitle(boxes:List<OcrTextBox>,width:Int,height:Int):String? {
         val rows=toolbarRows(boxes,width,height)
         val row=rows.firstOrNull() ?: return null
+        // A word touching a crop edge may be only part of a long remark.
+        if(row.any { it.bounds.left<=1 || it.bounds.right>=width-1 })return null
         if(row.zipWithNext().any { (a,b) -> a.bounds.right>b.bounds.left })return null
         return title(listOf(OcrTextBox(row.joinToString(" ") { it.text.trim() },row.first().bounds)))
     }
@@ -59,9 +75,9 @@ object ReplyStyleHeader {
         fun matchKey(value:String)=NicknameText.canonical(value).filterNot { it.isWhitespace() }
         val seen=(boxes.filter { box ->
             val b=box.bounds;val x=(b.left+b.right)/2.0/cropWidth;val y=(b.top+b.bottom)/2.0/cropHeight
-            x in .18.. .68 && y in .05.. .9
+            x in .18.. .68 && y in .05.. .9 && b.left>1 && b.right<cropWidth-1
         }.flatMap { it.text.lineSequence().map(String::trim).filter(String::isNotEmpty).toList() }+
-            toolbarRows(boxes,cropWidth,cropHeight).filter { row -> row.zipWithNext().none { (a,b) -> a.bounds.right>b.bounds.left } }.map { row -> row.joinToString("") { it.text } }).map(::matchKey).toSet()
+            toolbarRows(boxes,cropWidth,cropHeight).filter { row -> row.none { it.bounds.left<=1 || it.bounds.right>=cropWidth-1 } && row.zipWithNext().none { (a,b) -> a.bounds.right>b.bounds.left } }.map { row -> row.joinToString("") { it.text } }).map(::matchKey).toSet()
         return eligible.filter { name -> matchKey(name) in seen && eligible.count { ambiguousKey(it)==ambiguousKey(name) }==1 }.singleOrNull()
     }
 }

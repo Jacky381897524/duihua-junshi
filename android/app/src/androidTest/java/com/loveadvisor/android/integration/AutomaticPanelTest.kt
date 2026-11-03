@@ -32,7 +32,7 @@ class AutomaticPanelTest {
                 val view=panel!!
                 view.setReadContext("对象A");view.render(coordinator.state)
                 assertEquals("核对标题期间候选不能先变成空面板",6,all(view).filterIsInstance<ReplyCardView>().size)
-                assertEquals(PanelReplyRestoration.Result.RETAINED,restoration.complete(check,if(round%2==0)null else "错字昵称",false))
+                assertEquals(PanelReplyRestoration.Result.RETAINED,restoration.complete(check,if(round%2==0)null else "对象A",false))
                 view.render(coordinator.state)
                 assertSame(visible,coordinator.state.current)
                 assertEquals(6,all(view).filterIsInstance<ReplyCardView>().size)
