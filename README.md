@@ -1,80 +1,54 @@
-# 对话军师
+# 对话军师 V1.7.24 正式版
 
-<img src="docs/images/logo.png" alt="对话军师 Logo" width="96" />
+读取当前聊天后，生成六条不同思路的候选回复，提供选句回复、接话建议、人物记忆、单句分析和多语言支持。是否复制或填入由你决定，内容需自行核对并发送。
 
-**一个对话，六种思路。** 海街寺庙整合开发的 Android 聊天助手，最新测试版 **V1.5.0（编辑焦点、前台切换与互惠回复）**。
+## 下载
 
-## 下载与使用
+- [下载 V1.7.24 正式版 APK](https://github.com/Jacky381897524/duihua-junshi/releases/download/v1.7.24/duihua-junshi-V1.7.24.apk)
+- [V1.7.24 发布说明、校验文件与第三方许可](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.7.24)
+- [所有历史版本](https://github.com/Jacky381897524/duihua-junshi/releases)
 
-[下载 V1.5.0 测试版 APK](https://github.com/Jacky381897524/duihua-junshi/releases/download/v1.5.0/duihua-junshi-V1.5.0.apk) · [发布说明、源码包与校验文件](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.5.0)
+版本号：V1.7.24（版本码 71）；Android 11+、ARM64。
 
-[所有历史版本](https://github.com/Jacky381897524/duihua-junshi/releases) · [V1.4.9](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.4.9) · [V1.4.5](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.4.5) · [V1.3.10](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.3.10) · [V1.3.09](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.3.09) · [V1.2.12](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.2.12) · [完整更新记录](CHANGELOG.md)
+## 本版默认设置
 
-在本仓库的 **Releases** 下载 APK 和 SHA256 校验文件。Android 11+、ARM64。首次安装后开启悬浮窗及无障碍服务，在微信、QQ或抖音的真实单聊或群聊中点击悬浮球／胶囊，再点「读取信息」。本版为测试版，已知截图限制与首次覆盖安装问题见下方验证范围。
+- 顶部胶囊默认开启。
+- 切换聊天对象时保留并尝试恢复各对象最近一批候选，默认开启；切换时在本地核对和恢复，不因此调用生成模型。
+- 从旧版升级时，这两个默认值仅应用一次；之后你手动调整的开关状态会保存。
 
-[完整使用说明](docs/verification/user-guide.md)
+对象识别仍受聊天应用显示标题和无障碍信息限制，个别界面或设备状态下可能无法确认对象。生成候选需要你配置的模型服务，模型用量按服务商规则计费。
 
-## 主要功能
+## 版本展示图
 
-- **三种知识融合**：聊天副驾、狗头军师和恋爱大师共同参与，每批六条候选，滑动挑选、查看建议、刷新换一批。
-- **互惠回复**：生成与判断共用具体接话、自己的态度、适度幽默及低负担接话口准则；普通工作、严肃或拒绝场景不强制邀约和调情，保留用户风格与模型评分。不会为了新策略增加自动模型请求。
-- **单聊与群聊**：按需读取可见文字、图片、表情包和前文引用，区分自己、对方与群成员；群聊可按话题接话或指定一句回复，不自动@、引用或发送。
-- **同页选句判断**：在每句已读对方消息下显示判断，右侧「指定回复」围绕该句生成六条；判断结合全部已读消息，不把后续最后一句替换成目标。可见句子依次判断，同一已读会话／模型缓存最多200条结果。
-- **紧凑建议**：候选的「建议」显示怎么接、注意和一个后续分支；积极／含糊／拒绝本地切换，每次只展开一条，面板保持原高度。
-- **快捷回复**：复制后收起面板，填入草稿后由你发送。面板和圆球一起移动，键盘出现时为输入栏留出空间。
-- **输入区域定位**：优先保留已读原生输入框，微信空白输入框可在本次截图中本地定位，补充视觉未返回位置的情况；不增加模型调用。布局或输入区域无法确认时不点击，继续保留标题、输入连接、草稿和写入回读检查。
-- **混合消息读取**：不支持的文件卡片、坏行或缺少描述的单条媒体不再使整屏完整文字丢失；文件本身不被打开或猜测，截断和无可用聊天内容仍拒绝。
-- **左上角胶囊**：时间右侧、摄像头左侧的小号入口，无需通知；点击打开候选，长按可拖动微调并保存。仅在微信、QQ、抖音前台显示，开关在首页「悬浮窗设置」。
-- **面板外观**：系统原生轻毛玻璃，文字和按钮保持清晰；「悬浮窗设置」可切回普通面板。限制模糊强度、复用布局测量，不为外观持续截图或请求模型；省电或系统关闭模糊时使用清晰底色。
-- **对话衔接**：候选、刷新与判断携带说话方信息；最后一句是我发出的时，要求六条候选都以我的身份接着说。V1.3.04 起恢复 V1.2.13 的识别流程。
-- **边缘隐藏**：面板收起后默认15秒无操作，悬浮球平滑滑到最近的左右边缘，仅露约三分之一。轻点完整露出，再点展开面板；首页「悬浮窗设置」可自定义等待秒数。
-- **面板内设置**：回复风格、模型与悬浮窗设置均可在面板中保存；特殊字符昵称可保留原文或校正关联。单聊与群聊分别应用专属／全局风格，不读取头像或账号。
-- **编辑与前台切换**：只在点击输入框时获取键盘焦点，真正离开窗口释放焦点、保留草稿；返回后再点击输入框继续编辑。三平台共用窗口编号缓存和前台元数据判断，减少等待聊天节点查询；不能承诺早于系统事件或所有机型同帧消失。
-- **自选接口与模型**：OpenRouter、DeepSeek、通义兼容、智谱及自定义兼容接口；刷新模型目录并测试实际连接。
-- **判断接口**：默认 OpenRouter `typesafe/jev-1.13`，也可接入自定义判断模型。
-- **已读上下文**：单聊最近50条，群聊默认100条，可选50／100／200；只累计手动读取，不自动翻聊天。后台返回保留本次运行中的已读内容与面板草稿；填入仍核对当前聊天与输入框。
-- **清除缓存**：主页显示缓存大小，后台清理内部与外部临时缓存；保留密钥、模型配置、风格、关系记忆、聊天历史及系统编译缓存。
-- **诊断日志**：在最新版本上统一维护；本机记录实际版本、进程、操作编号、阶段、耗时、错误类别和脱敏代码位置，串联读取、截图、视觉、判断、生成、填入、复制、设置及服务变化。重启后保留，清除缓存不会删除；默认滚动保留最多30天／10,000条／4MiB，可导出完整日志文件。记录不含聊天、昵称、密钥、接口地址或截图。异常退出尽力留下最近一次收据，并结合本软件最近五条系统退出记录；未完成或未写入不能直接证明崩溃，也不保证每次得出唯一根因。
-- **屏幕与权限适配**：避让横屏挖孔、刘海、导航栏和键盘；菜单与操作按钮适应窄屏及大字体，底部收起条保持可触达；权限入口提供标准系统备用页面。具体品牌和机型仍需实测。
+下面包含 V1.7.13 用户提供的实操截图和早期功能示意图。图片可能标注 V1.7.0 或 V1.7.3，展示的是历史版本界面；当前行为以 V1.7.24 为准。旧图中的“好感度”功能已从当前版本移除。
 
-进入聊天或展开候选面板不会自动调用模型。「读取信息」收集当前内容；「刷新换一批」使用已读取上下文。主动进入「判断分析」后，对可见句子按需请求判断并复用结果。判断、回复和必要的截图会发送到你配置的服务，服务用量由相应平台计费。
+<table>
+<tr>
+  <td align="center"><img src="https://github.com/user-attachments/assets/819debf2-2332-4cff-b362-8ea08403abf5" alt="候选回复与建议 · 历史实操截图" width="220" /><br /><sub>候选回复与建议 · 历史实操截图</sub></td>
+  <td align="center"><img src="https://github.com/user-attachments/assets/b6f8ae21-0901-4d0f-b0c5-1a68b655efa2" alt="六条候选、复制与填入 · 历史实操截图" width="220" /><br /><sub>六条候选、复制与填入 · 历史实操截图</sub></td>
+  <td align="center"><img src="https://github.com/user-attachments/assets/1a591343-f2dc-4a85-8e45-92f0ae283950" alt="回复风格设置 · 历史界面" width="220" /><br /><sub>回复风格设置 · 历史界面</sub></td>
+</tr>
+<tr>
+  <td align="center"><img src="https://github.com/user-attachments/assets/d02b7d2c-68eb-411c-b0e7-9c8f5928e04a" alt="六条候选与选句分析" width="220" /><br /><sub>六条候选与选句分析</sub></td>
+  <td align="center"><img src="https://github.com/user-attachments/assets/02e059aa-b30d-4681-b4d8-c675882d5395" alt="三类知识来源协同" width="220" /><br /><sub>三类知识来源协同</sub></td>
+  <td align="center"><img src="https://github.com/user-attachments/assets/59780ef9-8555-491e-b461-e8c5a4441837" alt="默认、祛味与真实表达模式 · 旧版示意" width="220" /><br /><sub>默认、祛味与真实表达模式 · 旧版示意</sub></td>
+</tr>
+<tr>
+  <td align="center"><img src="https://github.com/user-attachments/assets/777d9359-f8bc-44d6-b611-a83b461aa5f1" alt="双方记忆与关系依据 · 旧版示意" width="220" /><br /><sub>双方记忆与关系依据 · 旧版示意</sub></td>
+  <td align="center"><img src="https://github.com/user-attachments/assets/8864d0f9-97c1-4fa7-9231-6a1fa8f8bba2" alt="群聊目标与聊天时间" width="220" /><br /><sub>群聊目标与聊天时间</sub></td>
+  <td align="center"><img src="https://github.com/user-attachments/assets/d66be1f0-7996-41b7-a3c7-4f5d6a9dd247" alt="双语候选与中文建议" width="220" /><br /><sub>双语候选与中文建议</sub></td>
+</tr>
+<tr>
+  <td align="center"><img src="https://github.com/user-attachments/assets/be9f78b1-f9ea-4985-a5a3-7d2ab3d4bea1" alt="外语分析与单句快捷分析" width="220" /><br /><sub>外语分析与单句快捷分析</sub></td>
+  <td align="center"><img src="https://github.com/user-attachments/assets/1c720530-2286-42ef-b54c-ecda39511240" alt="多平台入口与顶部胶囊" width="220" /><br /><sub>多平台入口与顶部胶囊</sub></td>
+  <td align="center"><img src="https://github.com/user-attachments/assets/3eccb34b-6458-4e3d-b21e-ef2ad0bd5efc" alt="对象缓存与用量优化" width="220" /><br /><sub>对象缓存与用量优化</sub></td>
+</tr>
+</table>
 
-## 知识资料
+## 闭源发行与验证
 
-收录46份资料，涵盖具体接话与互惠幽默、社会发展与家庭变迁、中国法律基础、安全与危机转介、冲突与修复、证据分级、婚姻家庭、情绪调节、职场沟通等主题。V1.5.0保留43份狗头军师原文，升级两份策略并新增互惠表达；[调研记录](docs/research/2026-10-22-knowledge-upgrade.md)列出实际引用、固定提交及许可。
+V1.5.0 起的自研更新以闭源二进制方式发布，范围包含界面与设置。V1.7.24 发布资产仅包括经验证的 APK、SHA-256 校验文件、版本说明和第三方许可；对应发行分支及 GitHub 自动生成的源码归档只含发行文档与许可，不是可构建源码包。历史公开源码和第三方既有权利不受影响。
 
-[资料目录](android/app/src/main/assets/knowledge/index.json)
+本版 release 构建、R8 混淆和资源缩减通过；安装包签名、版本信息及 ARM64 原生库 16 KB 对齐检查通过。本次未运行自动化测试，也未在用户手机上完成真机验收。混淆和客户端资源加密不能保证绝对无法逆向。
 
-## 界面与宣传
-
-![对话军师功能与知识库海报](docs/images/poster-V1.2.12.png)
-
-## 构建源码
-
-使用 Android Studio 或命令行，准备 JDK17、Android SDK35。Windows请克隆到不含中文的路径。
-
-```sh
-cd android
-./gradlew :core:test :app:assembleDebug
-```
-
-Windows使用 `gradlew.bat`。干净克隆默认生成本地调试签名；自行构建的 APK 与发布安装包签名可能不同。官方更新使用作者保管的签名私钥，该私钥不在仓库中。
-
-项目开发环境的本机构建辅助脚本位于 `tools/`，可选配置存放在被忽略的 `.toolchain/config.json`；标准 Gradle 构建不需要该本机配置。
-
-## 验证状态
-
-核心449项与配置16项测试通过；应用和Android测试包构建、Lint（0错误，41项警告）、原签名、46份知识及原生库16KB对齐检查通过，独立代码审查发现的问题已修正。键盘界面测试仅编译，未连接手机执行全屏／分屏验收或调用真实付费模型，不能把离线通过当成所有机型或候选效果保证。V1.4.9的输入区域定位和混合消息读取修正继续保留。
-
-**已知待验收问题**：OPPO PHY110 / ColorOS16 的V1.4.5偶发无障碍服务故障在重新开关后恢复，恢复后的成功日志没有故障原因；本版补充系统退出记录，尚不能宣称修复该次断开。部分OPPO／iQOO设备点击读取后微信无法手动截图，已有受保护窗口错误证据，根因未确认，本版未修改截图接口。安装器点击打开后出现灰色「正在更新」画面也尚未解决；该画面与军师自己的加载页不同，新增当前／上次进程的异步启动阶段记录，以区分进程、Activity、首帧和设置读取。无法凭视频确认画面所属系统组件，不能宣称已修复。具体机型、闲置首次填入和胶囊切换时延仍需实测。
-
-[本版验证记录](docs/verification/2026-10-22-v1.5.0.md) · [V1.4.10验证记录](docs/verification/2026-10-21-v1.4.10.md) · [V1.4.9验证记录](docs/verification/2026-10-20-v1.4.9.md)
-
-当前模糊半径为12dp、上限36物理像素；不支持时使用清晰底色。程序校验不能保证每次视觉识别和候选语义完全正确，发送前仍由你核对。
-
-## 来源与许可
-
-基于 [jev-chat-jarvis](https://github.com/jev-chat/jev-chat-jarvis) 和相关 [goutoujunshi-jev-chat](https://github.com/shengjidaguai-china/goutoujunshi-jev-chat) 开源资料结合开发。实际知识资料固定取自 [goutoujunshi](https://github.com/shengjidaguai-china/goutoujunshi) 的对应版本；来源清单及许可见 [第三方说明](THIRD_PARTY_NOTICES.md)。
-
-保留上游原文、版权和MIT许可。本项目名称与作者信息用于标识整合版，不表示上游作者参与或背书。
-
+第三方版权与许可见 [LICENSES](https://github.com/Jacky381897524/duihua-junshi/tree/codex/v1.7.24-distribution/LICENSES) 和发布附件 THIRD-PARTY-LICENSES.zip。
