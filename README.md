@@ -1,26 +1,27 @@
-# 对话军师 V1.7.24 正式版
+# 对话军师 V1.8.0 正式版
 
-读取当前聊天后，生成六条不同思路的候选回复，提供选句回复、接话建议、人物记忆、单句分析和多语言支持。是否复制或填入由你决定，内容需自行核对并发送。
+读取当前聊天后，按你设置的数量生成 1–6 条不同思路的候选回复，提供选句分析、人物记忆、单句分析和多语言支持。是否复制或填入由你决定，内容需自行核对并发送。
 
 ## 下载
 
-- [下载 V1.7.24 正式版 APK](https://github.com/Jacky381897524/duihua-junshi/releases/download/v1.7.24/duihua-junshi-V1.7.24.apk)
-- [V1.7.24 发布说明、校验文件与第三方许可](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.7.24)
+- [下载 V1.8.0 正式版 APK](https://github.com/Jacky381897524/duihua-junshi/releases/download/v1.8.0/duihua-junshi-V1.8.0.apk)
+- [V1.8.0 发布说明、校验文件与第三方许可](https://github.com/Jacky381897524/duihua-junshi/releases/tag/v1.8.0)
 - [所有历史版本](https://github.com/Jacky381897524/duihua-junshi/releases)
 
-版本号：V1.7.24（版本码 71）；Android 11+、ARM64。
+版本号：V1.8.0（版本码 72）；Android 11+、ARM64。
 
-## 本版默认设置
+## 本版更新
 
-- 顶部胶囊默认开启。
-- 切换聊天对象时保留并尝试恢复各对象最近一批候选，默认开启；切换时在本地核对和恢复，不因此调用生成模型。
-- 从旧版升级时，这两个默认值仅应用一次；之后你手动调整的开关状态会保存。
+- “复制单句回复”成为可记住的面板模式：开启后，打开顶部胶囊即进入单句粘贴分析；关闭模式回到普通面板。
+- 修复单句候选生成后短暂出现又消失的问题。
+- 可在主页设置每次生成 1–6 条候选，默认 6 条。
+- 精简主页重复入口；回复、视觉识别和判断模型增加常见服务商预设地址。使用模型仍需自行配置 API Key 与可用模型名称。
 
-对象识别仍受聊天应用显示标题和无障碍信息限制，个别界面或设备状态下可能无法确认对象。生成候选需要你配置的模型服务，模型用量按服务商规则计费。
+顶部胶囊、切换对象时保留并尝试恢复候选，默认开启。对象识别仍受聊天应用显示标题和无障碍信息限制；模型用量按所选服务商规则计费。
 
 ## 版本展示图
 
-下面包含 V1.7.13 用户提供的实操截图和早期功能示意图。图片可能标注 V1.7.0 或 V1.7.3，展示的是历史版本界面；当前行为以 V1.7.24 为准。旧图中的“好感度”功能已从当前版本移除。
+以下含用户提供的实操截图和早期功能示意图。部分图片标注 V1.7.0 或 V1.7.3，展示历史版本界面；当前行为以 V1.8.0 为准。旧图中的“好感度”功能已移除，候选条数现可设置。
 
 <table>
 <tr>
@@ -39,16 +40,16 @@
   <td align="center"><img src="https://github.com/user-attachments/assets/d66be1f0-7996-41b7-a3c7-4f5d6a9dd247" alt="双语候选与中文建议" width="220" /><br /><sub>双语候选与中文建议</sub></td>
 </tr>
 <tr>
-  <td align="center"><img src="https://github.com/user-attachments/assets/be9f78b1-f9ea-4985-a5a3-7d2ab3d4bea1" alt="多平台入口与顶部胶囊" width="220" /><br /><sub>外语分析与单句快捷分析</sub></td>
-  <td align="center"><img src="https://github.com/user-attachments/assets/1c720530-2286-42ef-b54c-ecda39511240" alt="对象缓存与用量优化" width="220" /><br /><sub>多平台入口与顶部胶囊</sub></td>
-  <td align="center"><img src="https://github.com/user-attachments/assets/3eccb34b-6458-4e3d-b21e-ef2ad0bd5efc" alt="外语分析与单句快捷分析" width="220" /><br /><sub>对象缓存与用量优化</sub></td>
+  <td align="center"><img src="https://github.com/user-attachments/assets/be9f78b1-f9ea-4985-a5a3-7d2ab3d4bea1" alt="多平台入口与顶部胶囊" width="220" /><br /><sub>多平台入口与顶部胶囊</sub></td>
+  <td align="center"><img src="https://github.com/user-attachments/assets/1c720530-2286-42ef-b54c-ecda39511240" alt="对象缓存与用量优化" width="220" /><br /><sub>对象缓存与用量优化</sub></td>
+  <td align="center"><img src="https://github.com/user-attachments/assets/3eccb34b-6458-4e3d-b21e-ef2ad0bd5efc" alt="外语分析与单句快捷分析" width="220" /><br /><sub>外语分析与单句快捷分析</sub></td>
 </tr>
 </table>
 
 ## 闭源发行与验证
 
-V1.5.0 起的自研更新以闭源二进制方式发布，范围包含界面与设置。V1.7.24 发布资产仅包括经验证的 APK、SHA-256 校验文件、版本说明和第三方许可；对应发行分支及 GitHub 自动生成的源码归档只含发行文档与许可，不是可构建源码包。历史公开源码和第三方既有权利不受影响。
+V1.5.0 起的自研更新以闭源二进制方式发布，范围包含界面与设置。V1.8.0 发布资产仅包括经验证的 APK、SHA-256 校验文件、版本说明和第三方许可；对应发行分支及 GitHub 自动生成的源码归档只含发行文档与许可，不是可构建源码包。历史公开源码和第三方既有权利不受影响。
 
-本版 release 构建、R8 混淆和资源缩减通过；安装包签名、版本信息及 ARM64 原生库 16 KB 对齐检查通过。本次未运行自动化测试，也未在用户手机上完成真机验收。混淆和客户端资源加密不能保证绝对无法逆向。
+本版 release 构建、R8 混淆、资源缩减、核心模块自动化测试通过；安装包签名、版本信息及 ARM64 原生库 16 KB 对齐检查通过。本次未在用户手机上完成真机验收。混淆和客户端资源加密不能保证绝对无法逆向。
 
-第三方版权与许可见 [LICENSES](https://github.com/Jacky381897524/duihua-junshi/tree/codex/v1.7.24-distribution/LICENSES) 和发布附件 THIRD-PARTY-LICENSES.zip。
+第三方版权与许可见 [LICENSES](https://github.com/Jacky381897524/duihua-junshi/tree/codex/v1.8.0-distribution/LICENSES) 和发布附件 THIRD-PARTY-LICENSES.zip。
